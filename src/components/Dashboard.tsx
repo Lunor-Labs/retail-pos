@@ -315,7 +315,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+      {/* <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <h3 className="text-lg font-bold text-slate-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <button className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition flex flex-col items-center text-center lg:items-start lg:text-left">
@@ -339,7 +339,7 @@ export function Dashboard() {
             <p className="text-sm text-slate-600">Analytics & insights</p>
           </button>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
