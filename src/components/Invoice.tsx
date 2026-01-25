@@ -1,4 +1,5 @@
 import { X, Printer, Share2 } from 'lucide-react';
+import logo from '../assets/favicon.jpeg';
 
 interface InvoiceItem {
   name: string;
@@ -123,8 +124,13 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
           <div className="p-6" id="invoice-content">
             <div className="invoice-print">
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Vehicle Parts Store</h1>
-                <p className="text-sm text-slate-600">Sales Invoice</p>
+                <div className="flex justify-center mb-2">
+                  <img src={logo} alt="Gasith Motors" className="h-16 w-16 object-cover rounded-lg" />
+                </div>
+                <h1 className="text-2xl font-bold text-slate-900 mb-1">Gasith Motors</h1>
+                <p className="text-sm text-slate-600">Auto Parts & Accessories</p>
+                <p className="text-xs text-slate-500 mt-1">No: 123, Main Street, Colombo</p>
+                <p className="text-xs text-slate-500">Tel: 011-2345678</p>
               </div>
 
               <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-slate-200">
