@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
+import { Invoice, InvoiceData } from './Invoice';
 import { Search, Eye, FileText, X } from 'lucide-react';
-// import { useAuth } from '../contexts/AuthContext';
 
 type Sale = Database['public']['Tables']['sales']['Row'] & {
     cashier?: { full_name: string } | null;
-    customer?: { name: string } | null;
+    customer?: { name: string; phone: string } | null;
 };
 
 type SaleItem = Database['public']['Tables']['sale_items']['Row'] & {
     product?: { name: string; sku: string } | null;
+    batch?: { batch_number: string } | null;
 };
 
 export function SalesHistory() {
@@ -29,6 +30,10 @@ export function SalesHistory() {
     const [loadingItems, setLoadingItems] = useState(false);
     const [showModal, setShowModal] = useState(false);
 
+    // Invoice State
+    const [showInvoice, setShowInvoice] = useState(false);
+    const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+
     useEffect(() => {
         loadSales();
     }, [dateRange]);
@@ -41,7 +46,7 @@ export function SalesHistory() {
                 .select(`
           *,
           cashier:user_profiles!cashier_id(full_name),
-          customer:customers(name)
+          customer:customers(name, phone)
         `)
                 .gte('sale_date', `${dateRange.start}T00:00:00`)
                 .lte('sale_date', `${dateRange.end}T23:59:59`)
@@ -76,7 +81,8 @@ export function SalesHistory() {
                 .from('sale_items')
                 .select(`
           *,
-          product:products(name, sku)
+          product:products(name, sku),
+          batch:product_batches(batch_number)
         `)
                 .eq('sale_id', sale.id);
 
@@ -85,7 +91,8 @@ export function SalesHistory() {
             // Transform data
             const formattedItems = (data as any[] || []).map(item => ({
                 ...item,
-                product: item.product ? (Array.isArray(item.product) ? item.product[0] : item.product) : null
+                product: item.product ? (Array.isArray(item.product) ? item.product[0] : item.product) : null,
+                batch: item.batch ? (Array.isArray(item.batch) ? item.batch[0] : item.batch) : null,
             })) as SaleItem[];
 
             setSaleItems(formattedItems);
@@ -101,6 +108,35 @@ export function SalesHistory() {
         sale.sale_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (sale.customer?.name && sale.customer.name.toLowerCase().includes(searchTerm.toLowerCase()))
     );
+
+    function handleGenerateInvoice() {
+        if (!selectedSale || !saleItems.length) return;
+
+        const data: InvoiceData = {
+            saleNumber: selectedSale.sale_number,
+            date: new Date(selectedSale.sale_date).toLocaleDateString(),
+            customerName: selectedSale.customer?.name || 'Walk-in Customer',
+            customerPhone: selectedSale.customer?.phone || undefined,
+            items: saleItems.map(item => ({
+                name: item.product?.name || 'Unknown Item',
+                quantity: item.quantity,
+                unitPrice: item.unit_price,
+                subtotal: item.subtotal,
+                batchNumber: item.batch?.batch_number || '',
+            })),
+            subtotal: selectedSale.subtotal,
+            discount: selectedSale.discount_amount,
+            tax: selectedSale.tax_amount,
+            total: selectedSale.total_amount,
+            paidAmount: selectedSale.paid_amount,
+            changeAmount: Math.max(0, selectedSale.paid_amount - selectedSale.total_amount),
+            paymentMethod: selectedSale.payment_method || 'cash',
+            cashierName: selectedSale.cashier?.full_name || 'System',
+        };
+
+        setInvoiceData(data);
+        setShowInvoice(true);
+    }
 
     return (
         <div className="space-y-6">
@@ -332,7 +368,15 @@ export function SalesHistory() {
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+                        <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-between">
+                            <button
+                                onClick={handleGenerateInvoice}
+                                className="px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 transition flex items-center gap-2"
+                                disabled={loadingItems}
+                            >
+                                <FileText className="w-4 h-4" />
+                                Print / Share Invoice
+                            </button>
                             <button
                                 onClick={() => setShowModal(false)}
                                 className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition"
@@ -342,6 +386,14 @@ export function SalesHistory() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Invoice Component */}
+            {showInvoice && invoiceData && (
+                <Invoice
+                    invoiceData={invoiceData}
+                    onClose={() => setShowInvoice(false)}
+                />
             )}
         </div>
     );

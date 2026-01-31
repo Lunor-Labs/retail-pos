@@ -1,7 +1,7 @@
 import { X, Printer, Share2 } from 'lucide-react';
 import logo from '../assets/favicon.jpeg';
 
-interface InvoiceItem {
+export interface InvoiceItem {
   name: string;
   quantity: number;
   unitPrice: number;
@@ -9,7 +9,7 @@ interface InvoiceItem {
   batchNumber: string;
 }
 
-interface InvoiceData {
+export interface InvoiceData {
   saleNumber: string;
   date: string;
   customerName?: string;
