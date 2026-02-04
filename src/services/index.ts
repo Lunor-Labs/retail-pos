@@ -5,8 +5,8 @@ import { InventoryService } from './InventoryService';
 
 // Create service instances
 export const productService = new ProductService(productRepository);
-export const salesService = new SalesService(saleRepository, customerRepository, productRepository);
 export const inventoryService = new InventoryService(productRepository, adapter);
+export const salesService = new SalesService(saleRepository, customerRepository, productRepository, inventoryService);
 
 // Export service classes for testing
 export { ProductService, SalesService, InventoryService };

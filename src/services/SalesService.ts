@@ -1,6 +1,7 @@
 import { SaleRepository, SaleWithItems } from '../repositories/SaleRepository';
 import { CustomerRepository } from '../repositories/CustomerRepository';
 import { ProductRepository } from '../repositories/ProductRepository';
+import { InventoryService } from './InventoryService';
 import { Sale, SaleItem } from '../types';
 import { logger } from '../lib/logger';
 
@@ -13,7 +14,7 @@ export interface CreateSaleInput {
         batch_id: string;
         quantity: number;
         unit_price: number;
-        cost_price?: number;
+        cost_price: number;
     }>;
     payment_method: 'cash' | 'card' | 'credit' | 'mixed';
     subtotal: number;
@@ -22,6 +23,7 @@ export interface CreateSaleInput {
     total_amount: number;
     paid_amount: number;
     notes?: string;
+    referral_commission_rate?: number;
 }
 
 /**
@@ -31,7 +33,8 @@ export class SalesService {
     constructor(
         private saleRepo: SaleRepository,
         private customerRepo: CustomerRepository,
-        private productRepo: ProductRepository
+        private productRepo: ProductRepository,
+        private inventoryRepo: InventoryService
     ) { }
 
     /**
@@ -69,6 +72,7 @@ export class SalesService {
                 sale_number: saleNumber,
                 customer_id: input.customer_id || null,
                 cashier_id: input.cashier_id,
+                referral_agent_id: input.referral_agent_id || null,
                 sale_date: new Date().toISOString(),
                 payment_method: input.payment_method,
                 subtotal: input.subtotal,
@@ -86,8 +90,12 @@ export class SalesService {
                 batch_id: item.batch_id,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
+                cost_price: item.cost_price,
                 subtotal: item.quantity * item.unit_price,
             }));
+
+            // Deduct stock levels
+            await this.inventoryRepo.deductStock(input.items);
 
             // Create sale with items
             const sale = await this.saleRepo.createWithItems(saleData, saleItems);
@@ -100,6 +108,23 @@ export class SalesService {
                 logger.info('Customer credit updated', {
                     customerId: input.customer_id,
                     creditAmount,
+                });
+            }
+
+            // Create referral commission if agent provided
+            if (input.referral_agent_id && input.referral_commission_rate !== undefined) {
+                const commissionAmount = input.total_amount * (input.referral_commission_rate / 100);
+                await this.saleRepo.createCommission({
+                    referral_agent_id: input.referral_agent_id,
+                    sale_id: sale.id,
+                    commission_amount: commissionAmount,
+                    commission_rate: input.referral_commission_rate,
+                    sale_amount: input.total_amount,
+                });
+
+                logger.info('Referral commission created', {
+                    agentId: input.referral_agent_id,
+                    amount: commissionAmount,
                 });
             }
 

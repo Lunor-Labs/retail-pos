@@ -182,4 +182,17 @@ export class SaleRepository extends BaseRepository<Sale> {
             throw new Error(`Failed to delete sale record: ${saleError.message}`);
         }
     }
+
+    /**
+     * Create a referral commission
+     */
+    async createCommission(data: {
+        referral_agent_id: string;
+        sale_id: string;
+        commission_amount: number;
+        commission_rate: number;
+        sale_amount: number;
+    }): Promise<void> {
+        await this.adapter.insert('referral_commissions', data);
+    }
 }

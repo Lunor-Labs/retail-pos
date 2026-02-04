@@ -17,7 +17,7 @@ import { CartItemsList } from './pos/CartItemsList';
 
 import { db } from '../lib/db';
 import { SyncStatus } from './pos/SyncStatus';
-import { salesService, productService, inventoryService } from '../services';
+import { salesService } from '../services';
 import { logger } from '../lib/logger';
 
 export function POS() {
@@ -474,24 +474,8 @@ export function POS() {
         tax_amount: taxAmount,
         total_amount: total,
         paid_amount: paidAmount,
+        referral_commission_rate: selectedReferralAgent?.commission_rate,
       });
-
-      // Handle referral commission if agent selected
-      if (selectedReferralAgent) {
-        const commissionAmount = total * (selectedReferralAgent.commission_rate / 100);
-        const { error: commissionError } = await (supabase.from('referral_commissions') as any)
-          .insert({
-            referral_agent_id: selectedReferralAgent.id,
-            sale_id: sale.id,
-            commission_amount: commissionAmount,
-            commission_rate: selectedReferralAgent.commission_rate,
-            sale_amount: total,
-          });
-
-        if (commissionError) {
-          logger.error('Failed to create referral commission', commissionError);
-        }
-      }
 
       // Prepare invoice data
       setInvoiceData({
