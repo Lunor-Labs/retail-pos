@@ -21,11 +21,15 @@ interface CreditSale {
   discount_amount: number;
   tax_amount: number;
   cashier_id: string;
+  service_charge: number;
 }
 
 type SaleDetailItem = Database['public']['Tables']['sale_items']['Row'] & {
   product?: { name: string; sku: string } | null;
   batch?: { batch_number: string } | null;
+  warranty_duration?: number;
+  warranty_unit?: 'days' | 'months' | 'years' | null;
+  warranty_type?: string | null;
 };
 
 export function Customers() {
@@ -246,6 +250,11 @@ export function Customers() {
         unitPrice: item.unit_price,
         subtotal: item.subtotal,
         batchNumber: item.batch?.batch_number || '',
+        warranty: item.warranty_duration && item.warranty_duration > 0 ? {
+          duration: item.warranty_duration,
+          unit: (item.warranty_unit as any) || 'months',
+          type: item.warranty_type || undefined
+        } : undefined,
       })),
       subtotal: selectedSaleDetail.subtotal,
       discount: selectedSaleDetail.discount_amount,
@@ -255,6 +264,7 @@ export function Customers() {
       changeAmount: Math.max(0, selectedSaleDetail.paid_amount - selectedSaleDetail.total_amount),
       paymentMethod: selectedSaleDetail.payment_method || 'cash',
       cashierName: 'System',
+      serviceCharge: selectedSaleDetail.service_charge || 0,
     };
 
     setInvoiceData(data);

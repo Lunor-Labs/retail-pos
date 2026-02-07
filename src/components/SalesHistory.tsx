@@ -15,6 +15,9 @@ type Sale = Database['public']['Tables']['sales']['Row'] & {
 type SaleItem = Database['public']['Tables']['sale_items']['Row'] & {
     product?: { name: string; sku: string } | null;
     batch?: { batch_number: string } | null;
+    warranty_duration?: number;
+    warranty_unit?: 'days' | 'months' | 'years' | null;
+    warranty_type?: string | null;
 };
 
 export function SalesHistory() {
@@ -123,6 +126,11 @@ export function SalesHistory() {
                 unitPrice: item.unit_price,
                 subtotal: item.subtotal,
                 batchNumber: item.batch?.batch_number || '',
+                warranty: item.warranty_duration && item.warranty_duration > 0 ? {
+                    duration: item.warranty_duration,
+                    unit: (item.warranty_unit as any) || 'months',
+                    type: item.warranty_type || undefined
+                } : undefined,
             })),
             subtotal: selectedSale.subtotal,
             discount: selectedSale.discount_amount,
@@ -132,6 +140,7 @@ export function SalesHistory() {
             changeAmount: Math.max(0, selectedSale.paid_amount - selectedSale.total_amount),
             paymentMethod: selectedSale.payment_method || 'cash',
             cashierName: selectedSale.cashier?.full_name || 'System',
+            serviceCharge: selectedSale.service_charge || 0,
         };
 
         setInvoiceData(data);

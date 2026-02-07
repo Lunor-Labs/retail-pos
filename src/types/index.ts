@@ -9,7 +9,11 @@ export type Customer = Database['public']['Tables']['customers']['Row'];
 export type Supplier = Database['public']['Tables']['suppliers']['Row'];
 export type ReferralAgent = Database['public']['Tables']['referral_agents']['Row'];
 export type Sale = Database['public']['Tables']['sales']['Row'];
-export type SaleItem = Database['public']['Tables']['sale_items']['Row'];
+export type SaleItem = Database['public']['Tables']['sale_items']['Row'] & {
+  warranty_duration?: number;
+  warranty_unit?: 'days' | 'months' | 'years' | null;
+  warranty_type?: string | null;
+};
 export type Return = Database['public']['Tables']['returns']['Row'];
 export type ReturnItem = Database['public']['Tables']['return_items']['Row'];
 export type PurchaseOrder = Database['public']['Tables']['purchase_orders']['Row'];
