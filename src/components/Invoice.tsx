@@ -310,32 +310,44 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
         }
 
         @media print {
-          /* Hide everything on body first using visibility */
-          body {
-            visibility: hidden !important;
+          /* Reset html and body for continuous printing */
+          html, body {
+            visibility: visible !important;
             margin: 0 !important;
             padding: 0 !important;
             width: 80mm !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
             background: white !important;
+            overflow: visible !important;
           }
 
-          /* Make the invoice content and all its children visible */
+          /* Hide all body children except invoice */
+          body > *:not(.fixed) {
+            display: none !important;
+            visibility: hidden !important;
+          }
+
+          /* Show the modal and invoice content */
+          .fixed,
           #invoice-content, 
           #invoice-content * {
             visibility: visible !important;
           }
 
-          /* Position invoice content absolutely at top-left of page */
+          /* Position invoice content for continuous printing */
           #invoice-content {
             display: block !important;
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: 80mm !important;
             margin: 0 !important;
-            padding: 5mm !important;
+            padding: 4mm 10mm !important; /* 4mm top/bottom, 10mm left/right - equal side padding */
             background: white !important;
             z-index: 9999 !important;
+            box-sizing: border-box !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           /* Hide UI elements that shouldn't print */
@@ -346,9 +358,36 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
             visibility: hidden !important;
           }
 
-          /* Show invoice wrapper */
+          /* Show invoice wrapper - prevent page breaks */
           .invoice-wrapper {
             display: block !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          /* Prevent page breaks on all invoice elements */
+          .invoice-wrapper *,
+          #invoice-content * {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-before: avoid !important;
+            break-before: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+
+          /* Hide modal backdrop and container styling */
+          .fixed.inset-0 {
+            position: static !important;
+            background: transparent !important;
+            padding: 0 !important;
+          }
+
+          .fixed.inset-0 > div {
+            max-height: none !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
           }
 
           /* Optimize fonts for thermal printing */
