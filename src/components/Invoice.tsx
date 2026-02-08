@@ -131,7 +131,7 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
             </div>
           </div>
 
-          <div className="p-6" id="invoice-content">
+          <div className="p-6 print:p-0" id="invoice-content">
             <div className="invoice-print">
               <div className="text-center mb-6">
                 <div className="flex justify-center mb-2">
@@ -143,27 +143,27 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
                 <p className="text-xs text-slate-500">Tel: 011-2345678</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-6 pb-6 border-b border-slate-200">
-                <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Invoice Number</p>
+              <div className="flex flex-col gap-y-4 sm:flex-row sm:flex-wrap sm:gap-x-6 mb-6 pb-6 border-b border-slate-200">
+                <div className="min-w-[120px]">
+                  <p className="text-sm font-medium text-slate-500 mb-0.5">Invoice Number</p>
                   <p className="font-bold text-slate-900">{invoiceData.saleNumber}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-500 mb-1">Date</p>
+                <div className="min-w-[120px]">
+                  <p className="text-sm font-medium text-slate-500 mb-0.5">Date</p>
                   <p className="font-bold text-slate-900">{invoiceData.date}</p>
                 </div>
                 {invoiceData.customerName && (
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 mb-1">Customer</p>
+                  <div className="min-w-[120px]">
+                    <p className="text-sm font-medium text-slate-500 mb-0.5">Customer</p>
                     <p className="font-bold text-slate-900">{invoiceData.customerName}</p>
                     {invoiceData.customerPhone && (
-                      <p className="text-sm text-slate-600">{invoiceData.customerPhone}</p>
+                      <p className="text-xs text-slate-600">{invoiceData.customerPhone}</p>
                     )}
                   </div>
                 )}
                 {invoiceData.cashierName && (
-                  <div>
-                    <p className="text-sm font-medium text-slate-500 mb-1">Cashier</p>
+                  <div className="min-w-[120px]">
+                    <p className="text-sm font-medium text-slate-500 mb-0.5">Cashier</p>
                     <p className="font-bold text-slate-900">{invoiceData.cashierName}</p>
                   </div>
                 )}
@@ -284,43 +284,53 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
 
       <style>{`
         @page {
-          margin: 0;
+          margin: 5mm;
           size: auto;
         }
         @media print {
-          body {
+          /* Hide everything first */
+          body * {
             visibility: hidden;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
           }
-          #invoice-content {
+          /* Show only the invoice content and its children */
+          #invoice-content, #invoice-content * {
             visibility: visible;
-            position: absolute;
-            left: 0;
-            top: 0;
+          }
+          /* Position the invoice at the very top naturally */
+          #invoice-content {
             width: 100%;
             margin: 0;
-            padding: 10mm;
-            background-color: white;
+            padding: 0;
+            background: white;
           }
-          #invoice-content * {
-            visibility: visible;
+          /* Reset common print issues */
+          body {
+            background: white !important;
           }
-          .print\:hidden {
+          .print-hidden {
             display: none !important;
           }
-          /* Ensure table cells don't break awkwardly */
           tr { page-break-inside: avoid; }
-          /* Adjust for thermal printers (usually narrow) */
+          
+          /* Specialized Thermal Printer Adjustments */
           @media (max-width: 80mm) {
             #invoice-content {
-              padding: 2mm;
+              padding: 0;
             }
-            .text-2xl { font-size: 1.25rem; }
-            .text-xl { font-size: 1.1rem; }
-            .text-sm { font-size: 0.75rem; }
-            .text-xs { font-size: 0.65rem; }
-            .w-64 { width: 100%; }
+            .invoice-print {
+              width: 100%;
+            }
+            .text-2xl { font-size: 1.1rem !important; }
+            .text-xl { font-size: 1rem !important; }
+            .text-sm { font-size: 0.75rem !important; }
+            .text-xs { font-size: 0.65rem !important; }
+            .w-64 { width: 100% !important; }
+            
+            /* Tighten up spacing for thermal */
+            .mb-6 { margin-bottom: 0.75rem !important; }
+            .pb-6 { padding-bottom: 0.75rem !important; }
+            .pt-6 { padding-top: 0.75rem !important; }
+            .gap-6 { gap: 0.5rem !important; }
           }
         }
       `}</style>
