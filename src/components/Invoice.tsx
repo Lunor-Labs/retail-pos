@@ -283,28 +283,44 @@ export function Invoice({ invoiceData, onClose }: InvoiceProps) {
       </div>
 
       <style>{`
+        @page {
+          margin: 0;
+          size: auto;
+        }
         @media print {
           body {
             visibility: hidden;
-            background-color: white;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           #invoice-content {
             visibility: visible;
             position: absolute;
             left: 0;
             top: 0;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
             margin: 0;
-            padding: 20px;
+            padding: 10mm;
             background-color: white;
-            z-index: 9999;
           }
           #invoice-content * {
             visibility: visible;
           }
           .print\:hidden {
             display: none !important;
+          }
+          /* Ensure table cells don't break awkwardly */
+          tr { page-break-inside: avoid; }
+          /* Adjust for thermal printers (usually narrow) */
+          @media (max-width: 80mm) {
+            #invoice-content {
+              padding: 2mm;
+            }
+            .text-2xl { font-size: 1.25rem; }
+            .text-xl { font-size: 1.1rem; }
+            .text-sm { font-size: 0.75rem; }
+            .text-xs { font-size: 0.65rem; }
+            .w-64 { width: 100%; }
           }
         }
       `}</style>
