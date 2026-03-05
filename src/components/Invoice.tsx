@@ -120,11 +120,19 @@ function buildReceiptHTML(
   <meta charset="UTF-8" />
   <title>Receipt – ${invoiceData.saleNumber}</title>
   <style>
-    /* @page size is set dynamically by JS after measuring actual content height.
-       This overrides any fixed paper size configured in the printer driver (CUPS/PPD). */
+    /*
+     * THERMAL RECEIPT PRINT CSS
+     * ─────────────────────────────────────────────────────────────────────
+     * KEY PRINCIPLE: Use ONLY physical units (mm, pt) for ALL sizes.
+     * Browsers scale px-based content to fit the page, shrinking text when
+     * there are many items. Physical units are immune to that scaling.
+     *
+     * @page height is patched by JS after measuring actual content height
+     * so the thermal cutter fires exactly after the last printed line.
+     */
     @page {
-      size: 80mm auto;
-      margin: 0;
+      size: 80mm auto;   /* JS will override with exact mm height */
+      margin: 0mm;
     }
 
     * {
@@ -135,17 +143,23 @@ function buildReceiptHTML(
       print-color-adjust: exact;
     }
 
-    html, body {
+    html {
+      /* Lock render width to exactly 80mm — no browser rescaling */
+      width: 80mm;
+      font-size: 8pt;        /* base: 1rem = 8pt ≈ 2.8mm */
+    }
+
+    body {
       width: 80mm;
       background: #fff;
       font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
+      font-size: 8pt;
       line-height: 1.4;
       color: #000;
     }
 
     #receipt {
-      width: 76mm;           /* 80mm - 2×2mm side padding */
+      width: 76mm;           /* 80mm − 2×2mm side padding */
       padding: 3mm 2mm 5mm;
     }
 
@@ -154,32 +168,32 @@ function buildReceiptHTML(
 
     .logo {
       display: block;
-      width: 40px;
-      height: 40px;
+      width: 11mm;
+      height: 11mm;
       object-fit: cover;
-      border-radius: 4px;
-      margin: 0 auto 4px;
+      border-radius: 1mm;
+      margin: 0 auto 1mm;
     }
 
     .store-name {
-      font-size: 14px;
+      font-size: 10pt;
       font-weight: 700;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.2mm;
     }
 
-    .store-sub  { font-size: 10px; }
-    .store-addr { font-size: 9px; color: #333; }
+    .store-sub  { font-size: 7pt; }
+    .store-addr { font-size: 7pt; color: #333; }
 
     /* ── Dividers ── */
     .dash {
       border: none;
-      border-top: 1px dashed #555;
-      margin: 4px 0;
+      border-top: 0.3mm dashed #555;
+      margin: 1.2mm 0;
     }
     .solid {
       border: none;
-      border-top: 2px solid #000;
-      margin: 4px 0;
+      border-top: 0.5mm solid #000;
+      margin: 1.2mm 0;
     }
 
     /* ── Two-column rows ── */
@@ -187,51 +201,52 @@ function buildReceiptHTML(
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      gap: 4px;
-      margin-bottom: 1px;
-      font-size: 11px;
+      gap: 1mm;
+      margin-bottom: 0.4mm;
+      font-size: 8pt;
     }
 
     .total-row {
-      font-size: 13px;
+      font-size: 10pt;
       font-weight: 700;
     }
 
     /* ── Items ── */
     .item {
-      margin-bottom: 5px;
+      margin-bottom: 1.5mm;
     }
 
     .item-name {
-      font-weight: 600;
-      font-size: 11px;
+      font-weight: 700;
+      font-size: 8pt;
       word-break: break-word;
       white-space: normal;
     }
 
     .warranty {
-      font-size: 9px;
-      padding-left: 10px;
+      font-size: 6.5pt;
+      padding-left: 3mm;
     }
 
     .item-price {
-      padding-left: 10px;
+      padding-left: 3mm;
+      font-size: 8pt;
     }
 
     /* ── Footer ── */
-    .footer { margin-top: 2px; }
+    .footer { margin-top: 1mm; }
 
     .qr {
       display: block;
-      width: 64px;
-      height: 64px;
+      width: 18mm;
+      height: 18mm;
       object-fit: contain;
-      margin: 3px auto;
+      margin: 1mm auto;
     }
 
-    .thank  { font-size: 10px; margin-top: 4px; }
-    .google { font-size: 10px; font-weight: 700; margin-bottom: 2px; }
-    .power  { font-size: 8px; color: #555; margin-top: 3px; }
+    .thank  { font-size: 7pt;  margin-top: 1mm; }
+    .google { font-size: 7pt;  font-weight: 700; margin-bottom: 0.5mm; }
+    .power  { font-size: 6pt;  color: #555; margin-top: 1mm; }
   </style>
 </head>
 <body>
@@ -295,54 +310,79 @@ function buildReceiptHTML(
 
 <script>
   /**
-   * Dynamic height measurement approach for thermal printers.
+   * THERMAL RECEIPT AUTO-SIZING & AUTO-CUT
+   * ────────────────────────────────────────────────────────────────────
+   * Problem 1 – Font shrinking:
+   *   Browsers scale the page content to fit the driver's fixed paper size.
+   *   We fix this by measuring the ACTUAL rendered height (in mm) and
+   *   injecting an exact @page rule BEFORE calling print(), so the browser
+   *   sees the page as exactly content-height tall — no scaling needed.
    *
-   * Problem: Printer drivers (CUPS/PPD) define a fixed paper height (e.g. 5").
-   * Even with @page { size: 80mm auto }, the driver can override and cut early.
+   * Problem 2 – Fixed cut length:
+   *   CUPS/PPD may define a fixed paper height. The injected @page rule
+   *   overrides it, so the cutter fires right after the last printed line.
    *
-   * Solution: After the page fully renders (fonts + images loaded), measure the
-   * exact pixel height of the receipt div, convert to mm, then inject a precise
-   * @page rule that overrides the driver's hardcoded size before printing.
+   * All CSS uses physical units (pt/mm) so there is nothing to scale.
    */
-  function doPrint() {
-    // Let layout settle for one paint cycle after images load
-    requestAnimationFrame(function () {
-      const receipt = document.getElementById('receipt');
-      const heightPx = receipt.getBoundingClientRect().height;
+  function measureAndPrint() {
+    const receipt = document.getElementById('receipt');
 
-      // Convert screen pixels → mm ( 1px = 25.4/96 mm at standard 96dpi )
-      // Add 8mm buffer so the cutter fires AFTER the last line, not on it.
-      const heightMm = Math.ceil(heightPx * 25.4 / 96) + 8;
+    // getBoundingClientRect gives CSS-pixel dimensions of the rendered div.
+    // At standard 96 dpi screen: 1 CSS px = 25.4/96 mm = 0.2646 mm.
+    // We use the screen DPI of the rendering context, not the printer DPI.
+    const heightPx  = receipt.getBoundingClientRect().height;
+    const heightMm  = Math.ceil(heightPx * 25.4 / 96) + 10; // +10mm cutter buffer
 
-      // Inject a precise @page that overrides the CUPS/driver paper size
-      const pageStyle = document.createElement('style');
-      pageStyle.textContent =
-        '@page { size: 80mm ' + heightMm + 'mm; margin: 0; }';
-      document.head.appendChild(pageStyle);
+    // Remove any previously injected @page rule (safety guard)
+    var old = document.getElementById('dynamic-page-style');
+    if (old) old.parentNode.removeChild(old);
 
-      window.focus();
-      window.print();
-      window.addEventListener('afterprint', function () { window.close(); });
+    // Inject precise @page that overrides CUPS/driver paper height
+    var style = document.createElement('style');
+    style.id = 'dynamic-page-style';
+    style.textContent = '@page { size: 80mm ' + heightMm + 'mm; margin: 0mm; }';
+    document.head.appendChild(style);
+
+    window.focus();
+    window.print();
+
+    // Close the popup after the print dialog is dismissed.
+    // afterprint fires both on Print and on Cancel — that is intentional
+    // so orphaned popups never pile up.
+    window.addEventListener('afterprint', function () {
+      window.close();
     });
   }
 
-  const images = document.querySelectorAll('img');
-  let loaded = 0;
-
-  function tryPrint() {
-    loaded++;
-    if (loaded >= images.length) doPrint();
+  function doPrint() {
+    // Two animation frames: first lets the browser finish layout,
+    // second ensures the paint (and font metrics) are fully committed.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        // Extra 80ms for web fonts / slow image decode
+        setTimeout(measureAndPrint, 80);
+      });
+    });
   }
 
-  if (images.length === 0) {
+  // ── Wait for all <img> tags to load before measuring height ──
+  var images = document.querySelectorAll('img');
+  var pending = images.length;
+
+  function onImageSettled() {
+    pending -= 1;
+    if (pending <= 0) doPrint();
+  }
+
+  if (pending === 0) {
     doPrint();
   } else {
     images.forEach(function (img) {
       if (img.complete) {
-        tryPrint();
+        onImageSettled();
       } else {
-        img.addEventListener('load', tryPrint);
-        img.addEventListener('error', tryPrint); // Don't block on broken image
+        img.addEventListener('load',  onImageSettled);
+        img.addEventListener('error', onImageSettled); // broken img must not block
       }
     });
   }
