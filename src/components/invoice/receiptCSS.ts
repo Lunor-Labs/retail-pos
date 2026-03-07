@@ -29,12 +29,7 @@
  */
 
 export const RECEIPT_PRINT_CSS = `
-  @page {
-    /* Width = driver's configured paper width (4 in), NOT the roll width.
-       JS will override height with the exact measured content height. */
-    size: 101.6mm auto;
-    margin: 0mm;
-  }
+  /* Remove initial @page rule - JS will inject the correct one */
 
   * {
     box-sizing: border-box;
@@ -47,32 +42,26 @@ export const RECEIPT_PRINT_CSS = `
   }
 
   html {
-    /* Must match @page width so the browser doesn't apply fit-to-page scaling */
+    /* Match printer driver: 4 inches = 101.6mm */
     width: 101.6mm;
-    font-size: 9.5pt;
+    font-size: 9pt;
   }
 
   body {
     width: 101.6mm;
     background: #fff;
     font-family: 'Courier New', Courier, monospace;
-    font-size: 9.5pt;
-    font-weight: 600;   /* minimum weight for clear thermal output */
-    line-height: 1.45;
+    font-size: 9pt;
+    font-weight: 600;
+    line-height: 1.4;
     color: #000;
   }
 
   #receipt {
-    /*
-     * 76 mm = comfortably within the 80 mm physical paper.
-     * margin-left: 0 = left-aligned so content falls on physical paper.
-     * The right ~25 mm of the 101.6 mm @page overhangs the paper edge and
-     * is simply not printed (no paper there to receive the dots).
-     */
+    /* 76mm fits within 80mm paper, centered for your printer */
     width: 76mm;
-    margin-left: 0;
-    margin-right: auto;
-    padding: 3mm 2mm 5mm;
+    margin: 0 auto;
+    padding: 2mm 2mm 4mm;
   }
 
   /* ── Header ── */
@@ -88,13 +77,13 @@ export const RECEIPT_PRINT_CSS = `
   }
 
   .store-name {
-    font-size: 13pt;
+    font-size: 12pt;
     font-weight: 800;
-    letter-spacing: 0.2mm;
+    letter-spacing: 0.1mm;
   }
 
-  .store-sub  { font-size: 8.5pt; font-weight: 600; }
-  .store-addr { font-size: 8pt;   font-weight: 600; color: #111; }
+  .store-sub  { font-size: 8pt; font-weight: 600; }
+  .store-addr { font-size: 7.5pt;   font-weight: 600; color: #111; }
 
   /* ── Dividers ── */
   .dash {
@@ -110,40 +99,50 @@ export const RECEIPT_PRINT_CSS = `
 
   /* ── Two-column rows ── */
   .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 1mm;
-    margin-bottom: 0.6mm;
-    font-size: 9.5pt;
+    display: table;
+    width: 100%;
+    margin-bottom: 0.5mm;
+    font-size: 9pt;
+  }
+  .row > * {
+    display: table-cell;
+    vertical-align: baseline;
+  }
+  .row > *:first-child {
+    text-align: left;
+  }
+  .row > *:last-child {
+    text-align: right;
   }
 
   .total-row {
-    font-size: 12pt;
+    font-size: 11pt;
     font-weight: 900;
   }
 
   /* ── Items ── */
   .item {
-    margin-bottom: 1.5mm;
+    margin-bottom: 1.2mm;
   }
 
   .item-name {
     font-weight: 800;
-    font-size: 9.5pt;
+    font-size: 9pt;
     word-break: break-word;
     white-space: normal;
+    line-height: 1.3;
   }
 
   .warranty {
-    font-size: 8pt;
+    font-size: 7.5pt;
     font-weight: 600;
-    padding-left: 3mm;
+    padding-left: 2mm;
+    line-height: 1.2;
   }
 
   .item-price {
-    padding-left: 3mm;
-    font-size: 9.5pt;
+    padding-left: 2mm;
+    font-size: 9pt;
   }
 
   /* ── Footer ── */
@@ -157,9 +156,9 @@ export const RECEIPT_PRINT_CSS = `
     margin: 1.5mm auto;
   }
 
-  .thank  { font-size: 8.5pt; font-weight: 600; margin-top: 1.5mm; }
-  .google { font-size: 8.5pt; font-weight: 800; margin-bottom: 0.8mm; }
-  .power  { font-size: 6pt;   font-weight: 600; color: #333; margin-top: 1mm; }
+  .thank  { font-size: 8pt; font-weight: 600; margin-top: 1.5mm; }
+  .google { font-size: 8pt; font-weight: 800; margin-bottom: 0.8mm; }
+  .power  { font-size: 5.5pt;   font-weight: 600; color: #333; margin-top: 1mm; }
 `;
 
 /**
@@ -176,33 +175,50 @@ export const RECEIPT_PRINT_CSS = `
  *   • The thermal cutter fires immediately after the last printed line.
  */
 export const RECEIPT_PRINT_JS = `
+  // Inject @page to match your 4-inch printer driver width
+  // Remove fixed height - let content determine length
+  (function() {
+    var style = document.createElement('style');
+    style.id = 'page-style';
+    // 101.6mm = 4 inches (matches your driver)
+    // 'auto' height should work with Type: Continue
+    style.textContent = '@page { size: 101.6mm auto; margin: 0; }';
+    document.head.appendChild(style);
+  })();
+
   function measureAndPrint() {
     var receipt = document.getElementById('receipt');
-    var heightPx = receipt.getBoundingClientRect().height;
-    // 1 CSS px = 25.4/96 mm at standard screen dpi; +10 mm cutter buffer.
-    var heightMm = Math.ceil(heightPx * 25.4 / 96) + 10;
 
-    var old = document.getElementById('dynamic-page-style');
-    if (old) old.parentNode.removeChild(old);
+    // Get actual content height
+    var heightPx = receipt.scrollHeight;
+    // Convert to mm: 1px = 25.4/96 mm
+    var heightMm = Math.ceil(heightPx * 25.4 / 96);
 
-    var style = document.createElement('style');
-    style.id = 'dynamic-page-style';
-    // Width = 101.6mm (4 in) matches CUPS configured width.
-    // Height = measured content height — tells the cutter exactly where to fire.
-    style.textContent = '@page { size: 101.6mm ' + heightMm + 'mm; margin: 0mm; }';
-    document.head.appendChild(style);
+    console.log('[Receipt] Content height:', heightMm, 'mm');
 
-    window.focus();
-    window.print();
-    window.addEventListener('afterprint', function () { window.close(); });
+    // For Xprinter with Continue type, we need to trick the driver
+    // by NOT setting a fixed page height - let it flow
+    // Just ensure body height matches content
+    document.body.style.height = 'auto';
+    document.documentElement.style.height = 'auto';
+
+    // Small delay then print
+    setTimeout(function() {
+      window.print();
+    }, 100);
+
+    window.addEventListener('afterprint', function () {
+      window.close();
+    });
   }
 
   function doPrint() {
-    requestAnimationFrame(function () {
+    // Wait for layout to settle
+    setTimeout(function() {
       requestAnimationFrame(function () {
-        setTimeout(measureAndPrint, 80);
+        requestAnimationFrame(measureAndPrint);
       });
-    });
+    }, 300);
   }
 
   var images = document.querySelectorAll('img');

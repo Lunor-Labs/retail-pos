@@ -97,8 +97,10 @@ export function openPrintPopup(
     showDiscount: boolean,
     buildHTML: (data: InvoiceData, discount: boolean, logo: string, qr: string) => string,
 ): void {
-    const logoUrl = new URL(logo, window.location.href).href;
-    const qrUrl = new URL(qrCode, window.location.href).href;
+    // Add cache-busting timestamp
+    const cacheBust = Date.now();
+    const logoUrl = new URL(logo, window.location.href).href + '?v=' + cacheBust;
+    const qrUrl = new URL(qrCode, window.location.href).href + '?v=' + cacheBust;
     const html = buildHTML(invoiceData, showDiscount, logoUrl, qrUrl);
 
     const popup = window.open(
