@@ -49,7 +49,12 @@ function AppContent() {
           onFilterNavigate={(filter) => handleNavigate('products', filter)}
         />
       )}
-      {currentView === 'pos' && <POS />}
+
+      {/* POS is always mounted but hidden — preserves cart and all state */}
+      <div style={{ display: currentView === 'pos' ? 'block' : 'none' }}>
+        <POS isActive={currentView === 'pos'} />
+      </div>
+
       {currentView === 'products' && (
         <Products key={initialStockFilter} initialStockFilter={initialStockFilter} />
       )}

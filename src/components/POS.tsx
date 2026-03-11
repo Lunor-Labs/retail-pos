@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useCartPersistence } from '../hooks/useCartPersistence';
 import {
   Search,
   Plus,
@@ -13,7 +14,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType } from '../hooks/useProducts';
-import { ProductWithBatches, Customer, ReferralAgent, CartItem } from '../types';
+import { ProductWithBatches, Customer, ReferralAgent } from '../types';
 import { Invoice } from './Invoice';
 import { ProductGrid } from './pos/ProductGrid';
 import { CartItemsList } from './pos/CartItemsList';
@@ -25,7 +26,7 @@ import { salesService, customerService, productService } from '../services'; // 
 import { logger } from '../lib/logger';
 import { playScannerBeep } from '../utils/audio';
 
-export function POS() {
+export function POS({ isActive = true }: { isActive?: boolean }) {
   const { profile } = useAuth();
   const { showToast } = useToast();
 
@@ -52,16 +53,28 @@ export function POS() {
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [referralAgents, setReferralAgents] = useState<ReferralAgent[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
 
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [selectedReferralAgent, setSelectedReferralAgent] = useState<ReferralAgent | null>(null);
+  // ── Persistent cart state (survives page navigation) ───────────────────────
+  const {
+    cart,
+    setCart,
+    selectedCustomer,
+    setSelectedCustomer,
+    selectedReferralAgent,
+    setSelectedReferralAgent,
+    paymentMethod,
+    setPaymentMethod,
+    paidAmount,
+    setPaidAmount,
+    serviceCharge,
+    setServiceCharge,
+    taxRate,
+    setTaxRate,
+    clearCart,
+  } = useCartPersistence(customers, referralAgents);
+
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithBatches | null>(null);
-  const [taxRate, setTaxRate] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'credit' | 'mixed'>('cash');
-  const [paidAmount, setPaidAmount] = useState(0);
-  const [serviceCharge, setServiceCharge] = useState(0);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -154,6 +167,8 @@ export function POS() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept scanner if POS is not the active page
+      if (!isActive) return;
       // Don't intercept scanner if a major modal is open (except POS scan mode)
       if (showCustomerModal || showAgentModal || showInvoice) return;
 
@@ -346,14 +361,7 @@ export function POS() {
     setCart(cart.filter((_, i) => i !== index));
   }
 
-  function clearCart() {
-    setCart([]);
-    setSelectedCustomer(null);
-    setSelectedReferralAgent(null);
-    setPaidAmount(0);
-    setServiceCharge(0);
-    setPaymentMethod('cash');
-  }
+  // clearCart is provided by useCartPersistence (clears & persists empty state)
 
   // Calculations
   const grossSubtotal = cart.reduce((sum, item) => sum + item.original_price * item.quantity, 0);
