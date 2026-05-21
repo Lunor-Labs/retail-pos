@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, UserPlus, Users, Check, X } from 'lucide-react';
+import { KeyRound, UserPlus, Users, Check, X, Star } from 'lucide-react';
 import { Database } from '../lib/database.types';
+import { loyaltyService } from '../services';
 
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 
@@ -28,8 +29,12 @@ export function Settings() {
   const [passwordMessage, setPasswordMessage] = useState('');
   const [cashierMessage, setCashierMessage] = useState('');
 
+  const [loyaltyEarnRate, setLoyaltyEarnRate] = useState(100);
+  const [loyaltySavingRates, setLoyaltySavingRates] = useState(false);
+
   useEffect(() => {
     loadUsers();
+    loyaltyService.getEarnRate().then(setLoyaltyEarnRate).catch(() => {});
   }, []);
 
   async function loadUsers() {
@@ -347,6 +352,58 @@ export function Settings() {
           )}
         </div>
       </div>
+
+      {/* Loyalty Rate Settings */}
+      {profile?.role === 'admin' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="bg-amber-100 p-2 rounded-lg">
+              <Star className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Loyalty Points Settings</h3>
+              <p className="text-sm text-slate-500">Configure how customers earn loyalty points</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 max-w-sm">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Earn Rate (LKR per 1 point)
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={loyaltyEarnRate}
+                onChange={(e) => setLoyaltyEarnRate(Number(e.target.value) || 1)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Customer earns 1 point for every LKR {loyaltyEarnRate} spent. 1 point = LKR 1 off at redemption.
+              </p>
+            </div>
+
+            <button
+              disabled={loyaltySavingRates}
+              onClick={async () => {
+                setLoyaltySavingRates(true);
+                try {
+                  await loyaltyService.setEarnRate(loyaltyEarnRate);
+                  showToast('Loyalty rate updated', 'success');
+                } catch {
+                  showToast('Failed to update loyalty rate', 'error');
+                } finally {
+                  setLoyaltySavingRates(false);
+                }
+              }}
+              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition disabled:opacity-50 font-medium"
+            >
+              {loyaltySavingRates ? 'Saving...' : 'Save Loyalty Settings'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
