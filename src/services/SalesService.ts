@@ -541,6 +541,34 @@ export class SalesService {
     /**
      * Get top selling items
      */
+    async getTopSellingToday(limit = 5): Promise<{ name: string; value: number }[]> {
+        try {
+            const adapter = (this.saleRepo as any).adapter;
+            const client = adapter.getClient();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const { data } = await (client.from('sale_items') as any)
+                .select('quantity, products(name), sales!inner(sale_date)')
+                .gte('sales.sale_date', today.toISOString())
+                .not('product_id', 'is', null);
+
+            const itemMap = new Map<string, number>();
+            (data || []).forEach((item: any) => {
+                const name = item.products?.name || 'Unknown';
+                itemMap.set(name, (itemMap.get(name) || 0) + Number(item.quantity));
+            });
+
+            return Array.from(itemMap.entries())
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, limit);
+        } catch (error) {
+            logger.error('Failed to fetch today top selling items', error as Error);
+            return [];
+        }
+    }
+
     async getTopSellingItems(limit: number = 5, period: 'month' | 'all' = 'all') {
         try {
             const adapter = (this.saleRepo as any).adapter;

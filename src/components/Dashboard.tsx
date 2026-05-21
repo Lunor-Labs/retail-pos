@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Package, Users, ShoppingCart, TrendingUp, DollarSign, AlertTriangle, FileText, RotateCcw, ArrowRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { StockFilter } from '../hooks/useProducts';
-import { productService, customerService, salesService } from '../services';
+import { productService, customerService, salesService, variantService } from '../services';
 
 interface DashboardStats {
   totalProducts: number;
@@ -35,8 +35,10 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
   const [outOfStockItems, setOutOfStockItems] = useState<any[]>([]);
-  const [activeStockTab, setActiveStockTab] = useState<'low' | 'out'>('low');
+  const [variantLowStockItems, setVariantLowStockItems] = useState<any[]>([]);
+  const [activeStockTab, setActiveStockTab] = useState<'low' | 'out' | 'variants'>('low');
   const [topSellingItems, setTopSellingItems] = useState<any[]>([]);
+  const [todayTopSellers, setTodayTopSellers] = useState<{ name: string; value: number }[]>([]);
 
   useEffect(() => {
     loadDashboardStats(Number(chartPeriod));
@@ -51,7 +53,9 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         pendingReturnsCount,
         recentSalesData,
         salesHistoryWithCost,
-        topSellingData
+        topSellingData,
+        variantLowStock,
+        todayTop
       ] = await Promise.all([
         productService.getAllProducts(),
         customerService.getCustomerCount(),
@@ -59,7 +63,9 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         salesService.getPendingReturnsCount(),
         salesService.getRecentSales(5),
         salesService.getSalesHistoryWithCost(days),
-        salesService.getTopSellingItems(20)
+        salesService.getTopSellingItems(20),
+        variantService.getLowStockVariants(),
+        salesService.getTopSellingToday(5),
       ]);
 
       const lowStockList = allProducts.filter(product => {
@@ -88,7 +94,9 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       setRecentSales(recentSalesData || []);
       setLowStockItems(lowStockList);
       setOutOfStockItems(outOfStockList);
+      setVariantLowStockItems(variantLowStock || []);
       setTopSellingItems(topSellingWithColors);
+      setTodayTopSellers(todayTop || []);
 
       setStats({
         totalProducts: allProducts.length,
@@ -389,6 +397,29 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         </div>
       </div>
 
+      {/* Today's Top Sellers */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp className="w-5 h-5 text-emerald-500" />
+          <h3 className="text-lg font-bold text-slate-900">Today's Top Sellers</h3>
+        </div>
+        {todayTopSellers.length === 0 ? (
+          <p className="text-sm text-slate-400 py-4 text-center">No sales recorded today yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {todayTopSellers.map((item, i) => (
+              <div key={i} className="flex items-center justify-between py-2 px-3 -mx-3 rounded-lg hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-400 w-4">{i + 1}</span>
+                  <span className="text-sm font-medium text-slate-800">{item.name}</span>
+                </div>
+                <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">{item.value} sold</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Lists Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Invoices */}
@@ -462,7 +493,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
             </button>
           </div>
 
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-4">
+          <div className="flex p-1 bg-slate-100 rounded-xl mb-4 gap-1">
             <button
               onClick={() => setActiveStockTab('low')}
               className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${activeStockTab === 'low'
@@ -470,7 +501,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
                 : 'text-slate-500 hover:text-slate-700'
                 }`}
             >
-              Low Stock ({stats.lowStockProducts})
+              Low ({stats.lowStockProducts})
             </button>
             <button
               onClick={() => setActiveStockTab('out')}
@@ -479,7 +510,16 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
                 : 'text-slate-500 hover:text-slate-700'
                 }`}
             >
-              Out of Stock ({stats.outOfStockProducts})
+              Out ({stats.outOfStockProducts})
+            </button>
+            <button
+              onClick={() => setActiveStockTab('variants')}
+              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${activeStockTab === 'variants'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+                }`}
+            >
+              Variants ({variantLowStockItems.length})
             </button>
           </div>
 
@@ -509,7 +549,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
                     </div>
                   )}
                 </>
-              ) : (
+              ) : activeStockTab === 'out' ? (
                 <>
                   {outOfStockItems.slice(0, 10).map((item, index) => (
                     <div key={index}
@@ -525,6 +565,28 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
                   {outOfStockItems.length === 0 && (
                     <div className="text-center py-8">
                       <p className="text-slate-400 text-sm">No out of stock items</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {variantLowStockItems.slice(0, 10).map((v: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-slate-50 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                        <div>
+                          <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">{v.sku}</span>
+                          {(v.size || v.color) && (
+                            <span className="ml-1.5 text-xs text-slate-400">{[v.color, v.size].filter(Boolean).join(' · ')}</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full">{v.total_stock}</span>
+                    </div>
+                  ))}
+                  {variantLowStockItems.length === 0 && (
+                    <div className="text-center py-8">
+                      <p className="text-slate-400 text-sm">All variants are well stocked</p>
                     </div>
                   )}
                 </>
