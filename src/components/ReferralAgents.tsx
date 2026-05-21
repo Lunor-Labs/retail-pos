@@ -33,7 +33,7 @@ export function ReferralAgents() {
   const [selectedAgent, setSelectedAgent] = useState<ReferralAgent | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    type: 'individual' as 'garage' | 'individual',
+    type: 'full_time' as 'full_time' | 'part_time',
     phone: '',
     email: '',
     address: '',
@@ -255,7 +255,7 @@ export function ReferralAgents() {
   function resetForm() {
     setFormData({
       name: '',
-      type: 'individual',
+      type: 'full_time',
       phone: '',
       email: '',
       address: '',
@@ -296,37 +296,37 @@ export function ReferralAgents() {
   );
 
   if (loading) {
-    return <LoadingSpinner message="Loading referral agents..." />;
+    return <LoadingSpinner message="Loading sales staff..." />;
   }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Referral Agents</h2>
-          <p className="text-slate-600 mt-1">Manage garages and individual referral partners</p>
+          <h2 className="text-2xl font-bold text-slate-900">Sales Staff</h2>
+          <p className="text-slate-600 mt-1">Manage full-time and part-time sales staff with commission tracking</p>
         </div>
         <button
           onClick={openAddModal}
           className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition shadow-sm"
         >
           <Plus className="w-5 h-5" />
-          Add Agent
+          Add Staff
         </button>
       </div>
 
       <SearchBar
         value={searchTerm}
         onChange={setSearchTerm}
-        placeholder="Search agents by name or phone..."
+        placeholder="Search staff by name or phone..."
       />
 
       {filteredAgents.length === 0 ? (
         <EmptyState
           icon={UserCheck}
-          title="No agents found"
-          description={searchTerm ? `No agents match "${searchTerm}"` : "You haven't added any referral agents yet."}
-          action={!searchTerm ? { label: 'Add Your First Agent', onClick: openAddModal } : undefined}
+          title="No staff found"
+          description={searchTerm ? `No staff match "${searchTerm}"` : "You haven't added any sales staff yet."}
+          action={!searchTerm ? { label: 'Add Your First Staff Member', onClick: openAddModal } : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -386,14 +386,14 @@ export function ReferralAgents() {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title={modalMode === 'add' ? 'Add Referral Agent' : 'Edit Referral Agent'}
+        title={modalMode === 'add' ? 'Add Sales Staff' : 'Edit Sales Staff'}
         size="2xl"
       >
         <form onSubmit={handleSubmit} className="p-6 text-left">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Agent Name <span className="text-red-500">*</span>
+                Staff Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -401,7 +401,7 @@ export function ReferralAgents() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Enter garage or name"
+                placeholder="Enter staff member's name"
               />
             </div>
 
@@ -414,8 +414,8 @@ export function ReferralAgents() {
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
               >
-                <option value="individual">Individual</option>
-                <option value="garage">Garage</option>
+                <option value="full_time">Full Time</option>
+                <option value="part_time">Part Time</option>
               </select>
             </div>
 
@@ -486,7 +486,7 @@ export function ReferralAgents() {
               type="submit"
               className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition"
             >
-              {modalMode === 'add' ? 'Add Agent' : 'Update Agent'}
+              {modalMode === 'add' ? 'Add Staff' : 'Update Staff'}
             </button>
           </div>
         </form>
