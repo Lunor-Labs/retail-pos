@@ -6,6 +6,8 @@ import { SupplierRepository } from './SupplierRepository';
 import { PurchaseOrderRepository } from './PurchaseOrderRepository';
 import { ReturnRepository } from './ReturnRepository';
 import { ReferralAgentRepository } from './ReferralAgentRepository';
+import { VariantRepository } from './VariantRepository';
+import { LoyaltyRepository } from './LoyaltyRepository';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -25,6 +27,8 @@ export const supplierRepository = new SupplierRepository(adapter);
 export const purchaseOrderRepository = new PurchaseOrderRepository(adapter);
 export const returnRepository = new ReturnRepository(adapter);
 export const referralAgentRepository = new ReferralAgentRepository(adapter);
+export const variantRepository = new VariantRepository(adapter);
+export const loyaltyRepository = new LoyaltyRepository(adapter);
 
 // Export adapter for advanced use cases
 export { adapter };
@@ -37,5 +41,7 @@ export {
     SupplierRepository,
     PurchaseOrderRepository,
     ReturnRepository,
-    ReferralAgentRepository
+    ReferralAgentRepository,
+    VariantRepository,
+    LoyaltyRepository,
 };
