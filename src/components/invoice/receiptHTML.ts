@@ -12,7 +12,7 @@ import { RECEIPT_PRINT_CSS, RECEIPT_PRINT_JS } from './receiptCSS';
 export function buildReceiptHTML(
     invoiceData: InvoiceData,
     showDiscount: boolean,
-    logoSrc: string,
+    _logoSrc: string,
     qrSrc: string,
 ): string {
     const displaySubtotal = !showDiscount
@@ -38,17 +38,16 @@ export function buildReceiptHTML(
                     ? item.discountedSubtotal
                     : item.subtotal;
 
-            const warrantyLine =
-                item.warranty && item.warranty.duration > 0
-                    ? `<div class="warranty">Warranty: ${item.warranty.duration} ${item.warranty.unit}${item.warranty.type ? ` (${item.warranty.type})` : ''}</div>`
-                    : '';
+            const variantLine = item.variantLabel
+                ? `<div class="warranty">${item.variantLabel}</div>`
+                : '';
 
             return `
         <div class="item">
           <div class="item-name">
             ${i + 1}. ${item.name}
           </div>
-          ${warrantyLine}
+          ${variantLine}
           <div class="row item-price">
             <span>${item.quantity} x ${up.toFixed(2)}</span>
             <b>LKR ${st.toFixed(2)}</b>
@@ -102,11 +101,8 @@ export function buildReceiptHTML(
 
   <!-- Header -->
   <div class="center">
-    <img class="logo" src="${logoSrc}" alt="Gasith Motors" />
-    <div class="store-name">Gasith Motors</div>
-    <div class="store-sub">Auto Parts &amp; Accessories</div>
-    <div class="store-addr">No: 80, Beliatta Rd, Walasmulla</div>
-    <div class="store-addr">Tel: +94 77 6600 285 / +94 47 2103 738</div>
+    <div class="store-name">RIVONLAK</div>
+    <div class="store-sub">Fashion Retail</div>
   </div>
 
   <hr class="dash" />
@@ -148,7 +144,7 @@ export function buildReceiptHTML(
 
   <!-- Footer -->
   <div class="center footer">
-    <div class="google">Review us on Google</div>
+    <div class="google">Shop Again at RIVONLAK</div>
     <img class="qr" src="${qrSrc}" alt="QR Code" />
     <div class="thank">Thank you for your business!</div>
     <div class="power">System Powered by <b>Lunor Labs</b></div>

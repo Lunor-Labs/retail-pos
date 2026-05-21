@@ -29,8 +29,8 @@ export function shareOnWhatsApp(invoiceData: InvoiceData, showDiscount: boolean)
 
     invoiceData.items.forEach((item, index) => {
         message += `${index + 1}. ${item.name} ${item.batchNumber ? `(Batch: ${item.batchNumber})` : ''}\n`;
-        if (item.warranty && item.warranty.duration > 0) {
-            message += `   Warranty: ${item.warranty.duration} ${item.warranty.unit} ${item.warranty.type ? `(${item.warranty.type})` : ''}\n`;
+        if (item.variantLabel) {
+            message += `   ${item.variantLabel}\n`;
         }
         const printUnitPrice =
             !showDiscount && item.discountedUnitPrice !== undefined

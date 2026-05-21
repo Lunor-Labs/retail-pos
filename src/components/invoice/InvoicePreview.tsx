@@ -1,4 +1,3 @@
-import logo from '../../assets/favicon.jpeg';
 import qrCode from '../../assets/QR.jpeg';
 import { InvoiceData } from './types';
 
@@ -22,15 +21,8 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
 
             {/* Header */}
             <div className="text-center mb-3">
-                <img
-                    src={logo}
-                    alt="Gasith Motors"
-                    style={{ height: 48, width: 48, objectFit: 'cover', borderRadius: 6, margin: '0 auto 6px' }}
-                />
-                <div style={{ fontWeight: 700, fontSize: 15 }}>Gasith Motors</div>
-                <div style={{ fontSize: 11, color: '#555' }}>Auto Parts &amp; Accessories</div>
-                <div style={{ fontSize: 10, color: '#777' }}>No: 80, Beliatta Rd, Walasmulla</div>
-                <div style={{ fontSize: 10, color: '#777' }}>Tel: +94 77 6600 285 / +94 47 2103 738</div>
+                <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: '0.1em' }}>RIVONLAK</div>
+                <div style={{ fontSize: 11, color: '#555' }}>Fashion Retail</div>
             </div>
             <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
 
@@ -72,9 +64,9 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
                         <div style={{ fontWeight: 600, wordBreak: 'break-word', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span>{i + 1}. {item.name}</span>
                         </div>
-                        {item.warranty && item.warranty.duration > 0 && (
-                            <div style={{ fontSize: 10, paddingLeft: 12 }}>
-                                Warranty: {item.warranty.duration} {item.warranty.unit}{item.warranty.type ? ` (${item.warranty.type})` : ''}
+                        {item.variantLabel && (
+                            <div style={{ fontSize: 10, paddingLeft: 12, color: '#555' }}>
+                                {item.variantLabel}
                             </div>
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: 12 }}>
@@ -133,7 +125,7 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
 
             {/* Footer */}
             <div className="text-center" style={{ paddingBottom: 6 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Review us on Google</div>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Shop Again at RIVONLAK</div>
                 <img
                     src={qrCode}
                     alt="QR Code"

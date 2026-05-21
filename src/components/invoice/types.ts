@@ -8,11 +8,7 @@ export interface InvoiceItem {
     discountedSubtotal?: number;
     batchNumber: string;
     isManual?: boolean;
-    warranty?: {
-        duration: number;
-        unit: 'days' | 'months' | 'years';
-        type?: string;
-    };
+    variantLabel?: string;
 }
 
 /** Full invoice / sale record passed into the Invoice component. */
