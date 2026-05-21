@@ -29,6 +29,8 @@ export interface CreateSaleInput {
     notes?: string;
     referral_commission_rate?: number;
     service_charge?: number;
+    loyalty_points_redeemed?: number;
+    customer_loyalty_balance?: number;
 }
 
 /**
@@ -127,6 +129,23 @@ export class SalesService {
                     customerId: input.customer_id,
                     creditAmount,
                 });
+            }
+
+            // Earn loyalty points for customer (non-fatal if it fails)
+            if (input.customer_id && input.customer_loyalty_balance !== undefined) {
+                try {
+                    const loyaltyService = (this as any)._loyaltyService as import('./LoyaltyService').LoyaltyService | undefined;
+                    if (loyaltyService) {
+                        await loyaltyService.earnPoints(
+                            input.customer_id,
+                            input.total_amount,
+                            sale.id,
+                            input.customer_loyalty_balance
+                        );
+                    }
+                } catch (loyaltyErr) {
+                    logger.error('Loyalty points earn failed (non-fatal)', loyaltyErr as Error);
+                }
             }
 
             // Create referral commission if agent provided (exclude service charge)
