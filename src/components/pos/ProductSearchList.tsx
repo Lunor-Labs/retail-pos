@@ -33,7 +33,7 @@ export function ProductSearchList({ products, onSelectProduct }: ProductSearchLi
               <div>
                 <p className="font-medium text-slate-900">{product.name}</p>
                 <p className="text-sm text-slate-500">
-                  {product.sku} {product.barcode && `• ${product.barcode}`}
+                  {product.sku} {product.category && `• ${product.category}`}
                 </p>
               </div>
             </div>

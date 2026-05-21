@@ -189,7 +189,7 @@ export class InventoryService {
     /**
      * Get low stock alerts
      */
-    async getLowStockAlerts(threshold?: number): Promise<Array<{
+    async getLowStockAlerts(threshold: number = 5): Promise<Array<{
         productId: string;
         productName: string;
         currentStock: number;
@@ -201,12 +201,12 @@ export class InventoryService {
             const products = await this.productRepo.findLowStock(threshold);
 
             const alerts = products
-                .filter(p => p.total_stock <= (p.reorder_level || 0))
+                .filter(p => p.total_stock <= threshold)
                 .map(p => ({
                     productId: p.id,
                     productName: p.name,
                     currentStock: p.total_stock,
-                    minStock: p.reorder_level || 0,
+                    minStock: threshold,
                 }));
 
             logger.info('Low stock alerts retrieved', { alertCount: alerts.length });

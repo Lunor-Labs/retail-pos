@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Database } from '../lib/database.types';
-import { Plus, Users, CreditCard, CheckCircle, Clock, Eye, FileText, X, UserPlus, Edit } from 'lucide-react';
+import { Plus, Users, CreditCard, CheckCircle, Clock, Eye, FileText, UserPlus, Edit } from 'lucide-react';
 import { Invoice, InvoiceData } from './Invoice';
 import { customerService, salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';

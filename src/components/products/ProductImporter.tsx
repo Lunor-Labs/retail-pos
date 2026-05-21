@@ -145,26 +145,12 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                     }
 
                     const cleanSku = row.sku.trim();
-                    const barcode = row.barcode?.trim() || null;
-
-                    // Check for existing product with this barcode to prevent unique constraint errors
-                    if (barcode) {
-                        const { data: barcodeConflict } = await (supabase
-                            .from('products')
-                            .select('id, sku')
-                            .eq('barcode', barcode)
-                            .single() as any);
-
-                        if (barcodeConflict && barcodeConflict.sku !== cleanSku) {
-                            throw new Error(`Barcode ${barcode} is already assigned to SKU: ${barcodeConflict.sku}`);
-                        }
-                    }
 
                     // Check Product
                     let productId = '';
                     const { data: existingProduct } = await supabase
                         .from('products')
-                        .select('id, barcode, image_url, reorder_level')
+                        .select('id, image_url')
                         .eq('sku', cleanSku)
                         .single() as any;
 
@@ -180,18 +166,14 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                     if (existingProduct) {
                         productId = existingProduct.id;
 
-                        // Merge fields to not override existing with nulls
                         const updateData = {
                             ...productData,
-                            barcode: barcode || existingProduct.barcode, // Keep existing if current is null
                             image_url: row.image_url || existingProduct.image_url,
-                            reorder_level: row.reorder_level ? parseInt(row.reorder_level) : existingProduct.reorder_level
                         };
 
-                        const { error: updateError } = await (supabase
-                            .from('products')
-                            .update(updateData as any)
-                            .eq('id', productId) as any);
+                        const { error: updateError } = await (supabase.from('products') as any)
+                            .update(updateData)
+                            .eq('id', productId);
 
                         if (updateError) throw updateError;
                     } else {
@@ -201,9 +183,7 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                             .insert({
                                 sku: cleanSku,
                                 ...productData,
-                                barcode: barcode,
                                 image_url: row.image_url || null,
-                                reorder_level: parseInt(row.reorder_level || '0') || 5,
                                 created_at: new Date().toISOString()
                             } as any)
                             .select('id')
@@ -225,24 +205,22 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
 
                         if (batchNumber) {
                             // Check for specific batch
-                            const { data: batch } = await supabase
-                                .from('product_batches')
+                            const { data: batch } = await (supabase
+                                .from('product_batches') as any)
                                 .select('id')
-                                .eq('product_id', productId)
                                 .eq('batch_number', batchNumber)
-                                .single() as any;
+                                .single();
                             if (batch) existingBatchId = batch.id;
                         } else {
                             // No batch number provided - find the most recent batch to update if qty is 0,
                             // or create a new one if qty > 0
                             if (qty === 0) {
-                                const { data: latestBatch } = await supabase
-                                    .from('product_batches')
+                                const { data: latestBatch } = await (supabase
+                                    .from('product_batches') as any)
                                     .select('id, batch_number')
-                                    .eq('product_id', productId)
                                     .order('received_date', { ascending: false })
                                     .limit(1)
-                                    .single() as any;
+                                    .single();
 
                                 if (latestBatch) {
                                     existingBatchId = latestBatch.id;
@@ -256,23 +234,21 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                         }
 
                         const baseBatchData = {
-                            product_id: productId,
+                            variant_id: null, // variant association done after variant management is active
                             supplier_id: supplierId,
                             batch_number: batchNumber,
                             cost_price: costPrice,
                             markup_percentage: markup,
-                            selling_price: Math.round(sellingPrice * 100) / 100, // Round to 2 decimals
+                            selling_price: Math.round(sellingPrice * 100) / 100,
                             current_quantity: qty,
-                            expiry_date: row.expiry_date || null,
                             updated_at: new Date().toISOString()
                         };
 
                         if (existingBatchId) {
                             // On update, we NEVER touch initial_quantity
-                            const { error: batchError } = await (supabase
-                                .from('product_batches')
-                                .update(baseBatchData as any)
-                                .eq('id', existingBatchId) as any);
+                            const { error: batchError } = await (supabase.from('product_batches') as any)
+                                .update(baseBatchData)
+                                .eq('id', existingBatchId);
 
                             if (batchError) throw batchError;
                         } else if (qty > 0) {

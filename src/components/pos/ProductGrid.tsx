@@ -75,9 +75,9 @@ export function ProductGrid({ products, onAddToCart, viewMode, isAdmin }: Produc
                       <span className="bg-slate-100 px-2 py-0.5 rounded text-xs font-mono">
                         {product.sku}
                       </span>
-                      {product.barcode && (
+                      {product.sku && (
                         <span className="text-xs text-slate-600">
-                          {product.barcode}
+                          {product.category}
                         </span>
                       )}
                     </div>

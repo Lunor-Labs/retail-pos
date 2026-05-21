@@ -83,9 +83,8 @@ export class SupabaseAdapter implements DatabaseAdapter {
     }
 
     async update<T>(table: string, id: string, data: Partial<T>): Promise<T> {
-        const { data: result, error } = await this.client
-            .from(table)
-            .update(data as any)
+        const { data: result, error } = await (this.client.from(table) as any)
+            .update(data)
             .eq('id', id)
             .select()
             .single();

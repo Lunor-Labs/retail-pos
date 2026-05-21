@@ -140,8 +140,8 @@ export function ProductDetailsView({ product, onClose, onUpdate, defaultShowAddS
             <p className="font-medium text-slate-900">{product.sku}</p>
           </div>
           <div>
-            <p className="text-sm text-slate-500">Barcode</p>
-            <p className="font-medium text-slate-900">{product.barcode || '-'}</p>
+            <p className="text-sm text-slate-500">Brand</p>
+            <p className="font-medium text-slate-900">{(product as any).brand || '-'}</p>
           </div>
           <div>
             <p className="text-sm text-slate-500">Category</p>

@@ -6,11 +6,10 @@ interface CartItemsListProps {
   items: CartItem[];
   onUpdateQuantity: (index: number, change: number) => void;
   onUpdatePrice?: (index: number, newPrice: number) => void;
-  onUpdateWarranty?: (index: number, warranty: { duration: number; unit: 'days' | 'months' | 'years'; type: string }) => void;
   onRemoveItem: (index: number) => void;
 }
 
-export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onUpdateWarranty, onRemoveItem }: CartItemsListProps) {
+export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemoveItem }: CartItemsListProps) {
   if (items.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400">
@@ -49,6 +48,8 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onUpdate
                 </div>
                 {!item.isManual && (
                   <p className="text-xs text-slate-500">
+                    {item.variant && [item.variant.color, item.variant.size].filter(Boolean).join(' · ')}
+                    {item.variant && ' • '}
                     Batch: {item.batch.batch_number} • LKR {item.batch.selling_price.toFixed(2)} each
                   </p>
                 )}
@@ -61,50 +62,6 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onUpdate
               <Trash2 className="w-4 h-4 text-red-600" />
             </button>
           </div>
-
-          {/* Warranty Section — only for regular product items */}
-          {!item.isManual && (
-            <div className="mb-3 p-2 bg-blue-50/50 rounded-lg border border-blue-100/50">
-              <p className="text-[10px] font-bold text-blue-800 uppercase tracking-wider mb-1 px-1">Warranty Info</p>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  value={item.warranty_duration || ''}
-                  onChange={(e) => onUpdateWarranty && onUpdateWarranty(index, {
-                    duration: parseInt(e.target.value) || 0,
-                    unit: item.warranty_unit || 'months',
-                    type: item.warranty_type || ''
-                  })}
-                  className="w-14 px-1 py-1 border border-blue-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <select
-                  value={item.warranty_unit || 'months'}
-                  onChange={(e) => onUpdateWarranty && onUpdateWarranty(index, {
-                    duration: item.warranty_duration || 0,
-                    unit: e.target.value as any,
-                    type: item.warranty_type || ''
-                  })}
-                  className="w-20 px-1 py-1 border border-blue-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  <option value="days">Days</option>
-                  <option value="months">Months</option>
-                  <option value="years">Years</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Type (e.g. Shop)"
-                  value={item.warranty_type || ''}
-                  onChange={(e) => onUpdateWarranty && onUpdateWarranty(index, {
-                    duration: item.warranty_duration || 0,
-                    unit: item.warranty_unit || 'months',
-                    type: e.target.value
-                  })}
-                  className="flex-1 min-w-0 px-2 py-1 border border-blue-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-              </div>
-            </div>
-          )}
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">

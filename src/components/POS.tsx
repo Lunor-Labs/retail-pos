@@ -393,14 +393,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     setCart(newCart);
   }
 
-  function updateCartItemWarranty(index: number, warranty: { duration: number; unit: 'days' | 'months' | 'years'; type: string }) {
-    const newCart = [...cart];
-    newCart[index].warranty_duration = warranty.duration;
-    newCart[index].warranty_unit = warranty.unit;
-    newCart[index].warranty_type = warranty.type;
-    setCart(newCart);
-  }
-
   function removeFromCart(index: number) {
     setCart(cart.filter((_, i) => i !== index));
   }
@@ -509,14 +501,12 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         referral_agent_id: selectedReferralAgent?.id || null,
         items: cart.map((item) => ({
           product_id: item.isManual ? undefined : item.product.id,
+          variant_id: item.isManual ? undefined : item.variant?.id,
           batch_id: item.isManual ? undefined : item.batch.id,
           quantity: item.quantity,
           unit_price: item.price,
           selling_price: item.original_price,
           cost_price: item.batch.cost_price,
-          warranty_duration: item.warranty_duration,
-          warranty_unit: item.warranty_unit,
-          warranty_type: item.warranty_type,
           is_manual: item.isManual || false,
           manual_description: item.manualDescription,
         })),
@@ -545,11 +535,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           discountedSubtotal: item.price * item.quantity,
           batchNumber: item.isManual ? '' : item.batch.batch_number,
           isManual: item.isManual,
-          warranty: (!item.isManual && item.warranty_duration) ? {
-            duration: item.warranty_duration,
-            unit: item.warranty_unit || 'months',
-            type: item.warranty_type
-          } : undefined,
+          variantLabel: item.variant ? [item.variant.color, item.variant.size].filter(Boolean).join(' · ') : undefined,
         })),
         subtotal: grossSubtotal,
         discount: itemLevelDiscount,
@@ -589,6 +575,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           },
           items: cart.map((item) => ({
             product_id: item.isManual ? undefined : item.product.id,
+            variant_id: item.isManual ? undefined : item.variant?.id,
             batch_id: item.isManual ? undefined : item.batch.id,
             quantity: item.quantity,
             unit_price: item.price,
@@ -596,9 +583,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             subtotal: item.price * item.quantity,
             total_price: item.price * item.quantity,
             cost_price: item.batch.cost_price,
-            warranty_duration: item.warranty_duration,
-            warranty_unit: item.warranty_unit,
-            warranty_type: item.warranty_type,
             is_manual: item.isManual || false,
             manual_description: item.manualDescription,
           })),
@@ -651,11 +635,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             discountedSubtotal: item.price * item.quantity,
             batchNumber: item.isManual ? '' : item.batch.batch_number,
             isManual: item.isManual,
-            warranty: (!item.isManual && item.warranty_duration) ? {
-              duration: item.warranty_duration,
-              unit: item.warranty_unit || 'months',
-              type: item.warranty_type
-            } : undefined,
+            variantLabel: item.variant ? [item.variant.color, item.variant.size].filter(Boolean).join(' · ') : undefined,
           })),
           subtotal: grossSubtotal,
           discount: itemLevelDiscount,
@@ -1013,7 +993,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   items={cart}
                   onUpdateQuantity={updateCartItemQuantity}
                   onUpdatePrice={updateCartItemPrice}
-                  onUpdateWarranty={updateCartItemWarranty}
                   onRemoveItem={removeFromCart}
                 />
               </div>
@@ -1254,7 +1233,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                     items={cart}
                     onUpdateQuantity={updateCartItemQuantity}
                     onUpdatePrice={updateCartItemPrice}
-                    onUpdateWarranty={updateCartItemWarranty}
                     onRemoveItem={removeFromCart}
                   />
                 </div>

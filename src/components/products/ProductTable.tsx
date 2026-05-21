@@ -1,4 +1,4 @@
-import { Edit, Eye, Barcode, Printer, PackagePlus } from 'lucide-react';
+import { Edit, Eye, Printer, PackagePlus } from 'lucide-react';
 import { ProductWithStock } from '../../types';
 import { ProductImage } from '../ProductImage';
 
@@ -77,22 +77,13 @@ export function ProductTable({
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">{product.sku}</td>
-                <td className="px-6 py-4">
-                  {product.barcode ? (
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Barcode className="w-4 h-4" />
-                      {product.barcode}
-                    </div>
-                  ) : (
-                    <span className="text-sm text-slate-400">-</span>
-                  )}
-                </td>
+                <td className="px-6 py-4 text-sm text-slate-600">{(product as any).brand || '-'}</td>
                 <td className="px-6 py-4 text-sm text-slate-600">{product.category || '-'}</td>
                 <td className="px-6 py-4">
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${product.total_stock <= product.reorder_level
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${product.total_stock <= 5
                       ? 'bg-red-100 text-red-800'
-                      : product.total_stock <= product.reorder_level * 2
+                      : product.total_stock <= 10
                         ? 'bg-yellow-100 text-yellow-800'
                         : 'bg-green-100 text-green-800'
                       }`}

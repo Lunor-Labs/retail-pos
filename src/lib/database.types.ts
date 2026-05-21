@@ -80,12 +80,13 @@ export interface Database {
         Row: {
           id: string
           sku: string
-          barcode: string | null
           name: string
           description: string | null
           category: string | null
-          unit: string
-          reorder_level: number
+          brand: string | null
+          gender: 'men' | 'women' | 'kids' | 'unisex' | null
+          material: string | null
+          unit: 'piece' | 'yard' | 'meter' | 'pack'
           image_url: string | null
           active: boolean
           created_at: string
@@ -94,12 +95,13 @@ export interface Database {
         Insert: {
           id?: string
           sku: string
-          barcode?: string | null
           name: string
           description?: string | null
           category?: string | null
-          unit?: string
-          reorder_level?: number
+          brand?: string | null
+          gender?: 'men' | 'women' | 'kids' | 'unisex' | null
+          material?: string | null
+          unit?: 'piece' | 'yard' | 'meter' | 'pack'
           image_url?: string | null
           active?: boolean
           created_at?: string
@@ -108,13 +110,52 @@ export interface Database {
         Update: {
           id?: string
           sku?: string
-          barcode?: string | null
           name?: string
           description?: string | null
           category?: string | null
-          unit?: string
-          reorder_level?: number
+          brand?: string | null
+          gender?: 'men' | 'women' | 'kids' | 'unisex' | null
+          material?: string | null
+          unit?: 'piece' | 'yard' | 'meter' | 'pack'
           image_url?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      product_variants: {
+        Row: {
+          id: string
+          product_id: string
+          size: string | null
+          color: string | null
+          sku: string
+          barcode: string | null
+          reorder_level: number
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          size?: string | null
+          color?: string | null
+          sku: string
+          barcode?: string | null
+          reorder_level?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          size?: string | null
+          color?: string | null
+          sku?: string
+          barcode?: string | null
+          reorder_level?: number
           active?: boolean
           created_at?: string
           updated_at?: string
@@ -123,7 +164,7 @@ export interface Database {
       product_batches: {
         Row: {
           id: string
-          product_id: string
+          variant_id: string
           batch_number: string
           purchase_order_id: string | null
           supplier_id: string
@@ -133,31 +174,29 @@ export interface Database {
           initial_quantity: number
           current_quantity: number
           received_date: string
-          expiry_date: string | null
           notes: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          product_id: string
+          variant_id: string
           batch_number: string
           purchase_order_id?: string | null
           supplier_id: string
           cost_price: number
           selling_price: number
-          markup_percentage: number
+          markup_percentage?: number
           initial_quantity: number
           current_quantity: number
           received_date?: string
-          expiry_date?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          product_id?: string
+          variant_id?: string
           batch_number?: string
           purchase_order_id?: string | null
           supplier_id?: string
@@ -167,7 +206,6 @@ export interface Database {
           initial_quantity?: number
           current_quantity?: number
           received_date?: string
-          expiry_date?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -182,6 +220,7 @@ export interface Database {
           address: string | null
           credit_limit: number
           current_credit: number
+          loyalty_points: number
           notes: string | null
           active: boolean
           created_at: string
@@ -195,6 +234,7 @@ export interface Database {
           address?: string | null
           credit_limit?: number
           current_credit?: number
+          loyalty_points?: number
           notes?: string | null
           active?: boolean
           created_at?: string
@@ -208,6 +248,7 @@ export interface Database {
           address?: string | null
           credit_limit?: number
           current_credit?: number
+          loyalty_points?: number
           notes?: string | null
           active?: boolean
           created_at?: string
@@ -218,7 +259,7 @@ export interface Database {
         Row: {
           id: string
           name: string
-          type: 'garage' | 'individual' | null
+          type: 'full_time' | 'part_time' | null
           phone: string | null
           email: string | null
           address: string | null
@@ -230,7 +271,7 @@ export interface Database {
         Insert: {
           id?: string
           name: string
-          type?: 'garage' | 'individual' | null
+          type?: 'full_time' | 'part_time' | null
           phone?: string | null
           email?: string | null
           address?: string | null
@@ -242,7 +283,7 @@ export interface Database {
         Update: {
           id?: string
           name?: string
-          type?: 'garage' | 'individual' | null
+          type?: 'full_time' | 'part_time' | null
           phone?: string | null
           email?: string | null
           address?: string | null
@@ -335,6 +376,7 @@ export interface Database {
           subtotal: number
           tax_amount: number
           discount_amount: number
+          service_charge: number
           total_amount: number
           paid_amount: number
           payment_method: 'cash' | 'card' | 'credit' | 'mixed' | null
@@ -343,7 +385,6 @@ export interface Database {
           cashier_id: string | null
           created_at: string
           updated_at: string
-          service_charge: number
         }
         Insert: {
           id?: string
@@ -354,6 +395,7 @@ export interface Database {
           subtotal?: number
           tax_amount?: number
           discount_amount?: number
+          service_charge?: number
           total_amount: number
           paid_amount?: number
           payment_method?: 'cash' | 'card' | 'credit' | 'mixed' | null
@@ -372,6 +414,7 @@ export interface Database {
           subtotal?: number
           tax_amount?: number
           discount_amount?: number
+          service_charge?: number
           total_amount?: number
           paid_amount?: number
           payment_method?: 'cash' | 'card' | 'credit' | 'mixed' | null
@@ -387,51 +430,45 @@ export interface Database {
           id: string
           sale_id: string
           product_id: string | null
+          variant_id: string | null
           batch_id: string | null
           quantity: number
           unit_price: number
-          selling_price: number
+          selling_price: number | null
           cost_price: number
           subtotal: number
           is_manual: boolean
           manual_description: string | null
-          warranty_duration: number | null
-          warranty_unit: string | null
-          warranty_type: string | null
           created_at: string
         }
         Insert: {
           id?: string
           sale_id: string
           product_id?: string | null
+          variant_id?: string | null
           batch_id?: string | null
           quantity: number
           unit_price: number
-          selling_price: number
+          selling_price?: number | null
           cost_price: number
           subtotal: number
           is_manual?: boolean
           manual_description?: string | null
-          warranty_duration?: number | null
-          warranty_unit?: string | null
-          warranty_type?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           sale_id?: string
           product_id?: string | null
+          variant_id?: string | null
           batch_id?: string | null
           quantity?: number
           unit_price?: number
-          selling_price?: number
+          selling_price?: number | null
           cost_price?: number
           subtotal?: number
           is_manual?: boolean
           manual_description?: string | null
-          warranty_duration?: number | null
-          warranty_unit?: string | null
-          warranty_type?: string | null
           created_at?: string
         }
       }
@@ -484,8 +521,9 @@ export interface Database {
           id: string
           return_id: string
           sale_item_id: string | null
-          product_id: string
-          batch_id: string
+          product_id: string | null
+          variant_id: string | null
+          batch_id: string | null
           quantity: number
           unit_price: number
           subtotal: number
@@ -495,8 +533,9 @@ export interface Database {
           id?: string
           return_id: string
           sale_item_id?: string | null
-          product_id: string
-          batch_id: string
+          product_id?: string | null
+          variant_id?: string | null
+          batch_id?: string | null
           quantity: number
           unit_price: number
           subtotal: number
@@ -506,8 +545,9 @@ export interface Database {
           id?: string
           return_id?: string
           sale_item_id?: string | null
-          product_id?: string
-          batch_id?: string
+          product_id?: string | null
+          variant_id?: string | null
+          batch_id?: string | null
           quantity?: number
           unit_price?: number
           subtotal?: number
@@ -551,6 +591,61 @@ export interface Database {
           status?: 'pending' | 'paid'
           payment_date?: string | null
           notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      loyalty_transactions: {
+        Row: {
+          id: string
+          customer_id: string
+          sale_id: string | null
+          type: 'earn' | 'redeem'
+          points: number
+          balance_after: number
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          customer_id: string
+          sale_id?: string | null
+          type: 'earn' | 'redeem'
+          points: number
+          balance_after: number
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          customer_id?: string
+          sale_id?: string | null
+          type?: 'earn' | 'redeem'
+          points?: number
+          balance_after?: number
+          notes?: string | null
+          created_at?: string
+        }
+      }
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          value: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          value: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          value?: string
           created_at?: string
           updated_at?: string
         }

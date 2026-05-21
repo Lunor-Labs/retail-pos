@@ -138,8 +138,6 @@ export function useProducts(
               if (nameMatch) return true;
 
               return p.sku.toLowerCase() === query ||
-                (typeof p.barcode === 'string' && p.barcode.includes(query)) ||
-                // Fallback: Space-insensitive normalization check
                 p.name.toLowerCase().replace(/\s+/g, '').includes(query.replace(/\s+/g, ''));
             });
             break;
@@ -148,7 +146,7 @@ export function useProducts(
 
       // Apply stock status filters
       if (stockFilter === 'low_stock') {
-        collection = collection.filter(p => (p.total_stock || 0) > 0 && (p.total_stock || 0) <= (p.reorder_level || 0));
+        collection = collection.filter(p => (p.total_stock || 0) > 0 && (p.total_stock || 0) <= 5);
       } else if (stockFilter === 'out_of_stock') {
         collection = collection.filter(p => (p.total_stock || 0) === 0);
       }

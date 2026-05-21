@@ -55,7 +55,7 @@ export class ReturnService {
             if (status === 'approved' && items.length > 0) {
                 for (const item of items) {
                     if (item.batch_id) {
-                        const batches = await this.productService.getProductBatches(item.product_id);
+                        const batches = await this.productService.getProductBatches(item.product_id!);
                         const batch = batches.find(b => b.id === item.batch_id);
                         if (batch) {
                             await this.productService.updateStock(batch.id, batch.current_quantity + item.quantity);
@@ -103,7 +103,7 @@ export class ReturnService {
                     // I'll try to add `increaseStock` to ProductService or just use `updateStock` if I can get current.
                     // Let's use `productService.updateStock` and catch error if I can't read current.
                     // Wait, `productService` has `getProductBatches`.
-                    const batches = await this.productService.getProductBatches(item.product_id);
+                    const batches = await this.productService.getProductBatches(item.product_id!);
                     const batch = batches.find(b => b.id === (item as any).batch_id);
                     if (batch) {
                         await this.productService.updateStock(batch.id, batch.current_quantity + item.quantity);

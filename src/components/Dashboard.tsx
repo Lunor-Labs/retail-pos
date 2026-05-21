@@ -63,7 +63,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       ]);
 
       const lowStockList = allProducts.filter(product => {
-        return product.total_stock > 0 && product.total_stock <= (product.reorder_level || 0);
+        return product.total_stock > 0 && product.total_stock <= 5;
       });
 
       const outOfStockList = allProducts.filter(product => {

@@ -48,7 +48,7 @@ export function Reports() {
       let totalRevenue = 0;
       let totalProfit = 0;
 
-      salesData?.forEach((sale) => {
+      (salesData as any[])?.forEach((sale) => {
         totalRevenue += Number(sale.total_amount);
         const saleItems = sale.sale_items as any[];
         saleItems?.forEach((item) => {

@@ -12,6 +12,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
   createUser: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
+  signupTenant: (email: string, password: string, fullName: string, businessName: string, slug: string, businessType: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isCashier: boolean;
@@ -82,8 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
 
     if (data.user) {
-      const { error: profileError } = await supabase
-        .from('user_profiles')
+      const { error: profileError } = await (supabase.from('user_profiles') as any)
         .insert({
           id: data.user.id,
           email,
@@ -122,8 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refresh_token: savedRefreshToken,
       });
 
-      const { error: profileError } = await supabase
-        .from('user_profiles')
+      const { error: profileError } = await (supabase.from('user_profiles') as any)
         .insert({
           id: data.user.id,
           email,
@@ -141,6 +140,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   }
 
+  async function signupTenant(_email: string, _password: string, _fullName: string, _businessName: string, _slug: string, _businessType: string) {
+    throw new Error('Multi-tenant signup not yet implemented for this deployment.');
+  }
+
   const value = {
     user,
     profile,
@@ -148,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signUp,
     createUser,
+    signupTenant,
     signOut,
     isAdmin: profile?.role === 'admin',
     isCashier: profile?.role === 'cashier',

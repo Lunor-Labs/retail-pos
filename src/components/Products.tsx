@@ -38,12 +38,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [selectedProduct, setSelectedProduct] = useState<ProductWithStock | null>(null);
   const [formData, setFormData] = useState({
     sku: '',
-    barcode: '',
     name: '',
     description: '',
     category: '',
     unit: 'piece',
-    reorder_level: 0,
     image_url: '',
     initial_quantity: 0,
     cost_price: 0,
@@ -144,12 +142,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   function resetForm() {
     setFormData({
       sku: '',
-      barcode: '',
       name: '',
       description: '',
       category: '',
       unit: 'piece',
-      reorder_level: 0,
       image_url: '',
       initial_quantity: 0,
       cost_price: 0,
@@ -182,12 +178,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setSelectedProduct(product);
     setFormData({
       sku: product.sku,
-      barcode: product.barcode || '',
       name: product.name,
       description: product.description || '',
       category: product.category || '',
       unit: product.unit || 'piece',
-      reorder_level: product.reorder_level || 0,
       image_url: product.image_url || '',
       initial_quantity: 0,
       cost_price: 0,
@@ -292,16 +286,16 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
             csvRows.push({
               product_name: product.name,
               sku: product.sku,
-              barcode: product.barcode || '',
               category: product.category || '',
+              brand: (product as any).brand || '',
+              gender: (product as any).gender || '',
+              material: (product as any).material || '',
               supplier_name: batch.supplier?.name || '',
               cost_price: batch.cost_price || 0,
               markup_percentage: batch.markup_percentage || 0,
               selling_price: batch.selling_price || 0,
               quantity: batch.current_quantity || 0,
               batch_number: batch.batch_number || '',
-              expiry_date: batch.expiry_date || '',
-              reorder_level: product.reorder_level || 0,
               unit: product.unit || 'piece',
               image_url: product.image_url || '',
             });
@@ -310,16 +304,16 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           csvRows.push({
             product_name: product.name,
             sku: product.sku,
-            barcode: product.barcode || '',
             category: product.category || '',
+            brand: (product as any).brand || '',
+            gender: (product as any).gender || '',
+            material: (product as any).material || '',
             supplier_name: '',
             cost_price: 0,
             markup_percentage: 0,
             selling_price: 0,
             quantity: 0,
             batch_number: '',
-            expiry_date: '',
-            reorder_level: product.reorder_level || 0,
             unit: product.unit || 'piece',
             image_url: product.image_url || '',
           });
@@ -536,7 +530,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       {/* Barcode Printing Modal */}
       {barcodeProduct && (
         <BarcodeGenerator
-          barcode={barcodeProduct.barcode || barcodeProduct.sku}
+          barcode={barcodeProduct.sku}
           productName={barcodeProduct.name}
           sku={barcodeProduct.sku}
           price={barcodeProduct.batches[0]?.selling_price}

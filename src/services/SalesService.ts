@@ -11,14 +11,12 @@ export interface CreateSaleInput {
     referral_agent_id?: string | null;
     items: Array<{
         product_id?: string | null;
+        variant_id?: string | null;
         batch_id?: string | null;
         quantity: number;
         unit_price: number;
         selling_price: number;
         cost_price: number;
-        warranty_duration?: number;
-        warranty_unit?: 'days' | 'months' | 'years';
-        warranty_type?: string;
         is_manual?: boolean;
         manual_description?: string;
     }>;
@@ -95,15 +93,13 @@ export class SalesService {
             // Prepare sale items
             const saleItems: Partial<SaleItem>[] = input.items.map(item => ({
                 product_id: item.product_id || null,
+                variant_id: item.variant_id || null,
                 batch_id: item.batch_id || null,
                 quantity: item.quantity,
                 unit_price: item.unit_price,
                 selling_price: item.selling_price,
                 cost_price: item.cost_price,
                 subtotal: item.quantity * item.unit_price,
-                warranty_duration: item.warranty_duration || 0,
-                warranty_unit: item.warranty_unit || null,
-                warranty_type: item.warranty_type || null,
                 is_manual: item.is_manual || false,
                 manual_description: item.manual_description || null,
             }));

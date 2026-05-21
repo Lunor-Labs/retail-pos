@@ -45,9 +45,9 @@ export function ReferralAgents() {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [loadingCommissions, setLoadingCommissions] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
-  const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(1)).toISOString().split('T')[0], // Start of current month
-    end: new Date().toISOString().split('T')[0], // Today
+  const [_dateRange] = useState({
+    start: new Date(new Date().setDate(1)).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0],
   });
 
   const [showConfirmPayoutModal, setShowConfirmPayoutModal] = useState(false);

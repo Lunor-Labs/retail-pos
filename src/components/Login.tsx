@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn } from 'lucide-react';
-import loginBg from '../assets/login_bg.mp4';
 import loginImage from '../assets/login.jpg';
 import logo from '../assets/favicon.jpeg';
 

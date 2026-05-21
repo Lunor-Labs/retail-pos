@@ -67,13 +67,14 @@ export class ProductRepository extends BaseRepository<Product> {
             }
         }
 
-        // 3. Group batches by product_id in memory
+        // 3. Group batches by product_id in memory (via variant_id join — cast since schema changed)
         const batchesByProduct = new Map<string, ProductBatch[]>();
-        for (const batch of allBatches) {
-            if (!batchesByProduct.has(batch.product_id)) {
-                batchesByProduct.set(batch.product_id, []);
+        for (const batch of allBatches as any[]) {
+            const pid: string = batch.product_id ?? batch.variant_id ?? '';
+            if (!batchesByProduct.has(pid)) {
+                batchesByProduct.set(pid, []);
             }
-            batchesByProduct.get(batch.product_id)!.push(batch);
+            batchesByProduct.get(pid)!.push(batch);
         }
 
         // 4. Combine products with their batches

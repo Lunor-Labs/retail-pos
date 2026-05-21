@@ -124,8 +124,7 @@ export class ProductService {
             this.validateProductData(productData);
 
             // Process and validate unique fields
-            const sku = productData.sku?.trim() || null;
-            const barcode = productData.barcode?.trim() || null;
+            const sku = (productData as any).sku?.trim() || null;
 
             // Check for duplicate SKU
             if (sku) {
@@ -135,14 +134,6 @@ export class ProductService {
                 }
             } else {
                 throw new Error('SKU is required.');
-            }
-
-            // Check for duplicate barcode
-            if (barcode) {
-                const existing = await this.productRepo.findByBarcode(barcode);
-                if (existing) {
-                    throw new Error(`Product with barcode "${barcode}" already exists.`);
-                }
             }
 
             // Separate batch data from product data
@@ -158,7 +149,6 @@ export class ProductService {
             const product = await this.productRepo.create({
                 ...pureProductData,
                 sku,
-                barcode,
                 active: true,
                 created_at: new Date().toISOString(),
             });
@@ -210,7 +200,6 @@ export class ProductService {
 
             // Process and validate unique fields if they are being updated
             const sku = updates.sku !== undefined ? (updates.sku?.trim() || null) : undefined;
-            const barcode = updates.barcode !== undefined ? (updates.barcode?.trim() || null) : undefined;
 
             // Validate SKU uniqueness if changing
             if (sku !== undefined && sku !== existing.sku) {
@@ -220,16 +209,6 @@ export class ProductService {
                 const duplicate = await this.productRepo.findBySku(sku);
                 if (duplicate && duplicate.id !== id) {
                     throw new Error(`SKU "${sku}" is already in use.`);
-                }
-            }
-
-            // Validate barcode uniqueness if changing
-            if (barcode !== undefined && barcode !== existing.barcode) {
-                if (barcode !== null) {
-                    const duplicate = await this.productRepo.findByBarcode(barcode);
-                    if (duplicate && duplicate.id !== id) {
-                        throw new Error(`Barcode "${barcode}" is already in use.`);
-                    }
                 }
             }
 
@@ -248,7 +227,6 @@ export class ProductService {
                 updated_at: new Date().toISOString(),
             };
             if (sku !== undefined) productObject.sku = sku;
-            if (barcode !== undefined) productObject.barcode = barcode;
 
             const product = await this.productRepo.update(id, productObject);
 
@@ -341,10 +319,6 @@ export class ProductService {
 
         if (!data.sku || data.sku.trim().length === 0) {
             throw new Error('SKU is required.');
-        }
-
-        if (data.reorder_level !== undefined && data.reorder_level < 0) {
-            throw new Error('Reorder level cannot be negative.');
         }
     }
 
