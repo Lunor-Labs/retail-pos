@@ -6,6 +6,7 @@ interface PaginationProps {
     totalPages: number;
     onPageChange: (page: number) => void;
     className?: string;
+    style?: React.CSSProperties;
 }
 
 export function Pagination({
@@ -13,6 +14,7 @@ export function Pagination({
     totalPages,
     onPageChange,
     className = '',
+    style,
 }: PaginationProps) {
     const [jumpPage, setJumpPage] = useState('');
 
@@ -32,103 +34,84 @@ export function Pagination({
     };
 
     const getPageNumbers = () => {
-        const pages = [];
+        const pages: (number | string)[] = [];
         const showMax = 5;
-
         if (totalPages <= showMax) {
-            for (let i = 1; i <= totalPages; i++) {
-                pages.push(i);
-            }
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
         } else {
-            // Always show first page
             pages.push(1);
-
-            if (currentPage > 3) {
-                pages.push('...');
-            }
-
-            // Show current page and neighbors
+            if (currentPage > 3) pages.push('...');
             const start = Math.max(2, currentPage - 1);
             const end = Math.min(totalPages - 1, currentPage + 1);
-
             for (let i = start; i <= end; i++) {
-                if (!pages.includes(i)) {
-                    pages.push(i);
-                }
+                if (!pages.includes(i)) pages.push(i);
             }
-
-            if (currentPage < totalPages - 2) {
-                pages.push('...');
-            }
-
-            // Always show last page
-            if (!pages.includes(totalPages)) {
-                pages.push(totalPages);
-            }
+            if (currentPage < totalPages - 2) pages.push('...');
+            if (!pages.includes(totalPages)) pages.push(totalPages);
         }
         return pages;
     };
 
+    const btnBase: React.CSSProperties = { width: 28, height: 28, padding: 0, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--ink-2)', fontSize: 12, fontWeight: 500, cursor: 'default', display: 'grid', placeItems: 'center', transition: 'all .1s' };
+
     return (
-        <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 ${className}`}>
-            <div className="flex items-center gap-1">
+        <div className={`flex items-center justify-between gap-4 flex-wrap ${className}`} style={style}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button
                     onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
-                    className="p-1.5 border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-transparent transition text-slate-600"
-                    title="Previous Page"
+                    className="btn btn-sm"
+                    style={{ height: 28, padding: '0 8px', opacity: currentPage === 1 ? 0.4 : 1 }}
+                    title="Previous"
                 >
-                    <ChevronLeft className="w-5 h-5" />
+                    <ChevronLeft size={14} /> Prev
                 </button>
 
-                <div className="flex items-center gap-1">
-                    {getPageNumbers().map((pageNum, idx) => (
-                        <React.Fragment key={idx}>
-                            {pageNum === '...' ? (
-                                <span className="px-2 text-slate-400">...</span>
-                            ) : (
-                                <button
-                                    onClick={() => onPageChange(pageNum as number)}
-                                    className={`min-w-[36px] h-9 rounded-lg text-sm font-medium transition ${currentPage === pageNum
-                                            ? 'bg-slate-900 text-white shadow-sm'
-                                            : 'text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200'
-                                        }`}
-                                >
-                                    {pageNum}
-                                </button>
-                            )}
-                        </React.Fragment>
-                    ))}
-                </div>
+                {getPageNumbers().map((pageNum, idx) => (
+                    <React.Fragment key={idx}>
+                        {pageNum === '...' ? (
+                            <span style={{ fontSize: 12, color: 'var(--faint)', padding: '0 4px' }}>…</span>
+                        ) : (
+                            <button
+                                onClick={() => onPageChange(pageNum as number)}
+                                style={{
+                                    ...btnBase,
+                                    background: currentPage === pageNum ? 'var(--ink)' : 'var(--panel)',
+                                    color: currentPage === pageNum ? '#fff' : 'var(--ink-2)',
+                                    borderColor: currentPage === pageNum ? 'var(--ink)' : 'var(--line)',
+                                    fontWeight: currentPage === pageNum ? 600 : 500,
+                                }}
+                            >
+                                {pageNum}
+                            </button>
+                        )}
+                    </React.Fragment>
+                ))}
 
                 <button
                     onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-1.5 border border-slate-300 rounded-lg hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-transparent transition text-slate-600"
-                    title="Next Page"
+                    className="btn btn-sm"
+                    style={{ height: 28, padding: '0 8px', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                    title="Next"
                 >
-                    <ChevronRight className="w-5 h-5" />
+                    Next <ChevronRight size={14} />
                 </button>
             </div>
 
-            <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-500 whitespace-nowrap">Jump to page:</span>
-                <form onSubmit={handleJumpSubmit} className="flex gap-1">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Jump to:</span>
+                <form onSubmit={handleJumpSubmit} style={{ display: 'flex', gap: 4 }}>
                     <input
                         type="number"
                         min="1"
                         max={totalPages}
                         value={jumpPage}
                         onChange={(e) => setJumpPage(e.target.value)}
-                        className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-slate-900 outline-none text-center"
+                        style={{ width: 48, height: 28, padding: '0 6px', border: '1px solid var(--line)', borderRadius: 7, fontSize: 12, textAlign: 'center', background: 'var(--panel)', color: 'var(--ink)', outline: 'none' }}
                         placeholder={currentPage.toString()}
                     />
-                    <button
-                        type="submit"
-                        className="px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 transition"
-                    >
-                        Go
-                    </button>
+                    <button type="submit" className="btn btn-sm" style={{ height: 28 }}>Go</button>
                 </form>
             </div>
         </div>

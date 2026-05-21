@@ -9,17 +9,9 @@ interface ModalProps {
     size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | 'full';
 }
 
-const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-xl',
-    xl: 'max-w-2xl',
-    '2xl': 'max-w-3xl',
-    '3xl': 'max-w-4xl',
-    '4xl': 'max-w-5xl',
-    '5xl': 'max-w-6xl',
-    '6xl': 'max-w-7xl',
-    full: 'max-w-[95vw]',
+const maxWidths: Record<string, string> = {
+    sm: '440px', md: '540px', lg: '640px', xl: '768px',
+    '2xl': '900px', '3xl': '1024px', '4xl': '1200px', '5xl': '1400px', '6xl': '1600px', full: '95vw',
 };
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
@@ -29,29 +21,32 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         } else {
             document.body.style.overflow = 'unset';
         }
-        return () => {
-            document.body.style.overflow = 'unset';
-        };
+        return () => { document.body.style.overflow = 'unset'; };
     }, [isOpen]);
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(20,22,26,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}
+            onClick={onClose}
+        >
             <div
-                className={`bg-white rounded-xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200`}
+                style={{ background: 'var(--panel)', borderRadius: 14, boxShadow: '0 24px 64px rgba(20,22,26,0.18)', width: '100%', maxWidth: maxWidths[size], maxHeight: '90vh', display: 'flex', flexDirection: 'column', border: '1px solid var(--line)' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-white rounded-t-xl sticky top-0 z-10">
-                    <h3 className="text-xl font-bold text-slate-900">{title}</h3>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--panel)', borderRadius: '14px 14px 0 0', flexShrink: 0 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>{title}</h3>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 hover:text-slate-700"
+                        style={{ width: 30, height: 30, borderRadius: 7, border: 0, background: 'transparent', color: 'var(--muted)', display: 'grid', placeItems: 'center', cursor: 'default', transition: 'all .1s' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--ink)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)'; }}
                     >
-                        <X className="w-6 h-6" />
+                        <X size={18} />
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scrollbar">
                     {children}
                 </div>
             </div>

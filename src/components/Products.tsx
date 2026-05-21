@@ -385,88 +385,65 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   }
 
   return (
-    <div>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Products</h2>
-          <p className="text-slate-600 mt-1">Manage inventory items and stock levels</p>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Products</h1>
+          <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>Manage inventory, pricing, and stock levels.</p>
         </div>
-
-        <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isAdmin && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowImportModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium"
-              >
-                <Upload className="w-4 h-4" />
-                Import CSV
+            <>
+              <button onClick={() => setShowImportModal(true)} className="btn" style={{ height: 36 }}>
+                <Upload size={14} /> Import CSV
               </button>
-              <button
-                onClick={handleExportCSV}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition shadow-sm font-medium"
-              >
-                <Download className="w-4 h-4" />
-                Export CSV
+              <button onClick={handleExportCSV} className="btn" style={{ height: 36 }}>
+                <Download size={14} /> Export CSV
               </button>
-            </div>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => openAddModal()}
-              className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition shadow-sm"
-            >
-              <Plus className="w-5 h-5" />
-              Add Product
-            </button>
+              <button onClick={() => openAddModal()} className="btn btn-primary" style={{ height: 36 }}>
+                <Plus size={14} /> Add Product
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      <SearchBar
-        value={searchTerm}
-        onChange={setSearchTerm}
-        placeholder={
-          searchType === 'name' ? "Search by name (e.g. 'Toyota Filter')..." :
-            searchType === 'sku' ? "Search by SKU..." :
-              searchType === 'barcode' ? "Scan barcode..." :
-                "Search by name, SKU, or barcode..."
-        }
-      >
-        <div className="relative">
-          <select
-            value={stockFilter}
-            onChange={(e) => {
-              setPage(1);
-              setStockFilter(e.target.value as StockFilter);
-            }}
-            className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-sm"
+      {/* Filters card */}
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <SearchBar
+            value={searchTerm}
+            onChange={setSearchTerm}
+            placeholder={
+              searchType === 'name' ? 'Search by name…' :
+                searchType === 'sku' ? 'Search by SKU…' :
+                  searchType === 'barcode' ? 'Scan barcode…' :
+                    'Search by name, SKU, or barcode…'
+            }
           >
-            <option value="all">All Stock</option>
-            <option value="low_stock">Low Stock</option>
-            <option value="out_of_stock">Out of Stock</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-            <Filter className="w-4 h-4" />
-          </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Stock</span>
+              <select value={stockFilter} onChange={(e) => { setPage(1); setStockFilter(e.target.value as StockFilter); }}
+                style={{ appearance: 'none', border: 0, background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontWeight: 500, outline: 'none', cursor: 'default' }}>
+                <option value="all">All stock</option>
+                <option value="low_stock">Low stock</option>
+                <option value="out_of_stock">Out of stock</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Search</span>
+              <select value={searchType} onChange={(e) => setSearchType(e.target.value as SearchType)}
+                style={{ appearance: 'none', border: 0, background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontWeight: 500, outline: 'none', cursor: 'default' }}>
+                <option value="all">Smart search</option>
+                <option value="name">Name only</option>
+                <option value="sku">SKU only</option>
+                <option value="barcode">Barcode</option>
+              </select>
+            </div>
+          </SearchBar>
         </div>
-
-        <div className="relative">
-          <select
-            value={searchType}
-            onChange={(e) => setSearchType(e.target.value as SearchType)}
-            className="appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-2 pl-4 pr-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 text-sm"
-          >
-            <option value="all">Smart Search</option>
-            <option value="name">Name Only</option>
-            <option value="sku">SKU Only</option>
-            <option value="barcode">Barcode</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-            <Filter className="w-4 h-4" />
-          </div>
-        </div>
-      </SearchBar>
+      </div>
 
       {products.length === 0 && !loading ? (
         <EmptyState
@@ -476,7 +453,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           action={!debouncedSearch ? { label: 'Add Your First Product', onClick: openAddModal } : undefined}
         />
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="card" style={{ overflow: 'hidden' }}>
           <div className="overflow-x-auto">
             <ProductTable
               products={products as any}
@@ -492,7 +469,8 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
             currentPage={page}
             totalPages={totalPages || 1}
             onPageChange={setPage}
-            className="p-4 border-t border-slate-200 bg-slate-50"
+            className="p-4"
+            style={{ borderTop: '1px solid var(--line)', background: 'var(--panel-2)' }}
           />
         </div>
       )}

@@ -178,155 +178,136 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+        <div className="animate-spin rounded-full h-10 w-10" style={{ border: '2px solid var(--line)', borderTopColor: 'var(--accent)' }} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
-          <p className="text-slate-500 mt-1">Welcome back! Here's what's happening today.</p>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Dashboard</h1>
+          <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>
+            Store overview — {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
         </div>
-        <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
-          <span className="text-sm font-medium text-slate-600">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          </span>
-        </div>
+        <button onClick={() => onNavigate?.('pos')} className="btn btn-primary" style={{ height: 36 }}>
+          New Sale
+        </button>
       </div>
 
-      {/* Stats Grid - 7 Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+      {/* Stats Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
         {statCards.map((card) => {
           const Icon = card.icon;
           return (
             <div
               key={card.title}
               onClick={() => card.filter && onFilterNavigate?.(card.filter)}
-              className={`bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center lg:items-start lg:text-left hover:shadow-md transition-shadow group ${card.filter ? 'cursor-pointer' : ''}`}
+              className="card"
+              style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, cursor: card.filter ? 'pointer' : 'default', transition: 'box-shadow .12s ease' }}
             >
-              <div className={`${card.bgColor} p-3 rounded-xl mb-3 lg:mb-4 group-hover:scale-110 transition-transform`}>
-                <Icon className={`w-6 h-6 ${card.iconColor}`} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{card.title}</span>
+                <div className={`${card.bgColor} p-1.5 rounded-lg`}>
+                  <Icon className={`w-4 h-4 ${card.iconColor}`} />
+                </div>
               </div>
-              <h3 className="text-xl lg:text-2xl font-bold text-slate-900 mb-1">{card.value}</h3>
-              <p className="text-sm font-medium text-slate-700">{card.title}</p>
-              <p className="text-xs text-slate-400 mt-1">{card.subtext}</p>
+              <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.05 }}>
+                {card.value}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{card.subtext}</div>
             </div>
           );
         })}
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <button
-          onClick={() => onNavigate?.('pos')}
-          className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all group text-left"
-        >
-          <div className="bg-blue-50 w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-100 transition-colors">
-            <ShoppingCart className="w-5 h-5 text-blue-600" />
-          </div>
-          <p className="font-semibold text-slate-900">New Sale</p>
-          <p className="text-xs text-slate-500 mt-1">Process transaction</p>
-        </button>
-
-        <button
-          onClick={() => onNavigate?.('products')}
-          className="bg-white p-4 rounded-xl border border-slate-200 hover:border-emerald-500 hover:shadow-md transition-all group text-left"
-        >
-          <div className="bg-emerald-50 w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-emerald-100 transition-colors">
-            <Package className="w-5 h-5 text-emerald-600" />
-          </div>
-          <p className="font-semibold text-slate-900">Add Product</p>
-          <p className="text-xs text-slate-500 mt-1">Update inventory</p>
-        </button>
-
-        <button
-          onClick={() => onNavigate?.('customers')}
-          className="bg-white p-4 rounded-xl border border-slate-200 hover:border-violet-500 hover:shadow-md transition-all group text-left"
-        >
-          <div className="bg-violet-50 w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-violet-100 transition-colors">
-            <Users className="w-5 h-5 text-violet-600" />
-          </div>
-          <p className="font-semibold text-slate-900">Add Customer</p>
-          <p className="text-xs text-slate-500 mt-1">Create profile</p>
-        </button>
-
-        <button
-          onClick={() => onNavigate?.('reports')}
-          className="bg-white p-4 rounded-xl border border-slate-200 hover:border-orange-500 hover:shadow-md transition-all group text-left"
-        >
-          <div className="bg-orange-50 w-10 h-10 rounded-lg flex items-center justify-center mb-3 group-hover:bg-orange-100 transition-colors">
-            <TrendingUp className="w-5 h-5 text-orange-600" />
-          </div>
-          <p className="font-semibold text-slate-900">View Reports</p>
-          <p className="text-xs text-slate-500 mt-1">Check analytics</p>
-        </button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+        {[
+          { label: 'New Sale', sub: 'Process transaction', view: 'pos', Icon: ShoppingCart, color: 'var(--accent)', bg: 'var(--accent-soft)' },
+          { label: 'Add Product', sub: 'Update inventory', view: 'products', Icon: Package, color: 'var(--accent)', bg: 'var(--accent-soft)' },
+          { label: 'Add Customer', sub: 'Create profile', view: 'customers', Icon: Users, color: 'var(--warn)', bg: 'var(--warn-soft)' },
+          { label: 'View Reports', sub: 'Check analytics', view: 'reports', Icon: TrendingUp, color: 'var(--ink-2)', bg: 'rgba(20,22,26,0.05)' },
+        ].map(({ label, sub, view, Icon, color, bg }) => (
+          <button
+            key={view}
+            onClick={() => onNavigate?.(view)}
+            className="card"
+            style={{ padding: '14px 16px', textAlign: 'left', border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'default' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(20,22,26,0.06)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+          >
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: bg, display: 'grid', placeItems: 'center', marginBottom: 10, color }}>
+              <Icon size={16} />
+            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>{sub}</div>
+          </button>
+        ))}
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue vs Expense Chart */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-2 card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Revenue vs Expense</h3>
-              <div className="flex items-center gap-4 mt-1">
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="inline-block w-3 h-1 rounded-full bg-emerald-500"></span>Revenue
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Revenue vs Cost</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 4 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)' }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 2, borderRadius: 999, background: 'var(--accent)' }} />Revenue
                 </span>
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="inline-block w-3 h-1 rounded-full bg-orange-400"></span>Cost (COGS)
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)' }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 2, borderRadius: 999, background: 'var(--warn)' }} />Cost (COGS)
                 </span>
               </div>
             </div>
             <select
               value={chartPeriod}
               onChange={e => setChartPeriod(e.target.value as '30' | '7')}
-              className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 outline-none focus:border-blue-500 transition-colors"
+              style={{ height: 28, padding: '0 8px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', fontSize: 12, color: 'var(--ink-2)', outline: 'none' }}
             >
               <option value="30">Last 30 Days</option>
               <option value="7">Last 7 Days</option>
             </select>
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={salesData.length > 0 ? salesData : [{ name: 'No Data', revenue: 0, cost: 0 }]}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#1B6B4F" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#1B6B4F" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F97316" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#B45309" stopOpacity={0.12} />
+                    <stop offset="95%" stopColor="#B45309" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: '#94A3B8' }} axisLine={false} tickLine={false} width={70}
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#7C828B' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#7C828B' }} axisLine={false} tickLine={false} width={60}
                   tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
-                  contentStyle={{ border: 'none', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                  contentStyle={{ border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 4px 16px rgba(20,22,26,0.1)', fontSize: 12, background: 'var(--panel)' }}
                   formatter={(value: any, name: string | undefined) => [
                     `LKR ${Number(value).toLocaleString()}`,
                     name === 'revenue' ? 'Revenue' : 'Cost (COGS)',
                   ]}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
-                <Area type="monotone" dataKey="cost" stroke="#F97316" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCost)" />
+                <Area type="monotone" dataKey="revenue" stroke="#1B6B4F" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="cost" stroke="#B45309" strokeWidth={2} strokeDasharray="4 3" fillOpacity={1} fill="url(#colorCost)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Top Selling Items Chart */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-900">Top Selling Items</h3>
-            <button className="text-slate-400 hover:text-slate-600">
-              <TrendingUp className="w-5 h-5" />
-            </button>
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Top Selling Items</h3>
           </div>
           <div className="h-[200px] relative flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
@@ -363,57 +344,44 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
             </ResponsiveContainer>
             {topSellingItems.length > 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-2xl font-bold text-slate-900">{topSellingItems[0].value}</span>
-                <span className="text-xs text-slate-500">Units Sold</span>
+                <span className="num" style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>{topSellingItems[0].value}</span>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Units Sold</span>
               </div>
             )}
           </div>
-          <div className="space-y-3 mt-6 max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
+          <div className="custom-scrollbar" style={{ marginTop: 16, maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {topSellingItems.map((item) => (
-              <div key={item.name} className="flex items-center gap-3 group">
-                <div
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span
-                  className="text-sm text-slate-600 flex-1 min-w-0 leading-snug"
-                  title={item.name}
-                  style={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {item.name}
-                </span>
-                <span className="text-sm font-bold text-slate-900 flex-shrink-0 ml-auto pl-2">{item.value}</span>
+              <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: item.color }} />
+                <span style={{ fontSize: 12.5, color: 'var(--ink-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                <span className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', flexShrink: 0 }}>{item.value}</span>
               </div>
             ))}
             {topSellingItems.length === 0 && (
-              <p className="text-center text-slate-500 py-4 text-sm">No sales data available</p>
+              <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>No sales data available</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Today's Top Sellers */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-5 h-5 text-emerald-500" />
-          <h3 className="text-lg font-bold text-slate-900">Today's Top Sellers</h3>
+      <div className="card" style={{ padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Today's Top Sellers</h3>
         </div>
         {todayTopSellers.length === 0 ? (
-          <p className="text-sm text-slate-400 py-4 text-center">No sales recorded today yet.</p>
+          <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>No sales recorded today yet.</p>
         ) : (
-          <div className="space-y-2">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {todayTopSellers.map((item, i) => (
-              <div key={i} className="flex items-center justify-between py-2 px-3 -mx-3 rounded-lg hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-400 w-4">{i + 1}</span>
-                  <span className="text-sm font-medium text-slate-800">{item.name}</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 7, transition: 'background .1s' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="num" style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.name}</span>
                 </div>
-                <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full">{item.value} sold</span>
+                <span className="chip chip-pos">{item.value} sold</span>
               </div>
             ))}
           </div>
@@ -421,177 +389,109 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       </div>
 
       {/* Lists Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
         {/* Recent Invoices */}
-        {/* Recent Invoices */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-slate-900">Recent Invoices</h3>
-            <button
-              onClick={() => onNavigate?.('sales-history')}
-              className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1"
-            >
-              View All <ArrowRight className="w-4 h-4" />
+        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Recent Invoices</h3>
+            <button onClick={() => onNavigate?.('sales-history')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 500, background: 'transparent', border: 0, cursor: 'default' }}>
+              View All <ArrowRight size={13} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-            <div className="space-y-4">
-              {recentSales.map((sale) => (
-                <div key={sale.id} className="flex items-center justify-between py-3 hover:bg-slate-50 rounded-xl px-3 -mx-3 transition-all group border-b border-slate-50 last:border-0">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:shadow-sm transition-all">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">#{sale.sale_number.slice(-8)}</p>
-                      <p className="text-xs text-slate-500 font-medium">{sale.customers?.name || 'Walk-in Customer'}</p>
-                    </div>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }} className="custom-scrollbar">
+            {recentSales.map((sale) => (
+              <div key={sale.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 8px', borderBottom: '1px solid var(--line-2)', transition: 'background .1s' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
+                    {(sale.customers?.name || 'W').charAt(0).toUpperCase()}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="text-xs text-slate-500">{new Date(sale.created_at).toLocaleDateString()}</p>
-                      <p className="text-sm font-bold text-slate-900">LKR {Number(sale.total_amount).toLocaleString()}</p>
-                    </div>
-                    <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${sale.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                      sale.status === 'partial' ? 'bg-amber-100 text-amber-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                      {sale.status === 'completed' ? 'Paid' : sale.status === 'partial' ? 'Partial' : 'Credit'}
-                    </span>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>#{sale.sale_number.slice(-8)}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 1 }}>{sale.customers?.name || 'Walk-in'}</div>
                   </div>
                 </div>
-              ))}
-              {recentSales.length === 0 && (
-                <div className="text-center py-8">
-                  <div className="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6 text-slate-300" />
-                  </div>
-                  <p className="text-slate-500 text-sm">No recent sales found</p>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>LKR {Number(sale.total_amount).toLocaleString()}</div>
+                  <span className={`chip ${sale.status === 'completed' ? 'chip-pos' : sale.status === 'partial' ? 'chip-warn' : 'chip-neutral'}`} style={{ fontSize: 10.5, marginTop: 3 }}>
+                    {sale.status === 'completed' ? 'Paid' : sale.status === 'partial' ? 'Partial' : 'Credit'}
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
+            {recentSales.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
+                <FileText size={24} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+                <p style={{ fontSize: 13 }}>No recent sales found</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Stock Alert */}
-        {/* Stock Alert */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-bold text-slate-900">Stock Alert</h3>
+        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Stock Alert</h3>
               {stats.lowStockProducts + stats.outOfStockProducts > 0 && (
-                <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-full">
-                  {stats.lowStockProducts + stats.outOfStockProducts}
-                </span>
+                <span className="chip chip-neg" style={{ fontSize: 10.5 }}>{stats.lowStockProducts + stats.outOfStockProducts}</span>
               )}
             </div>
-            <button
-              onClick={() => onFilterNavigate?.(activeStockTab === 'low' ? 'low_stock' : 'out_of_stock')}
-              className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1"
-            >
-              View All <ArrowRight className="w-4 h-4" />
+            <button onClick={() => onFilterNavigate?.(activeStockTab === 'low' ? 'low_stock' : 'out_of_stock')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 500, background: 'transparent', border: 0, cursor: 'default' }}>
+              View All <ArrowRight size={13} />
             </button>
           </div>
 
-          <div className="flex p-1 bg-slate-100 rounded-xl mb-4 gap-1">
-            <button
-              onClick={() => setActiveStockTab('low')}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${activeStockTab === 'low'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              Low ({stats.lowStockProducts})
-            </button>
-            <button
-              onClick={() => setActiveStockTab('out')}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${activeStockTab === 'out'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              Out ({stats.outOfStockProducts})
-            </button>
-            <button
-              onClick={() => setActiveStockTab('variants')}
-              className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-all ${activeStockTab === 'variants'
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              Variants ({variantLowStockItems.length})
-            </button>
+          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)', marginBottom: 12 }}>
+            {(['low', 'out', 'variants'] as const).map((tab) => (
+              <button key={tab} onClick={() => setActiveStockTab(tab)} style={{ flex: 1, padding: '5px 0', fontSize: 11.5, fontWeight: activeStockTab === tab ? 600 : 500, borderRadius: 6, border: 0, background: activeStockTab === tab ? 'var(--panel)' : 'transparent', color: activeStockTab === tab ? 'var(--ink)' : 'var(--muted)', cursor: 'default', boxShadow: activeStockTab === tab ? '0 1px 3px rgba(20,22,26,0.08)' : 'none', transition: 'all .1s' }}>
+                {tab === 'low' ? `Low (${stats.lowStockProducts})` : tab === 'out' ? `Out (${stats.outOfStockProducts})` : `Variants (${variantLowStockItems.length})`}
+              </button>
+            ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-            <div className="flex justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider pb-3 border-b border-slate-100 mb-2 sticky top-0 bg-white z-10">
-              <span>Product Name</span>
-              <span>Available</span>
-            </div>
-
-            <div className="space-y-2">
-              {activeStockTab === 'low' ? (
-                <>
-                  {lowStockItems.slice(0, 10).map((item, index) => (
-                    <div key={index}
-                      onClick={() => onFilterNavigate?.('low_stock')}
-                      className="flex items-center justify-between py-2.5 px-3 -mx-3 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                        <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">{item.name}</span>
+          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 320 }} className="custom-scrollbar">
+            {activeStockTab === 'low' ? (
+              lowStockItems.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>No low stock items</p>
+                : lowStockItems.slice(0, 10).map((item, i) => (
+                  <div key={i} onClick={() => onFilterNavigate?.('low_stock')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{item.name}</span>
+                    </div>
+                    <span className="chip chip-warn" style={{ fontSize: 10.5 }}>{item.total_stock}</span>
+                  </div>
+                ))
+            ) : activeStockTab === 'out' ? (
+              outOfStockItems.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>No out of stock items</p>
+                : outOfStockItems.slice(0, 10).map((item, i) => (
+                  <div key={i} onClick={() => onFilterNavigate?.('out_of_stock')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{item.name}</span>
+                    </div>
+                    <span className="chip chip-neg" style={{ fontSize: 10.5 }}>0</span>
+                  </div>
+                ))
+            ) : (
+              variantLowStockItems.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>All variants are well stocked</p>
+                : variantLowStockItems.slice(0, 10).map((v: any, i: number) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
+                      <div>
+                        <span className="num" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{v.sku}</span>
+                        {(v.size || v.color) && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>{[v.color, v.size].filter(Boolean).join(' · ')}</span>}
                       </div>
-                      <span className="text-sm font-bold text-orange-600 bg-orange-50 px-2.5 py-0.5 rounded-full">{item.total_stock}</span>
                     </div>
-                  ))}
-                  {lowStockItems.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-slate-400 text-sm">No low stock items</p>
-                    </div>
-                  )}
-                </>
-              ) : activeStockTab === 'out' ? (
-                <>
-                  {outOfStockItems.slice(0, 10).map((item, index) => (
-                    <div key={index}
-                      onClick={() => onFilterNavigate?.('out_of_stock')}
-                      className="flex items-center justify-between py-2.5 px-3 -mx-3 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                        <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">{item.name}</span>
-                      </div>
-                      <span className="text-sm font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full">0</span>
-                    </div>
-                  ))}
-                  {outOfStockItems.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-slate-400 text-sm">No out of stock items</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {variantLowStockItems.slice(0, 10).map((v: any, index: number) => (
-                    <div key={index} className="flex items-center justify-between py-2.5 px-3 -mx-3 rounded-lg hover:bg-slate-50 transition-colors group">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                        <div>
-                          <span className="text-sm font-medium text-slate-700 group-hover:text-slate-900">{v.sku}</span>
-                          {(v.size || v.color) && (
-                            <span className="ml-1.5 text-xs text-slate-400">{[v.color, v.size].filter(Boolean).join(' · ')}</span>
-                          )}
-                        </div>
-                      </div>
-                      <span className="text-sm font-bold text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full">{v.total_stock}</span>
-                    </div>
-                  ))}
-                  {variantLowStockItems.length === 0 && (
-                    <div className="text-center py-8">
-                      <p className="text-slate-400 text-sm">All variants are well stocked</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+                    <span className="chip chip-warn" style={{ fontSize: 10.5 }}>{v.total_stock}</span>
+                  </div>
+                ))
+            )}
           </div>
         </div>
       </div>

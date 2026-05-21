@@ -18,17 +18,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     action
 }) => {
     return (
-        <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-white rounded-xl border border-dashed border-slate-300">
-            <div className="bg-slate-50 p-4 rounded-full mb-4">
-                <Icon className="w-12 h-12 text-slate-400" />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', textAlign: 'center', background: 'var(--panel)', border: '1px dashed var(--line)', borderRadius: 12 }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--panel-2)', display: 'grid', placeItems: 'center', marginBottom: 16 }}>
+                <Icon size={24} style={{ color: 'var(--faint)' }} />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">{title}</h3>
-            <p className="text-slate-500 max-w-sm mb-6">{description}</p>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>{title}</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13.5, color: 'var(--muted)', maxWidth: 320 }}>{description}</p>
             {action && (
-                <button
-                    onClick={action.onClick}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition"
-                >
+                <button onClick={action.onClick} className="btn btn-primary" style={{ height: 36 }}>
                     {action.label}
                 </button>
             )}
