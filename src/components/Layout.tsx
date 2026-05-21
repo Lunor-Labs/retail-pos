@@ -16,7 +16,6 @@ import {
   LogOut,
   Bell,
 } from 'lucide-react';
-import logo from '../assets/favicon.jpeg';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,7 +34,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
     { name: 'Products', icon: Package, view: 'products', roles: ['admin', 'cashier'] },
     { name: 'Customers', icon: Users, view: 'customers', roles: ['admin', 'cashier'] },
     { name: 'Suppliers', icon: Truck, view: 'suppliers', roles: ['admin', 'cashier'] },
-    { name: 'Referral Agents', icon: UserCheck, view: 'referral-agents', roles: ['admin'] },
+    { name: 'Sales Staff', icon: UserCheck, view: 'referral-agents', roles: ['admin'] },
     { name: 'Returns', icon: RotateCcw, view: 'returns', roles: ['admin', 'cashier'] },
     { name: 'Sales History', icon: FileText, view: 'sales-history', roles: ['admin', 'cashier'] },
     { name: 'Reports', icon: TrendingUp, view: 'reports', roles: ['admin'] },
@@ -111,14 +110,12 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         {/* Brand */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800/50">
           <div className="flex items-center gap-3">
-            <img
-              src={logo}
-              alt="Gasith Motors"
-              className="w-8 h-8 rounded-lg object-cover"
-            />
+            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+              <span className="text-white font-bold text-xs">RV</span>
+            </div>
             <div className="flex flex-col">
-              <span className="font-bold text-lg tracking-wide">GASITH</span>
-              <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] -mt-1">Motors</span>
+              <span className="font-bold text-lg tracking-wide">RIVONLAK</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] -mt-1">Fashion</span>
             </div>
           </div>
           <button

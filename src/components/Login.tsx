@@ -59,23 +59,23 @@ export function Login() {
               <div className="flex items-center gap-3">
                 <img
                   src={logo}
-                  alt="Gasith Motors Logo"
+                  alt="RIVONLAK Logo"
                   className="w-12 h-12 rounded-lg object-cover"
                 />
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Gasith Motors</h2>
-                  <p className="text-sm text-white/80">Inventory & POS System</p>
+                  <h2 className="text-2xl font-bold text-white">RIVONLAK</h2>
+                  <p className="text-sm text-white/80">Fashion Retail POS</p>
                 </div>
               </div>
 
               <div className="text-white space-y-3">
                 <p className="text-4xl font-bold leading-tight">
-                  YOUR NEXT <br />
-                  ADVENTURE <br />
-                  AWAITS!
+                  YOUR STYLE <br />
+                  STARTS <br />
+                  HERE!
                 </p>
                 <p className="text-white/80 text-sm leading-relaxed">
-                  Log in to unlock exclusive deals, manage your inventory efficiently, and streamline your business operations. Your journey starts here.
+                  Log in to manage your fashion inventory, track sales, and grow your retail business with RIVONLAK POS.
                 </p>
               </div>
             </div>
@@ -87,7 +87,7 @@ export function Login() {
             <div className="lg:hidden flex justify-center mb-6">
               <img
                 src={logo}
-                alt="Gasith Motors Logo"
+                alt="RIVONLAK Logo"
                 className="w-14 h-14 rounded-lg object-cover"
               />
             </div>
