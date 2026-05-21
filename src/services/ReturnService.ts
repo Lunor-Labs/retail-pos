@@ -12,6 +12,7 @@ export interface CreateReturnInput {
     total_amount: number;
     items: {
         product_id: string;
+        variant_id?: string | null;
         batch_id?: string;
         quantity: number;
         subtotal: number;

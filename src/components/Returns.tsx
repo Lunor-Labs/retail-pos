@@ -117,6 +117,7 @@ export function Returns() {
           const saleItem = saleItems.find(si => si.id === saleItemId);
           return {
             product_id: saleItem.product_id,
+            variant_id: saleItem.variant_id || null,
             batch_id: saleItem.batch_id,
             quantity: qty,
             subtotal: saleItem.unit_price * qty,
@@ -372,6 +373,11 @@ export function Returns() {
                       <div key={item.id} className="flex items-center justify-between gap-4 p-2 bg-white rounded border border-slate-200">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-slate-900">{item.product?.name}</p>
+                          {item.variant && (
+                            <p className="text-xs text-blue-600 font-medium">
+                              {[item.variant.color, item.variant.size].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
                           <p className="text-xs text-slate-500">
                             Purchased: {item.quantity} @ LKR {item.unit_price.toFixed(2)}
                           </p>
