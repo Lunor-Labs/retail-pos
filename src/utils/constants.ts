@@ -1,9 +1,8 @@
 export const PRODUCT_UNITS = [
   { value: 'piece', label: 'Piece' },
-  { value: 'box', label: 'Box' },
-  { value: 'liter', label: 'Liter' },
-  { value: 'kg', label: 'Kilogram' },
+  { value: 'yard', label: 'Yard' },
   { value: 'meter', label: 'Meter' },
+  { value: 'pack', label: 'Pack' },
 ] as const;
 
 export const PAYMENT_METHODS = [

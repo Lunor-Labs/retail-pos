@@ -1,20 +1,26 @@
 import { useState } from 'react';
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { PRODUCT_UNITS } from '../../utils/constants';
 import { SupplierForm } from '../suppliers/SupplierForm';
 import { useToast } from '../../contexts/ToastContext';
 
-interface ProductFormData {
+const CLOTHING_CATEGORIES = [
+  'T-Shirts', 'Shirts', 'Pants', 'Dresses', 'Skirts',
+  'Jackets', 'Shoes', 'Belts', 'Bags', 'Sunglasses',
+  'Underwear', 'Socks', 'Fabric', 'Accessories', 'Other',
+];
+
+export interface ProductFormData {
   sku: string;
-  barcode: string;
   name: string;
   description: string;
   category: string;
+  brand?: string;
+  gender?: string;
+  material?: string;
   unit: string;
-  reorder_level: number;
   image_url: string;
-  // Initial stock fields
   initial_quantity?: number;
   cost_price?: number;
   markup_percentage?: number;
@@ -40,8 +46,6 @@ export function ProductForm({
   onSubmit,
   onCancel,
   mode,
-  scanningBarcode,
-  onStartBarcodeScanning,
   suppliers,
   onSupplierAdded,
 }: ProductFormProps) {
@@ -50,8 +54,7 @@ export function ProductForm({
 
   const handleQuickAddSupplier = async (data: any) => {
     try {
-      const { data: newSupplier, error } = await supabase
-        .from('suppliers')
+      const { data: newSupplier, error } = await (supabase.from('suppliers') as any)
         .insert({
           name: data.name,
           contact_person: data.contact_person || null,
@@ -59,7 +62,7 @@ export function ProductForm({
           email: data.email || null,
           address: data.address || null,
           notes: data.notes || null,
-        } as any)
+        })
         .select()
         .single();
 
@@ -71,15 +74,6 @@ export function ProductForm({
     } catch (error: any) {
       showToast('Error adding supplier: ' + error.message, 'error');
     }
-  };
-
-  const handleGenerateBarcode = () => {
-    // Generate a unique numeric barcode (12 digits)
-    const timestamp = Date.now().toString().slice(-8);
-    const random = Math.floor(Math.random() * 9000 + 1000).toString();
-    const newBarcode = timestamp + random;
-    onChange({ ...formData, barcode: newBarcode });
-    showToast('Unique barcode generated!', 'success');
   };
 
   return (
@@ -101,39 +95,19 @@ export function ProductForm({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Barcode
+              Unit
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={formData.barcode}
-                onChange={(e) => onChange({ ...formData, barcode: e.target.value })}
-                className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder={scanningBarcode ? 'Scan barcode...' : ''}
-              />
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={onStartBarcodeScanning}
-                  className={`px-3 py-2 rounded-lg transition flex items-center gap-2 ${scanningBarcode
-                    ? 'bg-green-600 text-white animate-pulse shadow-[0_0_15px_rgba(22,163,74,0.5)]'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  title="Scan with camera/scanner"
-                >
-                  {scanningBarcode ? 'Scanning...' : 'Scan'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleGenerateBarcode}
-                  className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition flex items-center gap-2"
-                  title="Generate unique barcode"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Gen
-                </button>
-              </div>
-            </div>
+            <select
+              value={formData.unit}
+              onChange={(e) => onChange({ ...formData, unit: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
+            >
+              {PRODUCT_UNITS.map((unit) => (
+                <option key={unit.value} value={unit.value}>
+                  {unit.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="md:col-span-2">
@@ -156,7 +130,7 @@ export function ProductForm({
             <textarea
               value={formData.description}
               onChange={(e) => onChange({ ...formData, description: e.target.value })}
-              rows={3}
+              rows={2}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
             />
           </div>
@@ -178,53 +152,59 @@ export function ProductForm({
                   src={formData.image_url}
                   alt="Product preview"
                   className="w-24 h-24 object-cover rounded-lg border border-slate-200"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Category
-            </label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+            <select
               value={formData.category}
               onChange={(e) => onChange({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-              placeholder="e.g., Engine Parts, Filters, etc."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Unit
-            </label>
-            <select
-              value={formData.unit}
-              onChange={(e) => onChange({ ...formData, unit: e.target.value })}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
             >
-              {PRODUCT_UNITS.map((unit) => (
-                <option key={unit.value} value={unit.value}>
-                  {unit.label}
-                </option>
+              <option value="">Select category...</option>
+              {CLOTHING_CATEGORIES.map(c => (
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Reorder Level
-            </label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Brand</label>
             <input
-              type="number"
-              value={formData.reorder_level}
-              onChange={(e) => onChange({ ...formData, reorder_level: parseInt(e.target.value) || 0 })}
-              min="0"
+              type="text"
+              value={formData.brand || ''}
+              onChange={(e) => onChange({ ...formData, brand: e.target.value })}
+              placeholder="e.g. Nike, Zara, H&M"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Gender</label>
+            <select
+              value={formData.gender || ''}
+              onChange={(e) => onChange({ ...formData, gender: e.target.value })}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
+            >
+              <option value="">Select...</option>
+              <option value="men">Men</option>
+              <option value="women">Women</option>
+              <option value="kids">Kids</option>
+              <option value="unisex">Unisex</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Material</label>
+            <input
+              type="text"
+              value={formData.material || ''}
+              onChange={(e) => onChange({ ...formData, material: e.target.value })}
+              placeholder="e.g. Cotton, Polyester, Denim"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
             />
           </div>
@@ -235,9 +215,7 @@ export function ProductForm({
             <h4 className="text-lg font-bold text-slate-900 mb-4">Initial Stock Intake (Optional)</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Supplier
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
                 <div className="flex gap-2">
                   <select
                     value={formData.supplier_id || ''}
@@ -261,9 +239,7 @@ export function ProductForm({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Initial Quantity
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Initial Quantity</label>
                 <input
                   type="number"
                   value={formData.initial_quantity || ''}
@@ -274,9 +250,7 @@ export function ProductForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Cost Price (LKR)
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Cost Price (LKR)</label>
                 <input
                   type="number"
                   step="any"
@@ -293,9 +267,7 @@ export function ProductForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Markup (%)
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Markup (%)</label>
                 <input
                   type="number"
                   step="any"
@@ -312,9 +284,7 @@ export function ProductForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Selling Price (LKR)
-                </label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Selling Price (LKR)</label>
                 <input
                   type="number"
                   step="any"

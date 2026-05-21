@@ -41,6 +41,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     name: '',
     description: '',
     category: '',
+    brand: '',
+    gender: '',
+    material: '',
     unit: 'piece',
     image_url: '',
     initial_quantity: 0,
@@ -72,11 +75,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           e.preventDefault();
 
           if (showModal && (modalMode === 'add' || modalMode === 'edit')) {
-            // We are already in a form, just fill the barcode
-            setFormData(prev => ({ ...prev, barcode: barcodeBuffer }));
             setScanningBarcode(false);
             playScannerBeep();
-            showToast('Barcode captured!', 'success');
+            showToast('Barcode scanned — assign it in the Variants tab.', 'info');
           } else {
             // Global scan - decide what to do
             handleGlobalScan(barcodeBuffer);
@@ -145,6 +146,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       name: '',
       description: '',
       category: '',
+      brand: '',
+      gender: '',
+      material: '',
       unit: 'piece',
       image_url: '',
       initial_quantity: 0,
@@ -157,14 +161,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setScanningBarcode(false);
   }
 
-  async function openAddModal(barcode?: string) {
+  async function openAddModal(_barcode?: string) {
     resetForm();
     setModalMode('add');
     setShowModal(true);
-
-    if (barcode) {
-      setFormData(prev => ({ ...prev, barcode }));
-    }
 
     try {
       const nextSku = await productService.generateNextSku();
@@ -181,6 +181,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       name: product.name,
       description: product.description || '',
       category: product.category || '',
+      brand: (product as any).brand || '',
+      gender: (product as any).gender || '',
+      material: (product as any).material || '',
       unit: product.unit || 'piece',
       image_url: product.image_url || '',
       initial_quantity: 0,
