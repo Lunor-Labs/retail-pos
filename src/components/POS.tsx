@@ -15,15 +15,17 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType } from '../hooks/useProducts';
-import { ProductWithBatches, Customer, ReferralAgent } from '../types';
+import { ProductWithBatches, Customer, ReferralAgent, VariantWithStock, ProductVariant, ProductBatch } from '../types';
 import { Invoice } from './Invoice';
 import { ProductGrid } from './pos/ProductGrid';
 import { CartItemsList } from './pos/CartItemsList';
+import { VariantPicker } from './pos/VariantPicker';
+import { LoyaltyPanel } from './pos/LoyaltyPanel';
 
 import { db } from '../lib/db';
 import { SyncStatus } from './pos/SyncStatus';
 import { Pagination } from './ui';
-import { salesService, customerService, productService } from '../services'; // Import services
+import { salesService, customerService, productService, variantService, loyaltyService } from '../services';
 import { logger } from '../lib/logger';
 import { playScannerBeep } from '../utils/audio';
 
@@ -104,6 +106,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // Manual Item Modal State
   const [showManualItemModal, setShowManualItemModal] = useState(false);
   const [manualItemForm, setManualItemForm] = useState({ description: '', price: 0, quantity: 1 });
+
+  // Variant picker state
+  const [variantPickerProduct, setVariantPickerProduct] = useState<ProductWithBatches | null>(null);
+  const [variantPickerVariants, setVariantPickerVariants] = useState<VariantWithStock[]>([]);
+
+  // Loyalty state
+  const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0);
+  const [earnRate, setEarnRate] = useState(100);
 
   useEffect(() => {
     loadData();
@@ -230,14 +241,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   async function loadData() {
     try {
-      // Only load customers and agents here, products are handled by the hook
-      const [customersList, agentsList] = await Promise.all([
+      const [customersList, agentsList, rate] = await Promise.all([
         customerService.getAllCustomers(),
         customerService.getAllReferralAgents(),
+        loyaltyService.getEarnRate(),
       ]);
 
       setCustomers(customersList);
       setReferralAgents(agentsList);
+      setEarnRate(rate);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -284,18 +296,49 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     }
   }
 
-  function handleProductSelect(product: ProductWithBatches) {
+  async function handleProductSelect(product: ProductWithBatches) {
+    try {
+      const variants = await variantService.getVariantsForProduct(product.id);
+      if (variants.length > 0) {
+        setVariantPickerProduct(product);
+        setVariantPickerVariants(variants);
+        return;
+      }
+    } catch {
+      // ignore variant lookup errors; fall through to batch flow
+    }
+
     if (product.batches.length === 0) {
       showToast('No stock available for this product', 'warning');
       return;
     }
-
     if (product.batches.length === 1) {
       addToCart(product, product.batches[0], 1);
     } else {
       setSelectedProduct(product);
       setShowBatchModal(true);
     }
+  }
+
+  function addToCartFromVariant(variant: ProductVariant, batch: ProductBatch, quantity: number) {
+    const product = variantPickerProduct!;
+    const existingIdx = cart.findIndex(
+      item => item.variant?.id === variant.id && item.batch.id === batch.id
+    );
+    if (existingIdx >= 0) {
+      const newCart = [...cart];
+      const newQty = newCart[existingIdx].quantity + quantity;
+      if (newQty > batch.current_quantity) {
+        showToast(`Only ${batch.current_quantity} in stock`, 'warning');
+        return;
+      }
+      newCart[existingIdx].quantity = newQty;
+      setCart(newCart);
+    } else {
+      setCart([...cart, { product, variant, batch, quantity, price: batch.selling_price, original_price: batch.selling_price }]);
+    }
+    setVariantPickerProduct(null);
+    setVariantPickerVariants([]);
   }
 
   function addToCart(product: ProductWithBatches, batch: any, quantity: number) {
@@ -407,7 +450,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // discountAmount is no longer used for global discount, simplifying math
   const taxBase = effectiveSubtotal;
   const taxAmount = taxBase * (taxRate / 100);
-  const total = taxBase + taxAmount + serviceCharge;
+  const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount);
   const changeAmount = paidAmount - total;
 
 
@@ -518,6 +561,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         paid_amount: paidAmount,
         referral_commission_rate: selectedReferralAgent?.commission_rate,
         service_charge: serviceCharge,
+        loyalty_points_redeemed: loyaltyPointsToRedeem || undefined,
+        customer_loyalty_balance: selectedCustomer?.loyalty_points,
       });
 
       // Prepare invoice data
@@ -550,6 +595,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
       setShowInvoice(true);
       clearCart();
+      setLoyaltyPointsToRedeem(0);
+      setLoyaltyDiscount(0);
       loadData();
       refetchProducts(); // Refresh stock levels
     } catch (err: any) {
@@ -804,6 +851,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                       onChange={(e) => {
                         const customer = customers.find((c) => c.id === e.target.value);
                         setSelectedCustomer(customer || null);
+                        setLoyaltyPointsToRedeem(0);
+                        setLoyaltyDiscount(0);
                       }}
                       className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none text-sm"
                     >
@@ -857,6 +906,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 </div>
 
               </div>
+
+              {selectedCustomer && (
+                <LoyaltyPanel
+                  customer={selectedCustomer}
+                  totalAmount={effectiveSubtotal}
+                  earnRate={earnRate}
+                  onRedeemChange={(pts, discount) => { setLoyaltyPointsToRedeem(pts); setLoyaltyDiscount(discount); }}
+                />
+              )}
 
               {/* Payment & Charges Group */}
               <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 space-y-4">
@@ -938,6 +996,13 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   <div className="flex justify-between text-xs text-orange-400">
                     <span>Discount:</span>
                     <span>-LKR {itemLevelDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {loyaltyDiscount > 0 && (
+                  <div className="flex justify-between text-xs text-amber-400">
+                    <span>Loyalty Discount:</span>
+                    <span>-LKR {loyaltyDiscount.toFixed(2)}</span>
                   </div>
                 )}
 
@@ -1092,6 +1157,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 </div>
               </div>
 
+              {selectedCustomer && (
+                <LoyaltyPanel
+                  customer={selectedCustomer}
+                  totalAmount={effectiveSubtotal}
+                  earnRate={earnRate}
+                  onRedeemChange={(pts, discount) => { setLoyaltyPointsToRedeem(pts); setLoyaltyDiscount(discount); }}
+                />
+              )}
+
               {/* Payment & Charges Group */}
               <div className="bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-slate-100 space-y-4">
                 <div className="flex items-center gap-2 mb-1">
@@ -1177,6 +1251,13 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   <div className="flex justify-between text-xs text-orange-400">
                     <span>Discount:</span>
                     <span>-LKR {itemLevelDiscount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {loyaltyDiscount > 0 && (
+                  <div className="flex justify-between text-xs text-amber-400">
+                    <span>Loyalty Discount:</span>
+                    <span>-LKR {loyaltyDiscount.toFixed(2)}</span>
                   </div>
                 )}
 
@@ -1521,6 +1602,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             </div>
           </div>
         </div>
+      )}
+
+      {variantPickerProduct && (
+        <VariantPicker
+          product={variantPickerProduct}
+          variants={variantPickerVariants}
+          onSelect={addToCartFromVariant}
+          onClose={() => { setVariantPickerProduct(null); setVariantPickerVariants([]); }}
+        />
       )}
     </div>
   );
