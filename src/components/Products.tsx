@@ -10,10 +10,26 @@ import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
 import { ProductImporter } from './products/ProductImporter';
 import { productService, supplierService } from '../services';
+import { VariantGrid } from './products/VariantGrid';
+import { useVariants } from '../hooks/useVariants';
+import { Product } from '../types';
 import { logger } from '../lib/logger';
 import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
 import { playScannerBeep } from '../utils/audio';
 import { useRef } from 'react';
+
+function ProductVariantSection({ product }: { product: Product }) {
+  const { variants, loading, addVariant, updateVariant } = useVariants(product.id);
+  if (loading) return <p className="text-xs text-slate-400 p-3">Loading variants…</p>;
+  return (
+    <VariantGrid
+      product={product}
+      variants={variants}
+      onAddVariant={data => addVariant({ ...data, product_id: product.id })}
+      onUpdateVariant={updateVariant}
+    />
+  );
+}
 
 interface ProductsProps {
   initialStockFilter?: StockFilter;
@@ -493,12 +509,17 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         size={modalMode === 'view' ? '4xl' : '3xl'}
       >
         {modalMode === 'view' && selectedProduct ? (
-          <ProductDetailsView
-            product={selectedProduct}
-            defaultShowAddStock={showAddStockInView}
-            onClose={() => setShowModal(false)}
-            onUpdate={refetch}
-          />
+          <>
+            <ProductDetailsView
+              product={selectedProduct}
+              defaultShowAddStock={showAddStockInView}
+              onClose={() => setShowModal(false)}
+              onUpdate={refetch}
+            />
+            <div className="px-6 pb-6 border-t border-slate-200 mt-4 pt-4">
+              <ProductVariantSection product={selectedProduct} />
+            </div>
+          </>
         ) : (
           <ProductForm
             mode={modalMode as 'add' | 'edit'}
