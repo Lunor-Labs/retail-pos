@@ -1,5 +1,5 @@
 import { InvoiceData } from './types';
-import logo from '../../assets/favicon.jpeg';
+import logo from '../../assets/revonlak.jpeg';
 import qrCode from '../../assets/QR.jpeg';
 
 /**

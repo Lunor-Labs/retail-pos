@@ -12,7 +12,7 @@ import { RECEIPT_PRINT_CSS, RECEIPT_PRINT_JS } from './receiptCSS';
 export function buildReceiptHTML(
     invoiceData: InvoiceData,
     showDiscount: boolean,
-    _logoSrc: string,
+    logoSrc: string,
     qrSrc: string,
 ): string {
     const displaySubtotal = !showDiscount
@@ -101,6 +101,7 @@ export function buildReceiptHTML(
 
   <!-- Header -->
   <div class="center">
+    <img class="logo" src="${logoSrc}" alt="RIVONLAK" />
     <div class="store-name">RIVONLAK</div>
     <div class="store-sub">Fashion Retail</div>
   </div>

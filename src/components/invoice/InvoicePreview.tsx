@@ -1,3 +1,4 @@
+import logo from '../../assets/revonlak.jpeg';
 import qrCode from '../../assets/QR.jpeg';
 import { InvoiceData } from './types';
 
@@ -21,6 +22,7 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
 
             {/* Header */}
             <div className="text-center mb-3">
+                <img src={logo} alt="RIVONLAK" style={{ height: 56, width: 56, objectFit: 'cover', borderRadius: 8, margin: '0 auto 6px' }} />
                 <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: '0.1em' }}>RIVONLAK</div>
                 <div style={{ fontSize: 11, color: '#555' }}>Fashion Retail</div>
             </div>

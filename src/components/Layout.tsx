@@ -16,6 +16,7 @@ import {
   LogOut,
   Bell,
 } from 'lucide-react';
+import revonlakLogo from '../assets/revonlak.jpeg';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -110,9 +111,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         {/* Brand */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800/50">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-              <span className="text-white font-bold text-xs">RV</span>
-            </div>
+            <img src={revonlakLogo} alt="RIVONLAK" className="w-8 h-8 rounded-lg object-cover" />
             <div className="flex flex-col">
               <span className="font-bold text-lg tracking-wide">RIVONLAK</span>
               <span className="text-[10px] text-slate-400 uppercase tracking-[0.2em] -mt-1">Fashion</span>

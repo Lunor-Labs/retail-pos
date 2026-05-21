@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import loginImage from '../assets/login.jpg';
-import logo from '../assets/favicon.jpeg';
+import logo from '../assets/revonlak.jpeg';
 
 export function Login() {
   const { signIn } = useAuth();
