@@ -400,7 +400,7 @@ export function AddProductPage({
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
             <thead>
               <tr style={{ background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)' }}>
-                {['Size', 'Colour', 'SKU', mode === 'edit' ? 'Stock' : 'Qty', 'Price (LKR)', ''].map(h => (
+                {['Size', 'Colour', 'SKU', 'Min Stock', mode === 'edit' ? 'Stock' : 'Qty', 'Price (LKR)', ''].map(h => (
                   <th key={h} style={{ padding: '8px 4px', textAlign: 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>

@@ -128,6 +128,18 @@ export function VariantTableRow({
           />
         </td>
 
+        {/* Min Stock (reorder level) */}
+        <td style={{ ...cellStyle, width: 72 }}>
+          <input
+            style={{ ...inputStyle, textAlign: 'right' }}
+            type="number"
+            min={0}
+            value={row.reorder_level || ''}
+            onChange={e => update({ reorder_level: parseInt(e.target.value) || 0 })}
+            placeholder="0"
+          />
+        </td>
+
         {/* Qty — editable in add mode, read-only in edit mode for existing variants */}
         <td style={{ ...cellStyle, width: 88 }}>
           {mode === 'edit' && row.id ? (
@@ -205,7 +217,7 @@ export function VariantTableRow({
       {/* Inline stock intake form — edit mode only */}
       {showStockIntake && (
         <tr>
-          <td colSpan={7} style={{ padding: '0 4px 10px', background: 'var(--panel-2)' }}>
+          <td colSpan={8} style={{ padding: '0 4px 10px', background: 'var(--panel-2)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', flexShrink: 0 }}>
                 {[row.size, row.color].filter(Boolean).join(' · ') || 'Default'}
