@@ -160,6 +160,23 @@ html, body {
   color: var(--muted);
 }
 
+/* ── POS two-column layout ──────────────────────────────── */
+.pos-layout {
+  margin: -24px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 56px);
+}
+
+@media (min-width: 1024px) {
+  .pos-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+  }
+}
+
 /* ── Custom scrollbar ───────────────────────────────────── */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
