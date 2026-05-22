@@ -191,3 +191,21 @@ html, body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(20,22,26,0.2);
 }
+
+/* ── Dashboard mobile ───────────────────────────────────── */
+.grid-kpi {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .grid-kpi { grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+}
+@media (min-width: 1024px) {
+  .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap); }
+}
+
+@media (max-width: 639px) {
+  .dashboard-status { display: none; }
+  .chart-stat-row   { display: none; }
+}
