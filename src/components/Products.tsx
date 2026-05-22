@@ -9,6 +9,7 @@ import { ProductTable } from './products/ProductTable';
 import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
 import { ProductImporter } from './products/ProductImporter';
+import { AddProductPage, DefaultPricing } from './products/AddProductPage';
 import { productService, supplierService } from '../services';
 import { VariantGrid } from './products/VariantGrid';
 import { useVariants } from '../hooks/useVariants';
@@ -70,6 +71,12 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   });
   const [barcodeProduct, setBarcodeProduct] = useState<ProductWithStock | null>(null);
   const [scanningBarcode, setScanningBarcode] = useState(false);
+
+  // Full-page add/edit view state
+  const [pageView, setPageView] = useState<'list' | 'add' | 'edit'>('list');
+  const [editProductId, setEditProductId] = useState<string | null>(null);
+  const [rememberedBrand, setRememberedBrand] = useState('');
+  const [rememberedPricing, setRememberedPricing] = useState<DefaultPricing | undefined>(undefined);
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
   const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastKeyTimeRef = useRef<number>(0);
@@ -226,6 +233,31 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setShowAddStockInView(true);
   }
 
+  function openAddPage() {
+    setPageView('add');
+    setEditProductId(null);
+  }
+
+  function openEditPage(product: ProductWithStock) {
+    setEditProductId(product.id);
+    setPageView('edit');
+  }
+
+  function closePage() {
+    setPageView('list');
+    setEditProductId(null);
+    refetch();
+  }
+
+  function handleSaveAndNext(brand: string, pricing: DefaultPricing) {
+    setRememberedBrand(brand);
+    setRememberedPricing(pricing);
+    refetch();
+    setEditProductId(null);
+    setPageView('list');
+    setTimeout(() => setPageView('add'), 0);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -275,8 +307,8 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           showToast(`Found: ${fullProduct.name}`, 'success');
         }
       } else {
-        // New product - open add modal
-        openAddModal(barcode);
+        // New product - open add page
+        openAddPage();
         playScannerBeep();
         showToast('New product detected!', 'info');
       }
@@ -380,6 +412,20 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setBarcodeProduct(product);
   }
 
+  if (pageView === 'add' || pageView === 'edit') {
+    return (
+      <AddProductPage
+        mode={pageView}
+        productId={editProductId ?? undefined}
+        onSave={closePage}
+        onCancel={closePage}
+        initialBrand={rememberedBrand}
+        initialPricing={rememberedPricing}
+        onSaveAndNext={pageView === 'add' ? handleSaveAndNext : undefined}
+      />
+    );
+  }
+
   if (loading && products.length === 0) {
     return <LoadingSpinner message="Loading products..." />;
   }
@@ -401,7 +447,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               <button onClick={handleExportCSV} className="btn" style={{ height: 36 }}>
                 <Download size={14} /> Export CSV
               </button>
-              <button onClick={() => openAddModal()} className="btn btn-primary" style={{ height: 36 }}>
+              <button onClick={openAddPage} className="btn btn-primary" style={{ height: 36 }}>
                 <Plus size={14} /> Add Product
               </button>
             </>
@@ -450,7 +496,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           icon={PackageOpen}
           title="No products found"
           description={debouncedSearch ? `No products match "${debouncedSearch}"` : "You haven't added any products yet."}
-          action={!debouncedSearch ? { label: 'Add Your First Product', onClick: openAddModal } : undefined}
+          action={!debouncedSearch ? { label: 'Add Your First Product', onClick: openAddPage } : undefined}
         />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
