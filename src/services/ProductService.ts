@@ -1,6 +1,19 @@
 import { ProductRepository } from '../repositories/ProductRepository';
-import { Product, ProductWithStock } from '../types';
+import { Product, ProductWithStock, ProductWithVariants } from '../types';
 import { logger } from '../lib/logger';
+
+export interface VariantInput {
+  size: string | null;
+  color: string | null;
+  sku: string;
+  barcode: string | null;
+  reorder_level: number;
+  qty: number;
+  selling_price: number;
+  cost_price: number;
+  markup_percentage: number;
+  supplier_id: string;
+}
 
 /**
  * Product service - handles product business logic
@@ -381,6 +394,202 @@ export class ProductService {
             if (error) throw error;
         } catch (error) {
             logger.error('Failed to update batch', error as Error);
+            throw error;
+        }
+    }
+
+    async createProductWithVariants(
+        productData: { sku: string; name: string; description?: string; category?: string; brand?: string; gender?: string; material?: string; unit?: string; image_url?: string },
+        variants: VariantInput[]
+    ): Promise<Product> {
+        try {
+            if (!productData.name?.trim()) throw new Error('Product name is required.');
+            if (!productData.sku?.trim()) throw new Error('SKU is required.');
+            if (variants.length === 0) throw new Error('At least one variant is required.');
+
+            const existing = await this.productRepo.findBySku(productData.sku.trim());
+            if (existing) throw new Error(`SKU "${productData.sku}" already exists.`);
+
+            const client = (this.productRepo as any).adapter.getClient();
+
+            const { data: product, error: prodErr } = await client
+                .from('products')
+                .insert({
+                    sku: productData.sku.trim(),
+                    name: productData.name.trim(),
+                    description: productData.description || null,
+                    category: productData.category || null,
+                    brand: productData.brand || null,
+                    gender: productData.gender || null,
+                    material: productData.material || null,
+                    unit: productData.unit || 'piece',
+                    image_url: productData.image_url || null,
+                    active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                })
+                .select()
+                .single();
+            if (prodErr) throw prodErr;
+
+            for (const v of variants) {
+                const { data: variant, error: varErr } = await client
+                    .from('product_variants')
+                    .insert({
+                        product_id: product.id,
+                        size: v.size || null,
+                        color: v.color || null,
+                        sku: v.sku.trim(),
+                        barcode: v.barcode || null,
+                        reorder_level: v.reorder_level || 0,
+                        active: true,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    })
+                    .select()
+                    .single();
+                if (varErr) throw varErr;
+
+                if (v.qty > 0) {
+                    const { error: batErr } = await client.from('product_batches').insert({
+                        variant_id: variant.id,
+                        supplier_id: v.supplier_id,
+                        batch_number: `B-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+                        cost_price: v.cost_price,
+                        markup_percentage: v.markup_percentage,
+                        selling_price: v.selling_price,
+                        initial_quantity: v.qty,
+                        current_quantity: v.qty,
+                        received_date: new Date().toISOString().split('T')[0],
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    });
+                    if (batErr) throw batErr;
+                }
+            }
+
+            return product as Product;
+        } catch (error) {
+            logger.error('Failed to create product with variants', error as Error);
+            throw error;
+        }
+    }
+
+    async getProductWithVariants(id: string): Promise<ProductWithVariants | null> {
+        try {
+            const client = (this.productRepo as any).adapter.getClient();
+
+            const { data: product, error: prodErr } = await client
+                .from('products')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (prodErr || !product) return null;
+
+            const { data: variants, error: varErr } = await client
+                .from('product_variants')
+                .select('*')
+                .eq('product_id', id)
+                .eq('active', true)
+                .order('size', { ascending: true });
+            if (varErr) throw varErr;
+
+            const variantIds = ((variants as any[]) || []).map((v: any) => v.id);
+            let allBatches: any[] = [];
+            if (variantIds.length > 0) {
+                const { data: batchData } = await client
+                    .from('product_batches')
+                    .select('*, supplier:suppliers(name)')
+                    .in('variant_id', variantIds);
+                allBatches = batchData || [];
+            }
+
+            const batchesByVariant = new Map<string, any[]>();
+            for (const b of allBatches) {
+                if (!batchesByVariant.has(b.variant_id)) batchesByVariant.set(b.variant_id, []);
+                batchesByVariant.get(b.variant_id)!.push(b);
+            }
+
+            let totalStock = 0;
+            let basePrice = 0;
+            const variantsWithStock = ((variants as any[]) || []).map(v => {
+                const batches = batchesByVariant.get(v.id) || [];
+                const stock = batches.reduce((s: number, b: any) => s + b.current_quantity, 0);
+                totalStock += stock;
+                for (const b of batches) {
+                    if (basePrice === 0 || b.selling_price < basePrice) basePrice = b.selling_price;
+                }
+                return { ...v, batches, total_stock: stock };
+            });
+
+            return { ...product, variants: variantsWithStock, total_stock: totalStock, base_price: basePrice } as ProductWithVariants;
+        } catch (error) {
+            logger.error('Failed to get product with variants', error as Error);
+            return null;
+        }
+    }
+
+    async updateProductWithVariants(
+        id: string,
+        productData: { name: string; description?: string; category?: string; brand?: string; gender?: string; material?: string; unit?: string; image_url?: string },
+        newVariants: VariantInput[]
+    ): Promise<void> {
+        try {
+            const client = (this.productRepo as any).adapter.getClient();
+
+            const { error: prodErr } = await client
+                .from('products')
+                .update({
+                    name: productData.name.trim(),
+                    description: productData.description || null,
+                    category: productData.category || null,
+                    brand: productData.brand || null,
+                    gender: productData.gender || null,
+                    material: productData.material || null,
+                    unit: productData.unit || 'piece',
+                    image_url: productData.image_url || null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', id);
+            if (prodErr) throw prodErr;
+
+            for (const v of newVariants) {
+                const { data: variant, error: varErr } = await client
+                    .from('product_variants')
+                    .insert({
+                        product_id: id,
+                        size: v.size || null,
+                        color: v.color || null,
+                        sku: v.sku.trim(),
+                        barcode: v.barcode || null,
+                        reorder_level: v.reorder_level || 0,
+                        active: true,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    })
+                    .select()
+                    .single();
+                if (varErr) throw varErr;
+
+                if (v.qty > 0) {
+                    const { error: batErr } = await client.from('product_batches').insert({
+                        variant_id: variant.id,
+                        supplier_id: v.supplier_id,
+                        batch_number: `B-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+                        cost_price: v.cost_price,
+                        markup_percentage: v.markup_percentage,
+                        selling_price: v.selling_price,
+                        initial_quantity: v.qty,
+                        current_quantity: v.qty,
+                        received_date: new Date().toISOString().split('T')[0],
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    });
+                    if (batErr) throw batErr;
+                }
+            }
+        } catch (error) {
+            logger.error('Failed to update product with variants', error as Error);
             throw error;
         }
     }
