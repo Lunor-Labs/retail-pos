@@ -338,32 +338,32 @@ export class ProductService {
     /**
      * Generate next SKU
      */
-    async generateNextSku(): Promise<string> {
+    async generateNextSku(brand: string = '', category: string = ''): Promise<string> {
         try {
+            const alpha = (s: string) => s.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3);
+            const brandPart = alpha(brand);
+            const catPart = alpha(category);
+
+            const prefix = [brandPart, catPart].filter(Boolean).join('-') || 'P';
+
             const client = (this.productRepo as any).adapter.getClient();
-            const { data, error } = await client
+            const { data } = await client
                 .from('products')
                 .select('sku')
-                .order('created_at', { ascending: false })
-                .limit(1);
+                .like('sku', `${prefix}-%`);
 
-            if (error) throw error;
+            let maxNum = 0;
+            const pattern = new RegExp(`^${prefix.replace(/-/g, '\\-')}-(\\d{3})$`);
+            for (const row of (data as any[]) || []) {
+                const m = row.sku.match(pattern);
+                if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
+            }
 
-            if (!data || data.length === 0) return 'SKU-0001';
-
-            const lastSku = (data[0] as any).sku;
-            const match = lastSku.match(/(\d+)$/);
-
-            if (!match) return `${lastSku}-0001`;
-
-            const lastNumber = parseInt(match[0]);
-            const nextNumber = lastNumber + 1;
-            const numberPart = nextNumber.toString().padStart(match[0].length, '0');
-
-            return lastSku.substring(0, lastSku.length - match[0].length) + numberPart;
+            const next = (maxNum + 1).toString().padStart(3, '0');
+            return `${prefix}-${next}`;
         } catch (error) {
             logger.error('Failed to generate SKU', error as Error);
-            return 'SKU-' + Date.now().toString().slice(-6);
+            return 'P-' + Date.now().toString().slice(-3).padStart(3, '0');
         }
     }
 

@@ -4,3 +4,4 @@ export * from './SearchBar';
 export * from './LoadingSpinner';
 export * from './EmptyState';
 export * from './Pagination';
+export * from './DropdownSelect';
