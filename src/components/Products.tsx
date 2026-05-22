@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType, StockFilter } from '../hooks/useProducts';
 import { ProductWithStock } from '../types';
-import { BarcodeGenerator } from './BarcodeGenerator';
+import { BarcodeGenerator, BarcodeVariant } from './BarcodeGenerator';
 import { ProductTable } from './products/ProductTable';
 import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
@@ -158,6 +158,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     supplier_id: '',
   });
   const [barcodeProduct, setBarcodeProduct] = useState<ProductWithStock | null>(null);
+  const [barcodeVariants, setBarcodeVariants] = useState<BarcodeVariant[]>([]);
   const [scanningBarcode, setScanningBarcode] = useState(false);
 
   const [quickStockProduct, setQuickStockProduct] = useState<ProductWithStock | null>(null);
@@ -495,8 +496,20 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     }
   }
 
-  function handlePrintBarcode(product: ProductWithStock) {
+  async function handlePrintBarcode(product: ProductWithStock) {
     setBarcodeProduct(product);
+    setBarcodeVariants([]);
+    try {
+      const full = await productService.getProductWithVariants(product.id);
+      if (full && full.variants.length > 0) {
+        const mapped: BarcodeVariant[] = full.variants.map(v => ({
+          sku: v.sku,
+          label: [v.size, v.color].filter(Boolean).join(' · ') || 'Default',
+          price: (v as any).batches?.[0]?.selling_price,
+        }));
+        setBarcodeVariants(mapped);
+      }
+    } catch { /* silently ignore — product-level print still works */ }
   }
 
   if (pageView === 'add' || pageView === 'edit') {
@@ -706,11 +719,11 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       {/* Barcode Printing Modal */}
       {barcodeProduct && (
         <BarcodeGenerator
-          barcode={barcodeProduct.sku}
           productName={barcodeProduct.name}
           sku={barcodeProduct.sku}
           price={barcodeProduct.batches[0]?.selling_price}
-          onClose={() => setBarcodeProduct(null)}
+          variants={barcodeVariants.length > 0 ? barcodeVariants : undefined}
+          onClose={() => { setBarcodeProduct(null); setBarcodeVariants([]); }}
         />
       )}
 

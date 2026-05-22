@@ -132,12 +132,32 @@ export class ProductRepository extends BaseRepository<Product> {
      * Find product by barcode
      */
     async findByBarcode(barcode: string): Promise<Product | null> {
-        const results = await this.query({
-            where: [{ field: 'barcode', operator: '=', value: barcode }],
-            limit: 1,
-        });
+        const client = (this.adapter as any).getClient();
 
-        return results[0] || null;
+        // Search product_variants by sku (SKU is the barcode)
+        const { data: variants } = await client
+            .from('product_variants')
+            .select('product_id')
+            .eq('sku', barcode)
+            .limit(1);
+
+        if (variants && variants.length > 0) {
+            const { data: product } = await client
+                .from('products')
+                .select('*')
+                .eq('id', variants[0].product_id)
+                .single();
+            if (product) return product as Product;
+        }
+
+        // Fall back: product-level SKU
+        const { data: bySku } = await client
+            .from('products')
+            .select('*')
+            .eq('sku', barcode)
+            .limit(1);
+
+        return (bySku && bySku[0]) || null;
     }
 
     /**
