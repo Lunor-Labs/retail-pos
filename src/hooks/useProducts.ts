@@ -129,13 +129,16 @@ export function useProducts(
           case 'all':
           default:
             collection = db.products.filter(p => {
-              // Check synonyms against name
               const nameMatch = expandedTerms.some(term => {
                 const words = term.split(/\s+/);
                 return words.every(word => p.name.toLowerCase().includes(word));
               });
-
               if (nameMatch) return true;
+
+              const brandMatch = (p as any).brand
+                ? expandedTerms.some(term => (p as any).brand!.toLowerCase().includes(term))
+                : false;
+              if (brandMatch) return true;
 
               return p.sku.toLowerCase() === query ||
                 p.name.toLowerCase().replace(/\s+/g, '').includes(query.replace(/\s+/g, ''));
