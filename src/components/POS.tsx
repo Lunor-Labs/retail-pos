@@ -39,7 +39,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchType, setSearchType] = useState<SearchType>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Use optimized hook
   const {
