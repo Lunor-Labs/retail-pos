@@ -26,17 +26,20 @@ export interface VariantWithStock extends ProductVariant {
 export interface ProductWithVariants extends Product {
   variants: VariantWithStock[];
   total_stock: number;
+  base_price: number;
 }
 
 // Kept for purchase order and product management screens that don't use variants yet
 export interface ProductWithStock extends Product {
   batches: ProductBatch[];
   total_stock: number;
+  base_price: number;
 }
 
 export interface ProductWithBatches extends Product {
   batches: ProductBatch[];
   total_stock: number;
+  base_price: number;
   search_words?: string[];
 }
 
