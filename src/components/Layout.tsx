@@ -81,7 +81,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
     .find((i) => i.id === currentView)?.label ?? 'Dashboard';
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
+    <div className="flex" style={{ background: 'var(--bg)', height: '100vh', overflow: 'hidden' }}>
       {/* Mobile overlay */}
       <div
         className={`fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300 ${
@@ -95,7 +95,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         className={`fixed lg:static inset-y-0 left-0 z-50 flex flex-col transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
-        style={{ width: 232, background: 'var(--sidebar)', color: 'var(--sidebar-ink)', borderRight: '1px solid rgba(255,255,255,0.05)' }}
+        style={{ width: 232, flexShrink: 0, height: '100vh', overflowY: 'hidden', background: 'var(--sidebar)', color: 'var(--sidebar-ink)', borderRight: '1px solid rgba(255,255,255,0.05)' }}
       >
         {/* Brand */}
         <div style={{ padding: '18px 18px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -288,7 +288,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto" style={{ padding: '24px' }}>
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
           <div style={{ maxWidth: 1400, margin: '0 auto' }}>
             {children}
           </div>
