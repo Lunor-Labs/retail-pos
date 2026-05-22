@@ -88,7 +88,7 @@ export class SaleRepository extends BaseRepository<Sale> {
      */
     async findRecentSales(limit: number): Promise<Sale[]> {
         return this.adapter.query<Sale>('sales', {
-            select: '*, customers(name)',
+            select: '*, customers(name), sale_items(id)',
             orderBy: [{ field: 'created_at', direction: 'desc' }],
             limit
         });

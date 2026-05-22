@@ -621,6 +621,71 @@ export class SalesService {
     }
 
 
+    async getYesterdayStats(): Promise<{ count: number; revenue: number }> {
+        try {
+            const adapter = (this.saleRepo as any).adapter;
+            const today = new Date();
+            const yStart = new Date(today); yStart.setDate(today.getDate() - 1); yStart.setHours(0, 0, 0, 0);
+            const yEnd = new Date(today); yEnd.setHours(0, 0, 0, 0);
+            const sales: any[] = await adapter.query('sales', {
+                select: 'total_amount',
+                where: [
+                    { field: 'created_at', operator: '>=', value: yStart.toISOString() },
+                    { field: 'created_at', operator: '<', value: yEnd.toISOString() },
+                ],
+            });
+            return { count: sales.length, revenue: sales.reduce((s, r) => s + Number(r.total_amount), 0) };
+        } catch {
+            return { count: 0, revenue: 0 };
+        }
+    }
+
+    async getTopSellingWithRevenue(limit = 5): Promise<{ name: string; sku: string; units: number; rev: number; color: string }[]> {
+        try {
+            const adapter = (this.saleRepo as any).adapter;
+            const items: any[] = await adapter.query('sale_items', {
+                select: 'quantity, unit_price, products(name, sku)',
+            });
+            const colors = ['#1B6B4F', '#3340A6', '#7A2A56', '#C68A2E', '#3A4E6B'];
+            const map = new Map<string, { name: string; sku: string; units: number; rev: number }>();
+            for (const it of items) {
+                const name = it.products?.name || 'Unknown';
+                const sku = it.products?.sku || '';
+                const qty = Number(it.quantity) || 0;
+                const price = Number(it.unit_price) || 0;
+                const cur = map.get(name) || { name, sku, units: 0, rev: 0 };
+                map.set(name, { ...cur, units: cur.units + qty, rev: cur.rev + qty * price });
+            }
+            return Array.from(map.values())
+                .sort((a, b) => b.rev - a.rev)
+                .slice(0, limit)
+                .map((it, i) => ({ ...it, color: colors[i % colors.length] }));
+        } catch {
+            return [];
+        }
+    }
+
+    async getCashierStats(): Promise<{ cashier_id: string; full_name: string; sales: number; revenue: number }[]> {
+        try {
+            const adapter = (this.saleRepo as any).adapter;
+            const today = new Date().toISOString().split('T')[0];
+            const sales: any[] = await adapter.query('sales', {
+                select: 'total_amount, user_id, profiles(full_name)',
+                where: [{ field: 'sale_date', operator: '>=', value: today }],
+            });
+            const map = new Map<string, { cashier_id: string; full_name: string; sales: number; revenue: number }>();
+            for (const s of sales) {
+                const id = s.user_id || 'unknown';
+                const name = s.profiles?.full_name || 'Unknown';
+                const cur = map.get(id) || { cashier_id: id, full_name: name, sales: 0, revenue: 0 };
+                map.set(id, { ...cur, sales: cur.sales + 1, revenue: cur.revenue + Number(s.total_amount) });
+            }
+            return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+        } catch {
+            return [];
+        }
+    }
+
     /**
      * Get sales for a date range with details
      */
