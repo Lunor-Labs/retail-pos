@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Package, Users, ShoppingCart, TrendingUp, DollarSign, AlertTriangle, FileText, RotateCcw, ArrowRight } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ArrowUpRight, ArrowDownRight, Package, Users, ShoppingCart, DollarSign, AlertTriangle, RotateCcw, ArrowRight, FileText } from 'lucide-react';
 import { StockFilter } from '../hooks/useProducts';
 import { productService, customerService, salesService, variantService } from '../services';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardStats {
   totalProducts: number;
@@ -19,508 +19,502 @@ interface DashboardProps {
   onFilterNavigate?: (filter: StockFilter) => void;
 }
 
+// ── Sparkline SVG ─────────────────────────────────────────
+function Sparkline({ data, color = 'var(--accent)', width = 72, height = 28 }: { data: number[]; color?: string; width?: number; height?: number }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  const n = data.length;
+  const stepX = width / (n - 1);
+  const pts = data.map((v, i) => [i * stepX, height - ((v - min) / range) * (height - 4) - 2]);
+  const path = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = path + ` L${width},${height} L0,${height} Z`;
+  const gid = 'sg' + Math.random().toString(36).slice(2, 7);
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// ── Revenue SVG chart ─────────────────────────────────────
+function RevenueChart({ data, period, onPeriod }: { data: { name: string; revenue: number; cost: number }[]; period: string; onPeriod: (p: string) => void }) {
+  const W = 720, H = 220, PL = 52, PR = 12, PT = 14, PB = 28;
+  const iw = W - PL - PR, ih = H - PT - PB;
+
+  if (!data.length) return (
+    <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No chart data yet.</div>
+  );
+
+  const xs = data.map((_, i) => PL + (i / Math.max(data.length - 1, 1)) * iw);
+  const maxY = Math.max(...data.map(d => d.revenue)) * 1.12 || 1;
+  const y = (v: number) => PT + ih - (v / maxY) * ih;
+
+  const linePath = (key: 'revenue' | 'cost') =>
+    data.map((d, i) => (i ? 'L' : 'M') + xs[i].toFixed(1) + ',' + y(d[key]).toFixed(1)).join(' ');
+  const areaPath = (key: 'revenue' | 'cost') =>
+    linePath(key) + ` L${xs[xs.length - 1]},${PT + ih} L${xs[0]},${PT + ih} Z`;
+
+  const ticks = 4;
+  const yTicks = Array.from({ length: ticks + 1 }, (_, i) => Math.round((maxY / ticks) * i));
+
+  const xLabels = data.reduce<{ x: number; label: string }[]>((acc, d, i) => {
+    const step = Math.max(1, Math.floor(data.length / 6));
+    if (i % step === 0 || i === data.length - 1) acc.push({ x: xs[i], label: d.name });
+    return acc;
+  }, []);
+
+  const lastIdx = data.length - 1;
+  const totalRev = data.reduce((s, d) => s + d.revenue, 0);
+  const totalCost = data.reduce((s, d) => s + d.cost, 0);
+  const margin = totalRev > 0 ? ((totalRev - totalCost) / totalRev) * 100 : 0;
+  const fmtLKR = (v: number) => `LKR ${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v.toLocaleString()}`;
+  const fmtFull = (v: number) => `LKR ${Math.round(v).toLocaleString()}`;
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)' }}>
+        <div>
+          <h3>Revenue &amp; Cost</h3>
+          <div className="sub" style={{ marginTop: 2 }}>Sales performance over time</div>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['7D', '30D', '90D'].map(r => (
+            <button key={r} onClick={() => onPeriod(r)} className="btn btn-sm" style={{
+              background: r === period ? 'var(--accent-soft)' : 'transparent',
+              borderColor: r === period ? 'transparent' : 'var(--line)',
+              color: r === period ? 'var(--accent-ink)' : 'var(--ink-2)',
+              fontWeight: r === period ? 600 : 500,
+            }}>{r}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '14px 18px 6px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <StatBlock label="Total Revenue" value={fmtFull(totalRev)} positive />
+        <StatBlock label="Total Cost" value={fmtFull(totalCost)} positive={false} />
+        <StatBlock label="Gross Margin" value={margin.toFixed(1) + '%'} positive={margin > 30} />
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 14, paddingBottom: 4 }}>
+          <LegendDot color="var(--accent)" label="Revenue" />
+          <LegendDot color="#C68A2E" label="Cost" />
+        </div>
+      </div>
+
+      <div style={{ padding: '4px 8px 14px 0', overflow: 'hidden' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }}>
+          <defs>
+            <linearGradient id="rev-g" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {yTicks.map((t, i) => (
+            <g key={i}>
+              <line x1={PL} x2={W - PR} y1={y(t)} y2={y(t)}
+                stroke="var(--line-2)" strokeDasharray={i ? '2 4' : ''} />
+              <text x={PL - 6} y={y(t) + 3} fontSize="10" textAnchor="end"
+                fill="var(--faint)" fontFamily="'JetBrains Mono',monospace">{fmtLKR(t)}</text>
+            </g>
+          ))}
+
+          {xLabels.map((l, i) => (
+            <text key={i} x={l.x} y={H - 8} fontSize="10" textAnchor="middle" fill="var(--faint)">{l.label}</text>
+          ))}
+
+          <path d={areaPath('revenue')} fill="url(#rev-g)" />
+          <path d={linePath('revenue')} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+          <path d={linePath('cost')} fill="none" stroke="#C68A2E" strokeWidth="1.5" strokeLinejoin="round" strokeDasharray="4 3" />
+
+          <circle cx={xs[lastIdx]} cy={y(data[lastIdx].revenue)} r="4" fill="var(--accent)" stroke="#fff" strokeWidth="2" />
+          <circle cx={xs[lastIdx]} cy={y(data[lastIdx].cost)} r="3" fill="#C68A2E" stroke="#fff" strokeWidth="2" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function StatBlock({ label, value, positive }: { label: string; value: string; positive: boolean }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, marginBottom: 4 }}>{label}</div>
+      <div className="num" style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>{value}</div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)' }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      {label}
+    </div>
+  );
+}
+
+// ── KPI Card ──────────────────────────────────────────────
+function KPICard({ label, value, sub, spark, positive = true, tone = 'default' }: {
+  label: string; value: string; sub: string;
+  spark?: number[]; positive?: boolean; tone?: 'default' | 'warn' | 'danger';
+}) {
+  const chipClass = tone === 'warn' ? 'chip-warn' : tone === 'danger' ? 'chip-neg' : positive ? 'chip-pos' : 'chip-neg';
+  const sparkColor = tone === 'warn' ? 'var(--warn)' : tone === 'danger' ? 'var(--danger)' : positive ? 'var(--accent)' : 'var(--danger)';
+  const Arrow = positive ? ArrowUpRight : ArrowDownRight;
+
+  return (
+    <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{label}</div>
+        <span className={`chip ${chipClass}`} style={{ fontSize: 10.5, padding: '2px 6px', display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Arrow size={10} strokeWidth={2.5} />
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+        <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.05, whiteSpace: 'nowrap' }}>
+          {value}
+        </div>
+        {spark && <Sparkline data={spark} color={sparkColor} width={64} height={26} />}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{sub}</div>
+    </div>
+  );
+}
+
+// ── Top Sellers ───────────────────────────────────────────
+function TopSellers({ items }: { items: { name: string; value: number; color: string }[] }) {
+  const maxVal = Math.max(...items.map(i => i.value), 1);
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)' }}>
+        <div>
+          <h3>Top Sellers</h3>
+          <div className="sub" style={{ marginTop: 2 }}>by units sold</div>
+        </div>
+      </div>
+      <div style={{ padding: '4px 0' }}>
+        {items.length === 0 ? (
+          <div style={{ padding: '32px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No sales data yet.</div>
+        ) : items.map((it, i) => (
+          <div key={i} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: i === items.length - 1 ? 'none' : '1px solid var(--line-2)' }}>
+            <div style={{ width: 34, height: 42, borderRadius: 5, flexShrink: 0, background: `linear-gradient(160deg, ${it.color}, color-mix(in oklab, ${it.color} 78%, #000))`, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{it.value} units sold</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0, minWidth: 60 }}>
+              <div className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{it.value}</div>
+              <div style={{ marginTop: 6, height: 3, background: 'var(--line-2)', borderRadius: 2, overflow: 'hidden', width: 60 }}>
+                <div style={{ width: ((it.value / maxVal) * 100) + '%', height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Recent Invoices ───────────────────────────────────────
+function RecentInvoices({ items, onViewAll }: { items: any[]; onViewAll: () => void }) {
+  const timeAgo = (iso: string) => {
+    const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (diff < 60) return `${Math.round(diff)}s ago`;
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+    return new Date(iso).toLocaleDateString();
+  };
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)' }}>
+        <div>
+          <h3>Recent Invoices</h3>
+          <div className="sub" style={{ marginTop: 2 }}>{items.length} recent transactions</div>
+        </div>
+        <button onClick={onViewAll} className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          View all <ArrowRight size={12} />
+        </button>
+      </div>
+      <div style={{ padding: '4px 0' }}>
+        {items.length === 0 ? (
+          <div style={{ padding: '32px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No recent sales found.</div>
+        ) : items.map((sale, i) => {
+          const name = sale.customers?.name || 'Walk-in customer';
+          const initials = name.split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase();
+          const isWalkin = !sale.customers?.name;
+          return (
+            <div key={sale.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i === items.length - 1 ? 'none' : '1px solid var(--line-2)' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: isWalkin ? 'rgba(20,22,26,0.06)' : 'var(--accent-soft)', color: isWalkin ? 'var(--muted)' : 'var(--accent-ink)', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 600 }}>
+                {initials}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                  <span className="num" style={{ color: 'var(--ink-2)', fontWeight: 500 }}>#{sale.sale_number?.slice(-8)}</span>
+                  <span style={{ color: 'var(--faint)' }}>·</span>
+                  <span style={{ textTransform: 'capitalize' }}>{sale.payment_method || 'cash'}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div className="num" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
+                  LKR {Number(sale.total_amount).toLocaleString()}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, whiteSpace: 'nowrap' }}>{timeAgo(sale.created_at)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Stock Alerts ──────────────────────────────────────────
+function StockAlerts({ lowItems, outItems, variantItems, onNavigate }: {
+  lowItems: any[]; outItems: any[]; variantItems: any[];
+  onNavigate: (filter: StockFilter) => void;
+}) {
+  const [tab, setTab] = useState<'low' | 'out' | 'variants'>('low');
+  const tabs = [
+    { id: 'low' as const, label: 'Low Stock', count: lowItems.length, tone: 'warn' },
+    { id: 'out' as const, label: 'Out of Stock', count: outItems.length, tone: 'danger' },
+    { id: 'variants' as const, label: 'Variants', count: variantItems.length, tone: 'neutral' },
+  ];
+  const list = tab === 'low' ? lowItems : tab === 'out' ? outItems : variantItems;
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="card-h" style={{ borderBottom: 'none' }}>
+        <div>
+          <h3>Stock Alerts</h3>
+          <div className="sub" style={{ marginTop: 2 }}>{lowItems.length + outItems.length} items need attention</div>
+        </div>
+        <button onClick={() => onNavigate(tab === 'low' ? 'low_stock' : 'out_of_stock')} className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          View all <ArrowRight size={12} />
+        </button>
+      </div>
+
+      {/* Underline tabs */}
+      <div style={{ display: 'flex', gap: 0, padding: '0 14px', borderBottom: '1px solid var(--line-2)' }}>
+        {tabs.map(t => {
+          const isActive = t.id === tab;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: '8px 12px 10px', border: 0, background: 'transparent', cursor: 'default',
+              borderBottom: isActive ? '2px solid var(--ink)' : '2px solid transparent',
+              marginBottom: -1,
+              color: isActive ? 'var(--ink)' : 'var(--muted)',
+              fontSize: 13, fontWeight: isActive ? 600 : 500,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              {t.label}
+              <span style={{ fontSize: 10.5, padding: '1px 6px', borderRadius: 999, background: isActive ? 'var(--accent-soft)' : 'rgba(20,22,26,0.05)', color: isActive ? 'var(--accent-ink)' : 'var(--muted)', fontFamily: "'JetBrains Mono',monospace", fontWeight: 600 }}>
+                {t.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div>
+        {list.length === 0 ? (
+          <div style={{ padding: '32px 18px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+            {tab === 'variants' ? 'All variants are well stocked.' : 'No items in this category.'}
+          </div>
+        ) : list.slice(0, 8).map((it: any, i: number) => {
+          const isVariant = tab === 'variants';
+          const stock = isVariant ? it.total_stock : it.total_stock;
+          const reorder = isVariant ? (it.reorder_level || 5) : 5;
+          const pct = Math.min(100, (stock / Math.max(reorder, stock)) * 100);
+          const isOut = tab === 'out';
+
+          return (
+            <div key={i} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: i === Math.min(list.length, 8) - 1 ? 'none' : '1px solid var(--line-2)', cursor: 'pointer' }}
+              onClick={() => onNavigate(tab === 'low' ? 'low_stock' : 'out_of_stock')}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {isVariant ? it.sku : it.name}
+                </div>
+                {isVariant && (it.color || it.size) && (
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                    {[it.color, it.size].filter(Boolean).join(' · ')}
+                  </div>
+                )}
+              </div>
+              <div style={{ width: 90, flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4, alignItems: 'baseline' }}>
+                  <span className="num" style={{ color: isOut ? 'var(--danger)' : 'var(--warn)', fontWeight: 600, fontSize: 12 }}>{stock}</span>
+                  <span className="num" style={{ color: 'var(--faint)' }}>/ {reorder} min</span>
+                </div>
+                <div style={{ height: 3, background: 'var(--line-2)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: pct + '%', height: '100%', background: isOut ? 'var(--danger)' : 'var(--warn)', borderRadius: 2 }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard ─────────────────────────────────────────────
 export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
+  const { profile } = useAuth();
+  const firstName = profile?.full_name?.split(' ')[0] || 'there';
+
   const [stats, setStats] = useState<DashboardStats>({
-    totalProducts: 0,
-    totalCustomers: 0,
-    todaySales: 0,
-    todayRevenue: 0,
-    lowStockProducts: 0,
-    outOfStockProducts: 0,
-    pendingReturns: 0,
+    totalProducts: 0, totalCustomers: 0, todaySales: 0,
+    todayRevenue: 0, lowStockProducts: 0, outOfStockProducts: 0, pendingReturns: 0,
   });
   const [loading, setLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ name: string; revenue: number; cost: number }[]>([]);
-  const [chartPeriod, setChartPeriod] = useState<'30' | '7'>('30');
+  const [chartPeriod, setChartPeriod] = useState('30D');
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [lowStockItems, setLowStockItems] = useState<any[]>([]);
   const [outOfStockItems, setOutOfStockItems] = useState<any[]>([]);
   const [variantLowStockItems, setVariantLowStockItems] = useState<any[]>([]);
-  const [activeStockTab, setActiveStockTab] = useState<'low' | 'out' | 'variants'>('low');
-  const [topSellingItems, setTopSellingItems] = useState<any[]>([]);
-  const [todayTopSellers, setTodayTopSellers] = useState<{ name: string; value: number }[]>([]);
+  const [topSellers, setTopSellers] = useState<{ name: string; value: number; color: string }[]>([]);
+
+  const COLORS = ['#1B6B4F', '#3340A6', '#7A2A56', '#C68A2E', '#3A4E6B'];
 
   useEffect(() => {
-    loadDashboardStats(Number(chartPeriod));
+    const days = chartPeriod === '7D' ? 7 : chartPeriod === '90D' ? 90 : 30;
+    load(days);
   }, [chartPeriod]);
 
-  async function loadDashboardStats(days = 30) {
+  async function load(days: number) {
     try {
-      const [
-        allProducts,
-        customerCount,
-        todaySales,
-        pendingReturnsCount,
-        recentSalesData,
-        salesHistoryWithCost,
-        topSellingData,
-        variantLowStock,
-        todayTop
-      ] = await Promise.all([
+      const [allProducts, customerCount, todaySalesData, pendingCount, recentSalesData, historyData, topSellingData, variantLowStock] = await Promise.all([
         productService.getAllProducts(),
         customerService.getCustomerCount(),
         salesService.getTodaySales(),
         salesService.getPendingReturnsCount(),
-        salesService.getRecentSales(5),
+        salesService.getRecentSales(8),
         salesService.getSalesHistoryWithCost(days),
-        salesService.getTopSellingItems(20),
+        salesService.getTopSellingItems(5),
         variantService.getLowStockVariants(),
-        salesService.getTopSellingToday(5),
       ]);
 
-      const lowStockList = allProducts.filter(product => {
-        return product.total_stock > 0 && product.total_stock <= 5;
-      });
+      const lowList = allProducts.filter(p => p.total_stock > 0 && p.total_stock <= 5);
+      const outList = allProducts.filter(p => p.total_stock === 0);
 
-      const outOfStockList = allProducts.filter(product => {
-        return product.total_stock === 0;
-      });
-
-      // Process chart data — already grouped by day from service
-      const chartData = (salesHistoryWithCost || []).map(day => ({
+      const chartData = (historyData || []).map((day: any) => ({
         name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         revenue: Math.round(day.revenue),
         cost: Math.round(day.cost),
       }));
 
-      // Top selling items are already processed by the service
-      const colors = ['#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#10B981'];
-      const topSellingWithColors = (topSellingData as any[]).map((item, index) => ({
-        ...item,
-        color: colors[index % colors.length]
+      const sellers = (topSellingData as any[]).map((item, idx) => ({
+        name: item.name,
+        value: item.value,
+        color: COLORS[idx % COLORS.length],
       }));
 
       setSalesData(chartData);
       setRecentSales(recentSalesData || []);
-      setLowStockItems(lowStockList);
-      setOutOfStockItems(outOfStockList);
+      setLowStockItems(lowList);
+      setOutOfStockItems(outList);
       setVariantLowStockItems(variantLowStock || []);
-      setTopSellingItems(topSellingWithColors);
-      setTodayTopSellers(todayTop || []);
-
+      setTopSellers(sellers);
       setStats({
         totalProducts: allProducts.length,
         totalCustomers: customerCount || 0,
-        todaySales: todaySales.count,
-        todayRevenue: todaySales.revenue,
-        lowStockProducts: lowStockList.length,
-        outOfStockProducts: outOfStockList.length,
-        pendingReturns: pendingReturnsCount || 0,
+        todaySales: todaySalesData.count,
+        todayRevenue: todaySalesData.revenue,
+        lowStockProducts: lowList.length,
+        outOfStockProducts: outList.length,
+        pendingReturns: pendingCount || 0,
       });
-    } catch (error) {
-      console.error('Error loading dashboard stats:', error);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   }
 
-  const statCards = [
-    {
-      title: 'Total Products',
-      value: stats.totalProducts.toLocaleString(),
-      subtext: 'Total Items',
-      icon: Package,
-      iconColor: 'text-blue-500',
-      bgColor: 'bg-blue-50',
-    },
-    {
-      title: 'Total Customers',
-      value: stats.totalCustomers.toLocaleString(),
-      subtext: 'Active Profiles',
-      icon: Users,
-      iconColor: 'text-emerald-500',
-      bgColor: 'bg-emerald-50',
-    },
-    {
-      title: "Today's Sales",
-      value: stats.todaySales.toLocaleString(),
-      subtext: 'Invoices Created',
-      icon: ShoppingCart,
-      iconColor: 'text-violet-500',
-      bgColor: 'bg-violet-50',
-    },
-    {
-      title: "Today's Revenue",
-      value: `LKR ${stats.todayRevenue.toLocaleString()}`,
-      subtext: 'Gross Income',
-      icon: DollarSign,
-      iconColor: 'text-green-500',
-      bgColor: 'bg-green-50',
-    },
-    {
-      title: 'Low Stock',
-      value: stats.lowStockProducts.toLocaleString(),
-      subtext: 'Items to Reorder',
-      icon: AlertTriangle,
-      iconColor: 'text-orange-500',
-      bgColor: 'bg-orange-50',
-      filter: 'low_stock' as StockFilter,
-    },
-    {
-      title: 'Stock Out',
-      value: stats.outOfStockProducts.toLocaleString(),
-      subtext: 'Needs Immediate Restock',
-      icon: AlertTriangle,
-      iconColor: 'text-red-500',
-      bgColor: 'bg-red-50',
-      filter: 'out_of_stock' as StockFilter,
-    },
-    {
-      title: 'Returns',
-      value: stats.pendingReturns.toLocaleString(),
-      subtext: 'Pending Process',
-      icon: RotateCcw,
-      iconColor: 'text-red-500',
-      bgColor: 'bg-red-50',
-    },
-  ];
+  // Generate decorative sparkline from salesData (last N days revenue)
+  const spark = (scale = 1) => salesData.slice(-10).map(d => d.revenue * scale || Math.random() * 100);
+
+  const fmtLKR = (v: number) => `LKR ${Math.round(v).toLocaleString()}`;
+
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-10 w-10" style={{ border: '2px solid var(--line)', borderTopColor: 'var(--accent)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
+        <div className="animate-spin" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)' }} />
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', paddingBottom: 4 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Dashboard</h1>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
+            Good morning, {firstName}
+          </h1>
           <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>
-            Store overview — {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            Here's how the store is performing today — <span style={{ color: 'var(--ink-2)' }}>{today}</span>.
           </p>
         </div>
-        <button onClick={() => onNavigate?.('pos')} className="btn btn-primary" style={{ height: 36 }}>
-          New Sale
-        </button>
-      </div>
-
-      {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.title}
-              onClick={() => card.filter && onFilterNavigate?.(card.filter)}
-              className="card"
-              style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10, cursor: card.filter ? 'pointer' : 'default', transition: 'box-shadow .12s ease' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{card.title}</span>
-                <div className={`${card.bgColor} p-1.5 rounded-lg`}>
-                  <Icon className={`w-4 h-4 ${card.iconColor}`} />
-                </div>
-              </div>
-              <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.05 }}>
-                {card.value}
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{card.subtext}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Quick Actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
-        {[
-          { label: 'New Sale', sub: 'Process transaction', view: 'pos', Icon: ShoppingCart, color: 'var(--accent)', bg: 'var(--accent-soft)' },
-          { label: 'Add Product', sub: 'Update inventory', view: 'products', Icon: Package, color: 'var(--accent)', bg: 'var(--accent-soft)' },
-          { label: 'Add Customer', sub: 'Create profile', view: 'customers', Icon: Users, color: 'var(--warn)', bg: 'var(--warn-soft)' },
-          { label: 'View Reports', sub: 'Check analytics', view: 'reports', Icon: TrendingUp, color: 'var(--ink-2)', bg: 'rgba(20,22,26,0.05)' },
-        ].map(({ label, sub, view, Icon, color, bg }) => (
-          <button
-            key={view}
-            onClick={() => onNavigate?.(view)}
-            className="card"
-            style={{ padding: '14px 16px', textAlign: 'left', border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'default' }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(20,22,26,0.06)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
-          >
-            <div style={{ width: 34, height: 34, borderRadius: 8, background: bg, display: 'grid', placeItems: 'center', marginBottom: 10, color }}>
-              <Icon size={16} />
-            </div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{label}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>{sub}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue vs Expense Chart */}
-        <div className="lg:col-span-2 card" style={{ padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Revenue vs Cost</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 4 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)' }}>
-                  <span style={{ display: 'inline-block', width: 10, height: 2, borderRadius: 999, background: 'var(--accent)' }} />Revenue
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)' }}>
-                  <span style={{ display: 'inline-block', width: 10, height: 2, borderRadius: 999, background: 'var(--warn)' }} />Cost (COGS)
-                </span>
-              </div>
-            </div>
-            <select
-              value={chartPeriod}
-              onChange={e => setChartPeriod(e.target.value as '30' | '7')}
-              style={{ height: 28, padding: '0 8px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', fontSize: 12, color: 'var(--ink-2)', outline: 'none' }}
-            >
-              <option value="30">Last 30 Days</option>
-              <option value="7">Last 7 Days</option>
-            </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' }} />
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Store</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>Open</span>
           </div>
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData.length > 0 ? salesData : [{ name: 'No Data', revenue: 0, cost: 0 }]}>
-                <defs>
-                  <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#1B6B4F" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#1B6B4F" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#B45309" stopOpacity={0.12} />
-                    <stop offset="95%" stopColor="#B45309" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#7C828B' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#7C828B' }} axisLine={false} tickLine={false} width={60}
-                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 4px 16px rgba(20,22,26,0.1)', fontSize: 12, background: 'var(--panel)' }}
-                  formatter={(value: any, name: string | undefined) => [
-                    `LKR ${Number(value).toLocaleString()}`,
-                    name === 'revenue' ? 'Revenue' : 'Cost (COGS)',
-                  ]}
-                />
-                <Area type="monotone" dataKey="revenue" stroke="#1B6B4F" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
-                <Area type="monotone" dataKey="cost" stroke="#B45309" strokeWidth={2} strokeDasharray="4 3" fillOpacity={1} fill="url(#colorCost)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Top Selling Items Chart */}
-        <div className="card" style={{ padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Top Selling Items</h3>
-          </div>
-          <div className="h-[200px] relative flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={topSellingItems}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {topSellingItems.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: any, _name: any, props: any) => [
-                    `${value} units`,
-                    props.payload?.name,
-                  ]}
-                  contentStyle={{
-                    border: 'none',
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.12)',
-                    fontSize: '12px',
-                    maxWidth: '200px',
-                    whiteSpace: 'normal',
-                    wordBreak: 'break-word',
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            {topSellingItems.length > 0 && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="num" style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>{topSellingItems[0].value}</span>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>Units Sold</span>
-              </div>
-            )}
-          </div>
-          <div className="custom-scrollbar" style={{ marginTop: 16, maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {topSellingItems.map((item) => (
-              <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: item.color }} />
-                <span style={{ fontSize: 12.5, color: 'var(--ink-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                <span className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', flexShrink: 0 }}>{item.value}</span>
-              </div>
-            ))}
-            {topSellingItems.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>No sales data available</p>
-            )}
+          <div style={{ width: 1, height: 14, background: 'var(--line)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Pending returns</span>
+            <span className="num" style={{ fontSize: 13, fontWeight: 500, color: stats.pendingReturns > 0 ? 'var(--warn)' : 'var(--ink)' }}>{stats.pendingReturns}</span>
           </div>
         </div>
       </div>
 
-      {/* Today's Top Sellers */}
-      <div className="card" style={{ padding: '18px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Today's Top Sellers</h3>
-        </div>
-        {todayTopSellers.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '12px 0' }}>No sales recorded today yet.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {todayTopSellers.map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 7, transition: 'background .1s' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="num" style={{ fontSize: 11, fontWeight: 600, color: 'var(--faint)', width: 16 }}>{i + 1}</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>{item.name}</span>
-                </div>
-                <span className="chip chip-pos">{item.value} sold</span>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--gap)' }}>
+        <KPICard label="Today's Revenue" value={fmtLKR(stats.todayRevenue)} sub="Gross income today" spark={spark()} positive />
+        <KPICard label="Today's Sales" value={stats.todaySales.toLocaleString()} sub="Invoices created" spark={spark(0.8)} positive />
+        <KPICard label="Total Products" value={stats.totalProducts.toLocaleString()} sub="Active SKUs in inventory" spark={spark(0.5)} positive />
+        <KPICard label="Total Customers" value={stats.totalCustomers.toLocaleString()} sub="Customer profiles" spark={spark(0.6)} positive />
+        <KPICard label="Low Stock" value={stats.lowStockProducts.toLocaleString()} sub="Items below reorder level" tone="warn" />
+        <KPICard label="Out of Stock" value={stats.outOfStockProducts.toLocaleString()} sub="Needs immediate restock" tone="danger" />
       </div>
 
-      {/* Lists Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
-        {/* Recent Invoices */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Recent Invoices</h3>
-            <button onClick={() => onNavigate?.('sales-history')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 500, background: 'transparent', border: 0, cursor: 'default' }}>
-              View All <ArrowRight size={13} />
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }} className="custom-scrollbar">
-            {recentSales.map((sale) => (
-              <div key={sale.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 8px', borderBottom: '1px solid var(--line-2)', transition: 'background .1s' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'grid', placeItems: 'center', flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
-                    {(sale.customers?.name || 'W').charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>#{sale.sale_number.slice(-8)}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 1 }}>{sale.customers?.name || 'Walk-in'}</div>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>LKR {Number(sale.total_amount).toLocaleString()}</div>
-                  <span className={`chip ${sale.status === 'completed' ? 'chip-pos' : sale.status === 'partial' ? 'chip-warn' : 'chip-neutral'}`} style={{ fontSize: 10.5, marginTop: 3 }}>
-                    {sale.status === 'completed' ? 'Paid' : sale.status === 'partial' ? 'Partial' : 'Credit'}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {recentSales.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
-                <FileText size={24} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
-                <p style={{ fontSize: 13 }}>No recent sales found</p>
-              </div>
-            )}
-          </div>
+      {/* Chart + Top sellers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'var(--gap)' }}>
+        <div style={{ minWidth: 0 }}>
+          <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} />
         </div>
-
-        {/* Stock Alert */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>Stock Alert</h3>
-              {stats.lowStockProducts + stats.outOfStockProducts > 0 && (
-                <span className="chip chip-neg" style={{ fontSize: 10.5 }}>{stats.lowStockProducts + stats.outOfStockProducts}</span>
-              )}
-            </div>
-            <button onClick={() => onFilterNavigate?.(activeStockTab === 'low' ? 'low_stock' : 'out_of_stock')} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent)', fontWeight: 500, background: 'transparent', border: 0, cursor: 'default' }}>
-              View All <ArrowRight size={13} />
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--panel-2)', borderRadius: 8, border: '1px solid var(--line)', marginBottom: 12 }}>
-            {(['low', 'out', 'variants'] as const).map((tab) => (
-              <button key={tab} onClick={() => setActiveStockTab(tab)} style={{ flex: 1, padding: '5px 0', fontSize: 11.5, fontWeight: activeStockTab === tab ? 600 : 500, borderRadius: 6, border: 0, background: activeStockTab === tab ? 'var(--panel)' : 'transparent', color: activeStockTab === tab ? 'var(--ink)' : 'var(--muted)', cursor: 'default', boxShadow: activeStockTab === tab ? '0 1px 3px rgba(20,22,26,0.08)' : 'none', transition: 'all .1s' }}>
-                {tab === 'low' ? `Low (${stats.lowStockProducts})` : tab === 'out' ? `Out (${stats.outOfStockProducts})` : `Variants (${variantLowStockItems.length})`}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', maxHeight: 320 }} className="custom-scrollbar">
-            {activeStockTab === 'low' ? (
-              lowStockItems.length === 0
-                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>No low stock items</p>
-                : lowStockItems.slice(0, 10).map((item, i) => (
-                  <div key={i} onClick={() => onFilterNavigate?.('low_stock')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{item.name}</span>
-                    </div>
-                    <span className="chip chip-warn" style={{ fontSize: 10.5 }}>{item.total_stock}</span>
-                  </div>
-                ))
-            ) : activeStockTab === 'out' ? (
-              outOfStockItems.length === 0
-                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>No out of stock items</p>
-                : outOfStockItems.slice(0, 10).map((item, i) => (
-                  <div key={i} onClick={() => onFilterNavigate?.('out_of_stock')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--danger)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>{item.name}</span>
-                    </div>
-                    <span className="chip chip-neg" style={{ fontSize: 10.5 }}>0</span>
-                  </div>
-                ))
-            ) : (
-              variantLowStockItems.length === 0
-                ? <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '24px 0' }}>All variants are well stocked</p>
-                : variantLowStockItems.slice(0, 10).map((v: any, i: number) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
-                      <div>
-                        <span className="num" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{v.sku}</span>
-                        {(v.size || v.color) && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 6 }}>{[v.color, v.size].filter(Boolean).join(' · ')}</span>}
-                      </div>
-                    </div>
-                    <span className="chip chip-warn" style={{ fontSize: 10.5 }}>{v.total_stock}</span>
-                  </div>
-                ))
-            )}
-          </div>
+        <div style={{ minWidth: 0 }}>
+          <TopSellers items={topSellers} />
         </div>
       </div>
 
-      {/* <div className="mt-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-bold text-slate-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <button className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition flex flex-col items-center text-center lg:items-start lg:text-left">
-            <ShoppingCart className="w-8 h-8 text-slate-900 mb-2" />
-            <p className="font-medium text-slate-900">New Sale</p>
-            <p className="text-sm text-slate-600">Process a new transaction</p>
-          </button>
-          <button className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition flex flex-col items-center text-center lg:items-start lg:text-left">
-            <Package className="w-8 h-8 text-slate-900 mb-2" />
-            <p className="font-medium text-slate-900">Add Product</p>
-            <p className="text-sm text-slate-600">Create new product</p>
-          </button>
-          <button className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition flex flex-col items-center text-center lg:items-start lg:text-left">
-            <Users className="w-8 h-8 text-slate-900 mb-2" />
-            <p className="font-medium text-slate-900">New Customer</p>
-            <p className="text-sm text-slate-600">Add customer record</p>
-          </button>
-          <button className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-900 hover:bg-slate-50 transition flex flex-col items-center text-center lg:items-start lg:text-left">
-            <TrendingUp className="w-8 h-8 text-slate-900 mb-2" />
-            <p className="font-medium text-slate-900">View Reports</p>
-            <p className="text-sm text-slate-600">Analytics & insights</p>
-          </button>
-        </div>
-      </div> */}
+      {/* Invoices + Stock alerts */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 'var(--gap)' }}>
+        <RecentInvoices items={recentSales} onViewAll={() => onNavigate?.('sales-history')} />
+        <StockAlerts
+          lowItems={lowStockItems}
+          outItems={outOfStockItems}
+          variantItems={variantLowStockItems}
+          onNavigate={(filter) => onFilterNavigate?.(filter)}
+        />
+      </div>
+
     </div>
   );
 }
