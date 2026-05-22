@@ -502,9 +502,8 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         <div className="card" style={{ overflow: 'hidden' }}>
           <div className="overflow-x-auto">
             <ProductTable
-              products={products as any}
-              onView={openViewModal}
-              onEdit={openEditModal}
+              products={products as ProductWithStock[]}
+              onEdit={openEditPage}
               onAddStock={openAddStockModal}
               onPrintBarcode={handlePrintBarcode}
               isAdmin={isAdmin}
