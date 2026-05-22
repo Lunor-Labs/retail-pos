@@ -72,8 +72,8 @@ function RevenueChart({ data, period, onPeriod }: { data: { name: string; revenu
   const fmtK = (v: number) => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'k' : String(Math.round(v));
   const fmtFull = (v: number) => `LKR ${Math.round(v).toLocaleString()}`;
 
-  if (!data.length) return (
-    <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No chart data yet.</div>
+  if (data.length < 2) return (
+    <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Not enough data to draw chart yet.</div>
   );
 
   const xs = data.map((_, i) => PL + (i / Math.max(data.length - 1, 1)) * iw);
@@ -118,7 +118,7 @@ function RevenueChart({ data, period, onPeriod }: { data: { name: string; revenu
         </div>
       </div>
 
-      <div style={{ padding: '14px 18px 6px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div className="chart-stat-row" style={{ padding: '14px 18px 6px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <ChartStat label="Total Revenue" value={fmtFull(totalRev)} delta={+12.4} />
         <ChartStat label="Total Cost" value={fmtFull(totalCost)} delta={+8.1} invert />
         <ChartStat label="Gross Margin" value={margin.toFixed(1) + '%'} delta={+2.3} />
@@ -615,7 +615,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
             Here's how the store is performing today — <span style={{ color: 'var(--ink-2)' }}>{today}</span>.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
+        <div className="dashboard-status" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' }} />
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>Store</span>
@@ -630,7 +630,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       </div>
 
       {/* KPI strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--gap)' }}>
+      <div className="grid-kpi">
         <KPICard label="Today's Revenue" value={fmtLKR(todayStats.revenue)} sub="vs. yesterday" spark={revSpark.length ? revSpark : [1, 2]} delta={revDelta} />
         <KPICard label="Invoices Today" value={todayStats.count.toLocaleString()} sub="vs. yesterday" spark={countSpark} delta={salesDelta} />
         <KPICard label="Total Products" value={totalProducts.toLocaleString()} sub="Active SKUs in inventory" spark={[10, 11, 11, 12, 12, 13, 13, 14, 14, 14, 15, 15]} delta={1.8} />
