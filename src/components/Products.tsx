@@ -504,7 +504,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
             <ProductTable
               products={products as ProductWithStock[]}
               onEdit={openEditPage}
-              onAddStock={openAddStockModal}
+              onAddStock={openEditPage}
               onPrintBarcode={handlePrintBarcode}
               isAdmin={isAdmin}
             />
