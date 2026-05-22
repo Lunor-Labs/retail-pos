@@ -10,6 +10,7 @@ import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
 import { ProductImporter } from './products/ProductImporter';
 import { AddProductPage, DefaultPricing } from './products/AddProductPage';
+import { QuickStockModal } from './products/QuickStockModal';
 import { productService, supplierService } from '../services';
 import { VariantGrid } from './products/VariantGrid';
 import { useVariants } from '../hooks/useVariants';
@@ -71,6 +72,8 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   });
   const [barcodeProduct, setBarcodeProduct] = useState<ProductWithStock | null>(null);
   const [scanningBarcode, setScanningBarcode] = useState(false);
+
+  const [quickStockProduct, setQuickStockProduct] = useState<ProductWithStock | null>(null);
 
   // Full-page add/edit view state
   const [pageView, setPageView] = useState<'list' | 'add' | 'edit'>('list');
@@ -227,10 +230,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   }
 
   function openAddStockModal(product: ProductWithStock) {
-    setSelectedProduct(product);
-    setModalMode('view');
-    setShowModal(true);
-    setShowAddStockInView(true);
+    setQuickStockProduct(product);
   }
 
   function openAddPage() {
@@ -504,7 +504,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
             <ProductTable
               products={products as ProductWithStock[]}
               onEdit={openEditPage}
-              onAddStock={openEditPage}
+              onAddStock={openAddStockModal}
               onPrintBarcode={handlePrintBarcode}
               isAdmin={isAdmin}
             />
@@ -582,6 +582,15 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           sku={barcodeProduct.sku}
           price={barcodeProduct.batches[0]?.selling_price}
           onClose={() => setBarcodeProduct(null)}
+        />
+      )}
+
+      {/* Quick Stock Modal */}
+      {quickStockProduct && (
+        <QuickStockModal
+          product={quickStockProduct}
+          onClose={() => setQuickStockProduct(null)}
+          onSuccess={refetch}
         />
       )}
     </div>
