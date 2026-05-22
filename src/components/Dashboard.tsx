@@ -54,10 +54,10 @@ function KPICard({ label, value, sub, spark, delta = 0, tone = 'default' }: {
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
-        <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.05, whiteSpace: 'nowrap' }}>
+        <div className="num kpi-value" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)', lineHeight: 1.05, whiteSpace: 'nowrap' }}>
           {value}
         </div>
-        {spark && <Sparkline data={spark} color={sparkColor} width={64} height={26} />}
+        {spark && <div className="kpi-spark" style={{ flexShrink: 0 }}><Sparkline data={spark} color={sparkColor} width={64} height={26} /></div>}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{sub}</div>
     </div>

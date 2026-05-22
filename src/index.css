@@ -208,4 +208,8 @@ html, body {
 @media (max-width: 639px) {
   .dashboard-status { display: none; }
   .chart-stat-row   { display: none; }
+  .grid-kpi > *     { min-width: 0; overflow: hidden; }
+  .grid-kpi .card   { padding: 10px 10px !important; }
+  .kpi-value        { font-size: 15px !important; }
+  .kpi-spark        { display: none; }
 }
