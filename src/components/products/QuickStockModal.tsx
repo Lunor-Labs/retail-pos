@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal } from '../ui';
+import { Modal, DropdownSelect } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
 import { productService, supplierService } from '../../services';
 import { ProductWithStock } from '../../types';
@@ -134,23 +134,24 @@ export function QuickStockModal({ product, onClose, onSuccess }: QuickStockModal
           {/* Variant */}
           <div>
             <label style={labelStyle}>Variant</label>
-            <select style={inputStyle} value={selectedVariantId} onChange={e => setSelectedVariantId(e.target.value)}>
-              {variants.map(v => (
-                <option key={v.id} value={v.id}>
-                  {v.label} — {v.stock} in stock
-                </option>
-              ))}
-            </select>
+            <DropdownSelect
+              value={selectedVariantId}
+              onChange={setSelectedVariantId}
+              options={variants.map(v => ({ value: v.id, label: `${v.label} — ${v.stock} in stock` }))}
+              placeholder="Select variant…"
+            />
           </div>
 
           {/* Supplier + Qty on one row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10 }}>
             <div>
               <label style={labelStyle}>Supplier</label>
-              <select style={inputStyle} value={supplierId} onChange={e => setSupplierId(e.target.value)}>
-                <option value="">Select supplier…</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <DropdownSelect
+                value={supplierId}
+                onChange={setSupplierId}
+                options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+                placeholder="Select supplier…"
+              />
             </div>
             <div>
               <label style={labelStyle}>Qty</label>

@@ -362,10 +362,12 @@ export function AddProductPage({
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 12, alignItems: 'end' }}>
           <div>
             <label style={labelStyle}>Supplier</label>
-            <select style={inputStyle} value={pricing.supplier_id} onChange={e => setPricing(p => ({ ...p, supplier_id: e.target.value }))}>
-              <option value="">Select supplier…</option>
-              {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <DropdownSelect
+              value={pricing.supplier_id}
+              onChange={v => setPricing(p => ({ ...p, supplier_id: v }))}
+              options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+              placeholder="Select supplier…"
+            />
           </div>
           <div>
             <label style={labelStyle}>Cost (LKR)</label>
