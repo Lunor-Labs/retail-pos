@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Plus, Upload, Filter, Download, PackageOpen } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../lib/db';
+import { Plus, Upload, Download, PackageOpen, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType, StockFilter } from '../hooks/useProducts';
@@ -18,7 +20,77 @@ import { Product } from '../types';
 import { logger } from '../lib/logger';
 import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
 import { playScannerBeep } from '../utils/audio';
-import { useRef } from 'react';
+
+// Inline custom dropdown — avoids native select styling issues
+function FilterDropdown({ value, onChange, options, placeholder }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = value !== '';
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          height: 28, padding: '0 10px 0 11px',
+          borderRadius: 999,
+          border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+          background: active ? 'var(--accent-soft)' : 'transparent',
+          color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
+          fontSize: 12.5, fontWeight: active ? 600 : 400,
+          cursor: 'default', whiteSpace: 'nowrap', transition: 'all .1s',
+        }}
+        onMouseEnter={e => { if (!active && !open) { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.borderColor = 'var(--faint)'; } }}
+        onMouseLeave={e => { if (!active && !open) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
+      >
+        {value || placeholder}
+        <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.6, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
+          background: 'var(--panel)', border: '1px solid var(--line)',
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(20,22,26,0.12)',
+          minWidth: 160, overflow: 'hidden', padding: '4px',
+        }}>
+          {['', ...options].map(opt => (
+            <button
+              key={opt || '__all'}
+              onClick={() => { onChange(opt); setOpen(false); }}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left',
+                padding: '7px 10px', border: 0, borderRadius: 7,
+                background: value === opt ? 'var(--accent-soft)' : 'transparent',
+                color: value === opt ? 'var(--accent-ink)' : 'var(--ink-2)',
+                fontSize: 13, fontWeight: value === opt ? 600 : 400,
+                cursor: 'default', whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = 'var(--panel-2)'; }}
+              onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = 'transparent'; }}
+            >
+              {opt || `All ${placeholder.toLowerCase()}s`}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ProductVariantSection({ product }: { product: Product }) {
   const { variants, loading, addVariant, updateVariant } = useVariants(product.id);
@@ -43,10 +115,25 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [pageSize] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [searchType, setSearchType] = useState<SearchType>('all');
+  const [searchType] = useState<SearchType>('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>(initialStockFilter);
+  const [brandFilter, setBrandFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
 
-  const { products, loading, refetch, totalPages } = useProducts(page, pageSize, debouncedSearch, searchType, stockFilter);
+  const { products, loading, refetch, totalPages } = useProducts(page, pageSize, debouncedSearch, searchType, stockFilter, brandFilter, categoryFilter);
+
+  const allBrands = useLiveQuery(async () => {
+    const all = await db.products.toArray();
+    const brands = [...new Set(all.map(p => (p as any).brand).filter(Boolean))].sort();
+    return brands as string[];
+  }, []) ?? [];
+
+  const allCategories = useLiveQuery(async () => {
+    const all = await db.products.toArray();
+    const cats = [...new Set(all.map(p => p.category).filter(Boolean))].sort();
+    return cats as string[];
+  }, []) ?? [];
+
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const { showToast } = useToast();
   const [showModal, setShowModal] = useState(false);
@@ -146,7 +233,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
-      setPage(1); // Reset to page 1 on search
+      setPage(1);
       setDebouncedSearch(searchTerm);
     }, 500);
 
@@ -456,38 +543,80 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       </div>
 
       {/* Filters card */}
-      <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <SearchBar
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder={
-              searchType === 'name' ? 'Search by name…' :
-                searchType === 'sku' ? 'Search by SKU…' :
-                  searchType === 'barcode' ? 'Scan barcode…' :
-                    'Search by name, SKU, or barcode…'
-            }
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
-              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Stock</span>
-              <select value={stockFilter} onChange={(e) => { setPage(1); setStockFilter(e.target.value as StockFilter); }}
-                style={{ appearance: 'none', border: 0, background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontWeight: 500, outline: 'none', cursor: 'default' }}>
-                <option value="all">All stock</option>
-                <option value="low_stock">Low stock</option>
-                <option value="out_of_stock">Out of stock</option>
-              </select>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}>
-              <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Search</span>
-              <select value={searchType} onChange={(e) => setSearchType(e.target.value as SearchType)}
-                style={{ appearance: 'none', border: 0, background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontWeight: 500, outline: 'none', cursor: 'default' }}>
-                <option value="all">Smart search</option>
-                <option value="name">Name only</option>
-                <option value="sku">SKU only</option>
-                <option value="barcode">Barcode</option>
-              </select>
-            </div>
-          </SearchBar>
+      <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Row 1: search bar */}
+        <SearchBar
+          value={searchTerm}
+          onChange={v => { setPage(1); setSearchTerm(v); }}
+          placeholder="Search by name, brand, SKU or scan barcode…"
+        />
+
+        {/* Row 2: brand chips + category + stock — all as pills */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+
+          {/* Brand chips */}
+          {allBrands.length > 0 && ['', ...allBrands].map(brand => {
+            const active = brandFilter === brand;
+            return (
+              <button
+                key={brand || '__all'}
+                onClick={() => { setPage(1); setBrandFilter(brand); }}
+                style={{
+                  height: 28, padding: '0 11px', borderRadius: 999,
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
+                  background: active ? 'var(--accent-soft)' : 'transparent',
+                  color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
+                  fontSize: 12.5, fontWeight: active ? 600 : 400,
+                  cursor: 'default', whiteSpace: 'nowrap', transition: 'all .1s',
+                }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.borderColor = 'var(--faint)'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
+              >
+                {brand || 'All brands'}
+              </button>
+            );
+          })}
+
+          {/* Divider — only if brands exist */}
+          {allBrands.length > 0 && (
+            <div style={{ width: 1, height: 18, background: 'var(--line)', margin: '0 2px', flexShrink: 0 }} />
+          )}
+
+          {/* Category custom dropdown */}
+          {allCategories.length > 0 && (
+            <FilterDropdown
+              value={categoryFilter}
+              onChange={v => { setPage(1); setCategoryFilter(v); }}
+              options={allCategories}
+              placeholder="Category"
+            />
+          )}
+
+          {/* Stock — 3 chip buttons */}
+          {(['all', 'low_stock', 'out_of_stock'] as StockFilter[]).map(val => {
+            const labels: Record<StockFilter, string> = { all: 'All stock', low_stock: 'Low stock', out_of_stock: 'Out of stock' };
+            const active = stockFilter === val;
+            const isWarn = val !== 'all' && active;
+            return (
+              <button
+                key={val}
+                onClick={() => { setPage(1); setStockFilter(val); }}
+                style={{
+                  height: 28, padding: '0 11px', borderRadius: 999,
+                  border: `1px solid ${isWarn ? 'var(--warn)' : active ? 'var(--accent)' : 'var(--line)'}`,
+                  background: isWarn ? 'var(--warn-soft)' : active ? 'var(--accent-soft)' : 'transparent',
+                  color: isWarn ? 'var(--warn)' : active ? 'var(--accent-ink)' : 'var(--ink-2)',
+                  fontSize: 12.5, fontWeight: active ? 600 : 400,
+                  cursor: 'default', whiteSpace: 'nowrap', transition: 'all .1s',
+                }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.borderColor = 'var(--faint)'; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
+              >
+                {labels[val]}
+              </button>
+            );
+          })}
+
         </div>
       </div>
 

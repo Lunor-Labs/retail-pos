@@ -18,7 +18,9 @@ export function useProducts(
   pageSize: number = 20,
   searchQuery: string = '',
   searchType: SearchType = 'all',
-  stockFilter: StockFilter = 'all'
+  stockFilter: StockFilter = 'all',
+  brandFilter: string = '',
+  categoryFilter: string = ''
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,13 +156,23 @@ export function useProducts(
         collection = collection.filter(p => (p.total_stock || 0) === 0);
       }
 
+      // Apply brand filter
+      if (brandFilter) {
+        collection = collection.filter(p => (p as any).brand === brandFilter);
+      }
+
+      // Apply category filter
+      if (categoryFilter) {
+        collection = collection.filter(p => p.category === categoryFilter);
+      }
+
       // Pagination
       const count = await collection.count();
       // Get data and handle sorting
       let data: ProductWithBatches[];
       const offset = (page - 1) * pageSize;
 
-      if (!searchQuery.trim() && stockFilter === 'all') {
+      if (!searchQuery.trim() && stockFilter === 'all' && !brandFilter && !categoryFilter) {
         // Optimized path: Use Dexie to get all then sort in memory for natural ordering
         // Standard index-based orderBy is lexicographical (1, 10, 100)
         // For natural sort (1, 2, 10), we sort in memory. 
@@ -180,7 +192,7 @@ export function useProducts(
       logger.error('Local product query failed', err as Error);
       return { products: [], totalCount: 0 };
     }
-  }, [page, pageSize, searchQuery, searchType, stockFilter]);
+  }, [page, pageSize, searchQuery, searchType, stockFilter, brandFilter, categoryFilter]);
 
   return {
     products: queryResult?.products || [],
