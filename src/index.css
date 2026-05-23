@@ -1,0 +1,277 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ──────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --bg:       #F7F6F2;
+  --panel:    #FFFFFF;
+  --panel-2:  #FBFAF7;
+
+  /* Ink */
+  --ink:      #15171A;
+  --ink-2:    #3A3F46;
+  --muted:    #7C828B;
+  --faint:    #B5BAC2;
+
+  /* Lines */
+  --line:     rgba(20,22,26,0.07);
+  --line-2:   rgba(20,22,26,0.04);
+
+  /* Accent — Emerald */
+  --accent:      #1B6B4F;
+  --accent-soft: #E8F1ED;
+  --accent-ink:  #0F3F2F;
+
+  /* Semantic */
+  --warn:        #B45309;
+  --warn-soft:   #FBF1E0;
+  --danger:      #B0341F;
+  --danger-soft: #FBEAE5;
+  --pos:         #14744E;
+  --neg:         #B0341F;
+
+  /* Sidebar (dark) */
+  --sidebar:       #0E0F12;
+  --sidebar-2:     #16181C;
+  --sidebar-ink:   #E6E7E9;
+  --sidebar-muted: #7E848D;
+
+  /* Spacing */
+  --gap: 14px;
+  --pad: 18px;
+  --radius: 12px;
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+html, body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Tabular numerics ──────────────────────────────────── */
+.num {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card:hover {
+  box-shadow: 0 4px 16px rgba(20,22,26,0.06);
+}
+
+/* ── Chips ──────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip-pos  { background: var(--accent-soft); color: var(--accent-ink); }
+.chip-neg  { background: var(--danger-soft); color: var(--danger); }
+.chip-warn { background: var(--warn-soft);   color: var(--warn); }
+.chip-neutral { background: rgba(20,22,26,0.05); color: var(--ink-2); }
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+  white-space: nowrap;
+  transition: background .1s ease, border-color .1s ease;
+}
+.btn:hover { background: var(--panel-2); }
+
+.btn-sm {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.15) inset, 0 2px 8px rgba(27,107,79,0.25);
+}
+.btn-primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.btn-ghost:hover { background: rgba(0,0,0,0.04); }
+
+/* ── Kbd ────────────────────────────────────────────────── */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* ── Card header row ────────────────────────────────────── */
+.card-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.card-h h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.card-h .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── POS two-column layout ──────────────────────────────── */
+.pos-layout {
+  margin: -24px;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 56px);
+}
+
+@media (min-width: 1024px) {
+  .pos-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    height: calc(100vh - 56px);
+    overflow: hidden;
+  }
+}
+
+/* ── Custom scrollbar ───────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(20,22,26,0.12);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(20,22,26,0.2);
+}
+
+/* ── Dashboard mobile ───────────────────────────────────── */
+.grid-kpi {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .grid-kpi { grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+}
+@media (min-width: 1024px) {
+  .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap); }
+}
+
+@media (max-width: 639px) {
+  .dashboard-status { display: none; }
+  .chart-stat-row   { display: none; }
+  .grid-kpi > *     { min-width: 0; overflow: hidden; }
+  .grid-kpi .card   { padding: 10px 10px !important; }
+  .kpi-value        { font-size: 15px !important; }
+  .kpi-spark        { display: none; }
+}
+
+/* ── Sales History split layout ─────────────────────────── */
+.sh-outer { padding: 0 16px 32px; }
+@media (min-width: 640px) { .sh-outer { padding: 0 24px 32px; } }
+
+.sh-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  align-items: stretch;
+}
+@media (min-width: 768px) {
+  .sh-split {
+    display: grid;
+    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+/* On mobile: when a sale is selected, hide the list and show only detail */
+@media (max-width: 767px) {
+  .sh-split.sh-detail-active .sh-list   { display: none; }
+  .sh-split:not(.sh-detail-active) .sh-detail { display: none; }
+  .sh-back { display: flex !important; }
+}
+@media (min-width: 768px) {
+  .sh-back { display: none !important; }
+}
+
+/* ── Dashboard section grids ────────────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+}
+@media (min-width: 768px) {
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── Dashboard page header ──────────────────────────────── */
+@media (max-width: 639px) {
+  .dash-header h1  { font-size: 18px !important; }
+  .dash-header p   { font-size: 12px !important; }
+}
+
+/* ── Customers list card ─────────────────────────────────── */
+/* On desktop: fixed-height scrollable sidebar */
+@media (min-width: 768px) {
+  .cust-list-card { min-height: 600px; overflow: hidden; }
+  .cust-rows      { flex: 1; overflow: auto; min-height: 0; }
+}
+/* On mobile: natural flow, full height, paginated */
+.cust-list-card { display: flex; flex-direction: column; }
+.cust-rows      { display: block; }
+
+/* ── Reports KPI strip ───────────────────────────────────── */
+.rpt-kpi {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap);
+}
+@media (min-width: 640px)  { .rpt-kpi { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .rpt-kpi { grid-template-columns: repeat(5, 1fr); } }
