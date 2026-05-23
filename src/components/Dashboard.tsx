@@ -629,6 +629,44 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         </div>
       </div>
 
+      {/* Mobile hero card */}
+      <div className="dash-mobile-hero" style={{
+        background: 'linear-gradient(140deg, #0E1C15 0%, #1B6B4F 100%)',
+        borderRadius: 'var(--radius)',
+        padding: '22px 20px 18px',
+        color: '#fff',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Decorative circle */}
+        <div style={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: -24, right: 20, width: 90, height: 90, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>{today}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)', marginBottom: 18 }}>
+          Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {firstName}
+        </div>
+
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 4, letterSpacing: '.04em', textTransform: 'uppercase' }}>Today's Revenue</div>
+        <div className="num" style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', color: '#fff', lineHeight: 1.1 }}>
+          {fmtLKR(todayStats.revenue)}
+        </div>
+
+        {/* Quick stats row */}
+        <div style={{ display: 'flex', gap: 0, marginTop: 18, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          {[
+            { label: 'Invoices', value: todayStats.count.toString(), warn: false },
+            { label: 'Returns', value: pendingReturns.toString(), warn: pendingReturns > 0 },
+            { label: 'Low Stock', value: lowStockItems.length.toString(), warn: lowStockItems.length > 0 },
+          ].map((s, i) => (
+            <div key={i} style={{ flex: 1, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.1)' : 'none', paddingLeft: i > 0 ? 16 : 0 }}>
+              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.45)', marginBottom: 3 }}>{s.label}</div>
+              <div className="num" style={{ fontSize: 18, fontWeight: 700, color: s.warn ? '#FBBF24' : '#fff' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* KPI strip */}
       <div className="grid-kpi">
         <KPICard label="Today's Revenue" value={fmtLKR(todayStats.revenue)} sub="vs. yesterday" spark={revSpark.length ? revSpark : [1, 2]} delta={revDelta} />

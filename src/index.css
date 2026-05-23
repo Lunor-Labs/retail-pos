@@ -212,7 +212,12 @@ html, body {
   .grid-kpi .card   { padding: 10px 10px !important; }
   .kpi-value        { font-size: 15px !important; }
   .kpi-spark        { display: none; }
+  .dash-header      { display: none !important; }
 }
+
+/* Mobile hero card */
+.dash-mobile-hero { display: block; }
+@media (min-width: 640px) { .dash-mobile-hero { display: none; } }
 
 /* ── Sales History split layout ─────────────────────────── */
 .sh-outer { padding: 0 16px 32px; }
