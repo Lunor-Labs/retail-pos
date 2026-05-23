@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, X, Pencil, ChevronRight, Users } from 'lucide-react';
+import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users } from 'lucide-react';
 import { salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -240,9 +240,15 @@ function StaffModal({ mode, onClose, onSaved }: {
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────
-function DetailPanel({ member, onEdit }: { member: StaffMember; onEdit: () => void }) {
+function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: () => void; onBack: () => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)', padding: '0 0 24px' }}>
+      <button className="sh-back" onClick={onBack} style={{
+        display: 'none', alignItems: 'center', gap: 6, border: 0, background: 'transparent',
+        color: 'var(--accent-ink)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', padding: '4px 0',
+      }}>
+        <ChevronLeft size={18} strokeWidth={2} /> Back to Staff
+      </button>
       {/* Identity card */}
       <div className="card" style={{ padding: '20px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -409,7 +415,7 @@ export function SalesStaff() {
   if (loading) return <LoadingSpinner message="Loading staff data…" />;
 
   return (
-    <div style={{ padding: '0 24px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="sh-outer" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Header */}
       <div style={{ padding: '24px 0 0', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
@@ -427,7 +433,7 @@ export function SalesStaff() {
       </div>
 
       {/* KPI row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--gap)' }}>
+      <div className="rpt-kpi">
         {[
           { label: 'Staff Members', value: staff.length.toString(), sub: `${staff.filter(s => s.role === 'admin').length} admin · ${staff.filter(s => s.role === 'cashier').length} cashier` },
           { label: 'Active Today', value: activeToday.toString(), sub: `of ${staff.length} staff` },
@@ -443,9 +449,9 @@ export function SalesStaff() {
       </div>
 
       {/* Split layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 'var(--gap)', alignItems: 'start' }}>
+      <div className={`sh-split ${selected ? 'sh-detail-active' : ''}`}>
         {/* Left: list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="sh-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* Search + sort */}
           <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{
@@ -544,20 +550,23 @@ export function SalesStaff() {
         </div>
 
         {/* Right: detail */}
-        {selected ? (
-          <DetailPanel
-            member={selected}
-            onEdit={() => setModal({ kind: 'edit', member: selected })}
-          />
-        ) : (
-          <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
-            <div style={{ textAlign: 'center' }}>
-              <Users size={32} style={{ color: 'var(--faint)', marginBottom: 12 }} />
-              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-2)' }}>Select a staff member</div>
-              <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Click any row to view performance details</div>
+        <div className="sh-detail">
+          {selected ? (
+            <DetailPanel
+              member={selected}
+              onEdit={() => setModal({ kind: 'edit', member: selected })}
+              onBack={() => setSelected(null)}
+            />
+          ) : (
+            <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
+              <div style={{ textAlign: 'center' }}>
+                <Users size={32} style={{ color: 'var(--faint)', marginBottom: 12 }} />
+                <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-2)' }}>Select a staff member</div>
+                <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Tap any row to view performance details</div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Modal */}
