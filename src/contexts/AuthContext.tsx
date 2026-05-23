@@ -136,8 +136,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    // Clear local session immediately so the UI always logs out,
+    // even if the server rejects the request (e.g. expired token).
+    await supabase.auth.signOut({ scope: 'local' });
+    // Best-effort server-side invalidation — ignore errors.
+    supabase.auth.signOut({ scope: 'global' }).catch(() => {});
   }
 
   async function signupTenant(_email: string, _password: string, _fullName: string, _businessName: string, _slug: string, _businessType: string) {
