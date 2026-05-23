@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import loginBg from '../assets/login_bg.mp4';
 import loginImage from '../assets/login-new.jpg';
 import logo from '../assets/revonlak.jpeg';
 
@@ -53,14 +52,7 @@ export function Login() {
         flex: '0 0 52%',
       }} className="login-left">
 
-        {/* Background video, fallback to image */}
-        <video
-          autoPlay loop muted playsInline
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-          onError={(e) => { (e.target as HTMLVideoElement).style.display = 'none'; }}
-        >
-          <source src={loginBg} type="video/mp4" />
-        </video>
+        {/* Background image */}
         <img
           src={loginImage}
           alt=""
