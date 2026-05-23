@@ -1,0 +1,573 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Search, X, Pencil, ChevronRight, Users } from 'lucide-react';
+import { salesService } from '../services';
+import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
+import { LoadingSpinner } from './ui';
+import { supabase } from '../lib/supabase';
+
+type UserProfile = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'admin' | 'cashier';
+  active: boolean;
+  created_at: string;
+};
+
+interface StaffMember extends UserProfile {
+  initials: string;
+  tone: string;
+  today: { sales: number; revenue: number };
+  month: { sales: number; revenue: number };
+  week: number[];
+  isActiveToday: boolean;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078','#7A8050','#6B4A2B'];
+function getTone(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffff;
+  return TONES[h % TONES.length];
+}
+function getInitials(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
+}
+function fmtLKR(n: number) { return 'LKR ' + Math.round(n).toLocaleString('en-US'); }
+function fmtK(n: number) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1000) return Math.round(n / 1000) + 'k';
+  return n.toString();
+}
+function fmtJoined(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+// ─── Avatar ──────────────────────────────────────────────────────────────
+function Avatar({ initials, tone, size = 40, active }: { initials: string; tone: string; size?: number; active?: boolean }) {
+  const fontSize = size >= 44 ? 14 : size >= 36 ? 13 : size >= 30 ? 12 : 10;
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: `linear-gradient(135deg, ${tone}, color-mix(in oklab, ${tone} 65%, #000))`,
+        color: '#fff', display: 'grid', placeItems: 'center',
+        fontWeight: 600, fontSize, letterSpacing: '-0.01em',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18)',
+      }}>{initials}</div>
+      {active !== undefined && size >= 30 && (
+        <span style={{
+          position: 'absolute', bottom: -1, right: -1,
+          width: Math.max(8, size * 0.25), height: Math.max(8, size * 0.25),
+          borderRadius: '50%',
+          background: active ? 'var(--accent)' : 'var(--faint)',
+          border: '2px solid var(--panel)',
+        }} />
+      )}
+    </div>
+  );
+}
+
+// ─── Mini bar chart ───────────────────────────────────────────────────────
+function MiniBars({ data }: { data: number[] }) {
+  const max = Math.max(...data, 1);
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 34 }}>
+        {data.map((v, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{
+              width: '100%', height: Math.max(2, (v / max) * 32) + 'px',
+              background: i === data.length - 1 ? 'var(--accent)' : 'color-mix(in oklab, var(--accent) 35%, var(--panel-2))',
+              borderRadius: 2,
+            }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 5, marginTop: 4 }}>
+        {days.map((d, i) => (
+          <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: 9.5, color: 'var(--faint)', fontFamily: "'JetBrains Mono', monospace" }}>{d}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Add / Edit Staff Modal ───────────────────────────────────────────────
+type ModalMode = { kind: 'add' } | { kind: 'edit'; member: StaffMember };
+
+function StaffModal({ mode, onClose, onSaved }: {
+  mode: ModalMode;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { createUser } = useAuth();
+  const { showToast } = useToast();
+  const isAdd = mode.kind === 'add';
+
+  const [fullName, setFullName] = useState(isAdd ? '' : mode.member.full_name);
+  const [email] = useState(isAdd ? '' : mode.member.email);
+  const [emailInput, setEmailInput] = useState(isAdd ? '' : mode.member.email);
+  const [role, setRole] = useState<'admin' | 'cashier'>(isAdd ? 'cashier' : mode.member.role);
+  const [active, setActive] = useState(isAdd ? true : mode.member.active);
+  const [password, setPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function handleSave() {
+    setErr('');
+    if (!fullName.trim()) { setErr('Full name is required.'); return; }
+    if (isAdd) {
+      if (!emailInput.trim()) { setErr('Email is required.'); return; }
+      if (password.length < 6) { setErr('Password must be at least 6 characters.'); return; }
+    }
+    setSaving(true);
+    try {
+      if (isAdd) {
+        await createUser(emailInput.trim(), password, fullName.trim(), role);
+      } else {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ full_name: fullName.trim(), role, active } as any)
+          .eq('id', (mode as { kind: 'edit'; member: StaffMember }).member.id);
+        if (error) throw error;
+      }
+      showToast(isAdd ? 'Staff member added' : 'Staff member updated', 'success');
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      setErr(e?.message ?? 'An error occurred.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', height: 36, padding: '0 11px', borderRadius: 7,
+    border: '1px solid var(--line)', background: 'var(--panel-2)',
+    color: 'var(--ink)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 5,
+    display: 'block', letterSpacing: '.06em', textTransform: 'uppercase',
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(10,12,15,0.55)', backdropFilter: 'blur(4px)',
+      display: 'grid', placeItems: 'center', padding: 20,
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: 'var(--panel)', borderRadius: 14, width: '100%', maxWidth: 420,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.28)', overflow: 'hidden',
+      }}>
+        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+            {isAdd ? 'Add Staff Member' : 'Edit Staff Member'}
+          </h2>
+          <button onClick={onClose} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 6 }}>
+            <X size={17} />
+          </button>
+        </div>
+
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {err && (
+            <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)', fontSize: 12.5 }}>
+              {err}
+            </div>
+          )}
+          <div>
+            <label style={labelStyle}>Full Name</label>
+            <input style={inputStyle} value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Kasun Perera" />
+          </div>
+          <div>
+            <label style={labelStyle}>Email</label>
+            <input value={isAdd ? emailInput : email} onChange={e => isAdd && setEmailInput(e.target.value)}
+              placeholder="e.g. kasun@example.com" type="email" disabled={!isAdd}
+              style={{ ...inputStyle, opacity: isAdd ? 1 : 0.6 }} />
+          </div>
+          {isAdd && (
+            <div>
+              <label style={labelStyle}>Password</label>
+              <input style={inputStyle} value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="Minimum 6 characters" type="password" />
+            </div>
+          )}
+          <div>
+            <label style={labelStyle}>Role</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['cashier', 'admin'] as const).map(r => (
+                <button key={r} onClick={() => setRole(r)} style={{
+                  flex: 1, height: 36, borderRadius: 7,
+                  border: role === r ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  background: role === r ? 'var(--accent-soft)' : 'var(--panel-2)',
+                  color: role === r ? 'var(--accent-ink)' : 'var(--ink-2)',
+                  fontSize: 13, fontWeight: role === r ? 600 : 500, cursor: 'pointer', textTransform: 'capitalize',
+                }}>{r}</button>
+              ))}
+            </div>
+          </div>
+          {!isAdd && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+              <span style={{ fontSize: 13, color: 'var(--ink)' }}>Active account</span>
+              <button onClick={() => setActive(v => !v)} style={{
+                width: 40, height: 22, borderRadius: 99, border: 0, cursor: 'pointer',
+                background: active ? 'var(--accent)' : 'var(--faint)',
+                position: 'relative', transition: 'background .15s',
+              }}>
+                <span style={{
+                  position: 'absolute', top: 3, left: active ? 21 : 3,
+                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                  transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                }} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onClose} className="btn" style={{ height: 34, fontSize: 12.5 }} disabled={saving}>Cancel</button>
+          <button onClick={handleSave} className="btn btn-primary" style={{ height: 34, fontSize: 12.5, minWidth: 80 }} disabled={saving}>
+            {saving ? 'Saving…' : isAdd ? 'Add Staff' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Detail panel ─────────────────────────────────────────────────────────
+function DetailPanel({ member, onEdit }: { member: StaffMember; onEdit: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)', padding: '0 0 24px' }}>
+      {/* Identity card */}
+      <div className="card" style={{ padding: '20px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <Avatar initials={member.initials} tone={member.tone} size={52} active={member.isActiveToday} />
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>{member.full_name}</h2>
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3, textTransform: 'capitalize' }}>{member.role}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>Joined {fmtJoined(member.created_at)}</div>
+            </div>
+          </div>
+          <button onClick={onEdit} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px',
+            border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel-2)',
+            color: 'var(--ink-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+          }}>
+            <Pencil size={12} strokeWidth={1.7} /> Edit
+          </button>
+        </div>
+
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--line-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--ink-2)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Email</span>
+            <a href={`mailto:${member.email}`} style={{ color: 'var(--accent-ink)', textDecoration: 'none' }}>{member.email}</a>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Status</span>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: member.isActiveToday ? 'var(--accent)' : 'var(--faint)', flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: member.isActiveToday ? 'var(--accent-ink)' : 'var(--muted)' }}>
+                {member.isActiveToday ? 'Active today' : 'No sales today'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--gap)' }}>
+        {[
+          { label: 'Revenue · Today', value: member.today.revenue > 0 ? fmtLKR(member.today.revenue) : '—', sub: member.today.sales > 0 ? `${member.today.sales} sales` : 'No sales' },
+          { label: 'Revenue · MTD', value: member.month.revenue > 0 ? fmtLKR(member.month.revenue) : '—', sub: `${member.month.sales} sales` },
+          { label: 'Avg Sale · MTD', value: member.month.sales > 0 ? fmtLKR(member.month.revenue / member.month.sales) : '—', sub: 'per transaction' },
+        ].map((s, i) => (
+          <div key={i} className="card" style={{ padding: '12px 14px' }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, marginBottom: 6, letterSpacing: '.03em' }}>{s.label}</div>
+            <div className="num" style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.02em', lineHeight: 1 }}>{s.value}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--faint)', marginTop: 5 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Weekly trend */}
+      <div className="card" style={{ padding: '16px 18px' }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500, marginBottom: 12 }}>7-day revenue trend</div>
+        <MiniBars data={member.week} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────
+export function SalesStaff() {
+  const { showToast } = useToast();
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('All');
+  const [selected, setSelected] = useState<StaffMember | null>(null);
+  const [modal, setModal] = useState<ModalMode | null>(null);
+  const [sort, setSort] = useState<'revenue' | 'sales' | 'name'>('revenue');
+
+  const load = useCallback(async () => {
+    try {
+      const client = (salesService as any).saleRepo.adapter.getClient();
+
+      const { data: profiles } = await client
+        .from('user_profiles')
+        .select('*')
+        .eq('active', true)
+        .order('created_at');
+
+      const users: UserProfile[] = profiles ?? [];
+
+      const today = new Date().toISOString().split('T')[0];
+      const monthStart = today.slice(0, 7) + '-01';
+
+      const weekDays: string[] = [];
+      for (let d = 6; d >= 0; d--) {
+        const dt = new Date(); dt.setDate(dt.getDate() - d);
+        weekDays.push(dt.toISOString().split('T')[0]);
+      }
+
+      const [{ data: todaySales }, { data: monthSales }, { data: weekSales }] = await Promise.all([
+        client.from('sales').select('cashier_id, total_amount').gte('sale_date', today).not('cashier_id', 'is', null),
+        client.from('sales').select('cashier_id, total_amount').gte('sale_date', monthStart).not('cashier_id', 'is', null),
+        client.from('sales').select('cashier_id, total_amount, sale_date').gte('sale_date', weekDays[0]).not('cashier_id', 'is', null),
+      ]);
+
+      const todayMap: Record<string, { sales: number; revenue: number }> = {};
+      const monthMap: Record<string, { sales: number; revenue: number }> = {};
+      const weekMap: Record<string, number[]> = {};
+
+      for (const s of (todaySales ?? [])) {
+        const id = s.cashier_id;
+        if (!todayMap[id]) todayMap[id] = { sales: 0, revenue: 0 };
+        todayMap[id].sales++;
+        todayMap[id].revenue += Number(s.total_amount);
+      }
+      for (const s of (monthSales ?? [])) {
+        const id = s.cashier_id;
+        if (!monthMap[id]) monthMap[id] = { sales: 0, revenue: 0 };
+        monthMap[id].sales++;
+        monthMap[id].revenue += Number(s.total_amount);
+      }
+      for (const s of (weekSales ?? [])) {
+        const id = s.cashier_id;
+        if (!weekMap[id]) weekMap[id] = new Array(7).fill(0);
+        const idx = weekDays.indexOf(s.sale_date);
+        if (idx >= 0) weekMap[id][idx] += Number(s.total_amount);
+      }
+
+      const enriched: StaffMember[] = users.map(u => ({
+        ...u,
+        initials: getInitials(u.full_name),
+        tone: getTone(u.full_name),
+        today: todayMap[u.id] ?? { sales: 0, revenue: 0 },
+        month: monthMap[u.id] ?? { sales: 0, revenue: 0 },
+        week: weekMap[u.id] ?? new Array(7).fill(0),
+        isActiveToday: !!(todayMap[u.id]?.sales),
+      }));
+
+      setStaff(enriched);
+      setSelected(prev => prev ? (enriched.find(s => s.id === prev.id) ?? null) : null);
+    } catch {
+      showToast('Failed to load staff data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const roles = ['All', ...Array.from(new Set(staff.map(s => s.role)))];
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let rows = staff.filter(s => {
+      if (roleFilter !== 'All' && s.role !== roleFilter) return false;
+      if (q && !(s.full_name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    return rows.sort((a, b) => {
+      if (sort === 'name') return a.full_name.localeCompare(b.full_name);
+      if (sort === 'sales') return b.month.sales - a.month.sales;
+      return b.month.revenue - a.month.revenue;
+    });
+  }, [staff, search, roleFilter, sort]);
+
+  const activeToday = staff.filter(s => s.isActiveToday).length;
+  const totalRevToday = staff.reduce((s, m) => s + m.today.revenue, 0);
+  const totalRevMTD = staff.reduce((s, m) => s + m.month.revenue, 0);
+
+  if (loading) return <LoadingSpinner message="Loading staff data…" />;
+
+  return (
+    <div style={{ padding: '0 24px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Header */}
+      <div style={{ padding: '24px 0 0', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Sales Staff</h1>
+          <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>
+            <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{staff.length} team members</span>{' · '}
+            <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{activeToday} active today</span>
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setModal({ kind: 'add' })} className="btn btn-primary" style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} /> Add Staff
+          </button>
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--gap)' }}>
+        {[
+          { label: 'Staff Members', value: staff.length.toString(), sub: `${staff.filter(s => s.role === 'admin').length} admin · ${staff.filter(s => s.role === 'cashier').length} cashier` },
+          { label: 'Active Today', value: activeToday.toString(), sub: `of ${staff.length} staff` },
+          { label: 'Revenue · Today', value: 'LKR ' + fmtK(totalRevToday), sub: 'all cashiers combined' },
+          { label: 'Revenue · MTD', value: 'LKR ' + fmtK(totalRevMTD), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
+        ].map((k, i) => (
+          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
+            <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.05, color: 'var(--ink)' }}>{k.value}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Split layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) minmax(0, 1fr)', gap: 'var(--gap)', alignItems: 'start' }}>
+        {/* Left: list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Search + sort */}
+          <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 12px',
+              borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)',
+            }}>
+              <Search size={15} style={{ color: 'var(--muted)', flexShrink: 0 }} strokeWidth={1.6} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
+                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--ink)', minWidth: 0 }} />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ border: 0, background: 'transparent', color: 'var(--faint)', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {([['revenue', 'Top Revenue'], ['sales', 'Most Sales'], ['name', 'A–Z']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setSort(k)} style={{
+                  flex: 1, height: 28, borderRadius: 6,
+                  border: sort === k ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                  background: sort === k ? 'var(--accent-soft)' : 'var(--panel-2)',
+                  color: sort === k ? 'var(--accent-ink)' : 'var(--ink-2)',
+                  fontSize: 11.5, fontWeight: sort === k ? 600 : 500, cursor: 'pointer',
+                }}>{l}</button>
+              ))}
+            </div>
+            {/* Role chips */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {roles.map(r => {
+                const isA = r === roleFilter;
+                const count = r === 'All' ? staff.length : staff.filter(s => s.role === r).length;
+                return (
+                  <button key={r} onClick={() => setRoleFilter(r)} style={{
+                    padding: '4px 10px', borderRadius: 999,
+                    border: isA ? '1px solid var(--accent)' : '1px solid var(--line)',
+                    background: isA ? 'var(--accent-soft)' : 'var(--panel)',
+                    color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
+                    fontSize: 11.5, fontWeight: isA ? 600 : 500, cursor: 'pointer', textTransform: 'capitalize',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                  }}>
+                    {r}
+                    <span className="num" style={{ fontSize: 10.5, color: isA ? 'inherit' : 'var(--faint)' }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Staff rows */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                <Users size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
+                <div>No staff found</div>
+              </div>
+            ) : filtered.map((s, i) => {
+              const isSelected = selected?.id === s.id;
+              return (
+                <div key={s.id} onClick={() => setSelected(isSelected ? null : s)} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: 'pointer',
+                  borderBottom: i < filtered.length - 1 ? '1px solid var(--line-2)' : 'none',
+                  background: isSelected ? 'color-mix(in oklab, var(--accent) 6%, var(--panel))' : 'transparent',
+                  borderLeft: isSelected ? '2.5px solid var(--accent)' : '2.5px solid transparent',
+                  transition: 'background .1s',
+                }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Avatar initials={s.initials} tone={s.tone} size={38} active={s.isActiveToday} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {s.full_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span style={{ textTransform: 'capitalize' }}>{s.role}</span>
+                      {s.isActiveToday && (
+                        <>
+                          <span style={{ color: 'var(--faint)' }}>·</span>
+                          <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>Active today</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    {s.month.revenue > 0 ? (
+                      <div className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>LKR {fmtK(s.month.revenue)}</div>
+                    ) : (
+                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>No sales</div>
+                    )}
+                    <ChevronRight size={14} style={{ color: 'var(--faint)', marginTop: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right: detail */}
+        {selected ? (
+          <DetailPanel
+            member={selected}
+            onEdit={() => setModal({ kind: 'edit', member: selected })}
+          />
+        ) : (
+          <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
+            <div style={{ textAlign: 'center' }}>
+              <Users size={32} style={{ color: 'var(--faint)', marginBottom: 12 }} />
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-2)' }}>Select a staff member</div>
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Click any row to view performance details</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {modal && (
+        <StaffModal
+          mode={modal}
+          onClose={() => setModal(null)}
+          onSaved={load}
+        />
+      )}
+    </div>
+  );
+}

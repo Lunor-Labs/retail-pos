@@ -493,39 +493,31 @@ export class SalesService {
      */
     async getSalesHistoryWithCost(days: number = 30): Promise<{ date: string; revenue: number; cost: number }[]> {
         try {
-            const adapter = (this.saleRepo as any).adapter;
+            const client = (this.saleRepo as any).adapter.getClient();
             const since = new Date();
             since.setDate(since.getDate() - days);
             const sinceStr = since.toISOString();
 
-            // Fetch sales for revenue
-            const sales: any[] = await adapter.query('sales', {
-                select: 'created_at, total_amount',
-                where: [{ field: 'created_at', operator: '>=', value: sinceStr }],
-                orderBy: [{ field: 'created_at', direction: 'asc' }],
-            });
+            // Fetch sales + their items in one query, grouped by sale_date
+            const { data: sales, error } = await client
+                .from('sales')
+                .select('sale_date, total_amount, sale_items(cost_price, quantity)')
+                .gte('sale_date', sinceStr)
+                .order('sale_date', { ascending: true });
 
-            // Fetch sale items for COGS
-            const items: any[] = await adapter.query('sale_items', {
-                select: 'created_at, cost_price, quantity',
-                where: [{ field: 'created_at', operator: '>=', value: sinceStr }],
-            });
+            if (error) throw error;
 
-            // Group revenue by date
             const revenueMap = new Map<string, number>();
-            for (const s of sales) {
-                const day = new Date(s.created_at).toISOString().split('T')[0];
-                revenueMap.set(day, (revenueMap.get(day) || 0) + Number(s.total_amount));
-            }
-
-            // Group cost by date
             const costMap = new Map<string, number>();
-            for (const item of items) {
-                const day = new Date(item.created_at).toISOString().split('T')[0];
-                costMap.set(day, (costMap.get(day) || 0) + Number(item.cost_price) * Number(item.quantity));
+
+            for (const s of (sales || [])) {
+                const day = new Date(s.sale_date).toISOString().split('T')[0];
+                revenueMap.set(day, (revenueMap.get(day) || 0) + Number(s.total_amount));
+                for (const item of (s.sale_items || [])) {
+                    costMap.set(day, (costMap.get(day) || 0) + Number(item.cost_price) * Number(item.quantity));
+                }
             }
 
-            // Merge into sorted daily array
             const allDays = Array.from(new Set([...revenueMap.keys(), ...costMap.keys()])).sort();
             return allDays.map(day => ({
                 date: day,
@@ -630,8 +622,8 @@ export class SalesService {
             const sales: any[] = await adapter.query('sales', {
                 select: 'total_amount',
                 where: [
-                    { field: 'created_at', operator: '>=', value: yStart.toISOString() },
-                    { field: 'created_at', operator: '<', value: yEnd.toISOString() },
+                    { field: 'sale_date', operator: '>=', value: yStart.toISOString() },
+                    { field: 'sale_date', operator: '<', value: yEnd.toISOString() },
                 ],
             });
             return { count: sales.length, revenue: sales.reduce((s, r) => s + Number(r.total_amount), 0) };

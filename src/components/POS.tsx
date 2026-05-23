@@ -24,7 +24,7 @@ import { LoyaltyPanel } from './pos/LoyaltyPanel';
 
 import { db } from '../lib/db';
 import { SyncStatus } from './pos/SyncStatus';
-import { Pagination } from './ui';
+import { Pagination, Modal } from './ui';
 import { salesService, customerService, productService, variantService, loyaltyService } from '../services';
 import { logger } from '../lib/logger';
 import { playScannerBeep } from '../utils/audio';
@@ -80,6 +80,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   const [selectedProduct, setSelectedProduct] = useState<ProductWithBatches | null>(null);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const cartScrollRef = useRef<HTMLDivElement>(null);
+  const [cartHasMore, setCartHasMore] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
@@ -87,6 +89,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     email: '',
     address: '',
     credit_limit: 0,
+    notes: '',
   });
   const [showAgentModal, setShowAgentModal] = useState(false);
   const [agentFormData, setAgentFormData] = useState({
@@ -106,6 +109,12 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // Manual Item Modal State
   const [showManualItemModal, setShowManualItemModal] = useState(false);
   const [manualItemForm, setManualItemForm] = useState({ description: '', price: 0, quantity: 1 });
+
+  function handleCartScroll() {
+    const el = cartScrollRef.current;
+    if (!el) return;
+    setCartHasMore(el.scrollHeight - el.scrollTop > el.clientHeight + 8);
+  }
 
   // Variant picker state
   const [variantPickerProduct, setVariantPickerProduct] = useState<ProductWithBatches | null>(null);
@@ -129,6 +138,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Scroll cart to bottom when a new item is added; recalc overflow indicator on any cart change
+  useEffect(() => {
+    const el = cartScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setCartHasMore(false); // just scrolled to bottom
+  }, [cart.length]);
+
+  useEffect(() => {
+    handleCartScroll();
+  }, [cart]);
 
   // Background sync for offline sales
   useEffect(() => {
@@ -473,6 +494,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         email: '',
         address: '',
         credit_limit: 0,
+        notes: '',
       });
       loadData();
       setSelectedCustomer(data);
@@ -719,7 +741,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
           {/* Toolbar */}
           <div style={{ padding: '14px 18px', display: 'flex', gap: 10, alignItems: 'center', borderBottom: '1px solid var(--line-2)', background: 'var(--panel)', flexShrink: 0 }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, height: 40, padding: '0 14px', borderRadius: 10, background: 'var(--panel)', border: '1px solid var(--line)', minWidth: 0 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, height: 40, padding: '0 14px', borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--line)', minWidth: 0 }}>
               <Search size={16} strokeWidth={1.6} style={{ color: 'var(--muted)', flexShrink: 0 }} />
               <input
                 ref={searchInputRef}
@@ -727,7 +749,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 placeholder="Search by name or SKU — or scan barcode"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13.5, color: 'var(--ink)', minWidth: 0 }}
+                style={{ flex: 1, border: 0, outline: 'none', background: 'var(--bg)', fontSize: 13.5, color: 'var(--ink)', minWidth: 0 }}
                 autoFocus
               />
               <span className="kbd">/</span>
@@ -829,9 +851,19 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 {profile?.full_name?.split(' ')[0] || 'Cashier'} · Register 1
               </div>
             </div>
-            <button onClick={clearCart} className="btn btn-sm btn-ghost" style={{ color: 'var(--muted)' }}>
-              Clear
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => { setManualItemForm({ description: '', price: 0, quantity: 1 }); setShowManualItemModal(true); }}
+                title="Add manual item"
+                className="btn btn-sm btn-ghost"
+                style={{ color: 'var(--warn)', padding: 0, width: 28, height: 28, justifyContent: 'center' }}
+              >
+                <Tag size={14} />
+              </button>
+              <button onClick={clearCart} className="btn btn-sm btn-ghost" style={{ color: 'var(--muted)' }}>
+                Clear
+              </button>
+            </div>
           </div>
 
           {/* Customer */}
@@ -897,39 +929,38 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             </div>
           )}
 
-          {/* Manual item button */}
-          <div style={{ padding: '8px 18px', borderBottom: '1px solid var(--line-2)', flexShrink: 0 }}>
-            <button
-              onClick={() => { setManualItemForm({ description: '', price: 0, quantity: 1 }); setShowManualItemModal(true); }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '6px 0', borderRadius: 7, fontSize: 12.5, fontWeight: 500,
-                border: '1px dashed rgba(180,83,9,0.4)', color: 'var(--warn)', background: 'transparent', cursor: 'default',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--warn-soft)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <Tag size={13} /> Add Manual Item
-            </button>
-          </div>
-
           {/* Cart lines */}
-          <div style={{ flex: 1, overflowY: 'auto' }} className="custom-scrollbar">
-            {cart.length === 0 ? (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', padding: '40px 18px', textAlign: 'center' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(20,22,26,0.04)', display: 'grid', placeItems: 'center' }}>
-                  <ShoppingCart size={20} strokeWidth={1.4} />
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <div
+              ref={cartScrollRef}
+              onScroll={handleCartScroll}
+              style={{ position: 'absolute', inset: 0, overflowY: 'auto' }}
+              className="custom-scrollbar"
+            >
+              {cart.length === 0 ? (
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', padding: '40px 18px', textAlign: 'center' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(20,22,26,0.04)', display: 'grid', placeItems: 'center' }}>
+                    <ShoppingCart size={20} strokeWidth={1.4} />
+                  </div>
+                  <div style={{ fontSize: 13 }}>Cart is empty</div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)' }}>Scan or click products to add</div>
                 </div>
-                <div style={{ fontSize: 13 }}>Cart is empty</div>
-                <div style={{ fontSize: 11, color: 'var(--faint)' }}>Scan or click products to add</div>
-              </div>
-            ) : (
-              <CartItemsList
-                items={cart}
-                onUpdateQuantity={updateCartItemQuantity}
-                onUpdatePrice={updateCartItemPrice}
-                onRemoveItem={removeFromCart}
-              />
+              ) : (
+                <CartItemsList
+                  items={cart}
+                  onUpdateQuantity={updateCartItemQuantity}
+                  onUpdatePrice={updateCartItemPrice}
+                  onRemoveItem={removeFromCart}
+                />
+              )}
+            </div>
+            {/* Scroll fade — indicates more items below */}
+            {cartHasMore && (
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, height: 48,
+                background: 'linear-gradient(to bottom, transparent, var(--panel))',
+                pointerEvents: 'none',
+              }} />
             )}
           </div>
 
@@ -1413,181 +1444,131 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         </div>
       )}
 
-      {showCustomerModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-slate-900">Add New Customer</h3>
-              <button onClick={() => setShowCustomerModal(false)} className="p-1 hover:bg-slate-100 rounded-md transition">
-                <X className="w-6 h-6 text-slate-500" />
-              </button>
-            </div>
-            <form onSubmit={handleCustomerSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                <input
-                  required
-                  type="text"
-                  value={customerFormData.name}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-                  <input
-                    type="tel"
-                    value={customerFormData.phone}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
-                  />
+      <Modal isOpen={showCustomerModal} onClose={() => setShowCustomerModal(false)} title="Add Customer" size="md">
+        {(() => {
+          const inputStyle: React.CSSProperties = { width: '100%', height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--ink)', background: 'var(--panel)', outline: 'none', boxSizing: 'border-box' };
+          const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
+          return (
+            <form onSubmit={handleCustomerSubmit} style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={labelStyle}>Full Name *</label>
+                  <input required autoFocus style={inputStyle} value={customerFormData.name} onChange={e => setCustomerFormData(p => ({ ...p, name: e.target.value }))} placeholder="Customer name" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Credit Limit</label>
-                  <input
-                    type="number"
-                    value={customerFormData.credit_limit}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, credit_limit: Number(e.target.value) })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
-                  />
+                  <label style={labelStyle}>Phone</label>
+                  <input style={inputStyle} type="tel" value={customerFormData.phone} onChange={e => setCustomerFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+94 7x xxx xxxx" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Email</label>
+                  <input style={inputStyle} type="email" value={customerFormData.email} onChange={e => setCustomerFormData(p => ({ ...p, email: e.target.value }))} placeholder="email@example.com" />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={labelStyle}>Address</label>
+                  <input style={inputStyle} value={customerFormData.address} onChange={e => setCustomerFormData(p => ({ ...p, address: e.target.value }))} placeholder="City / district" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Credit Limit (LKR)</label>
+                  <input style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} value={customerFormData.credit_limit} onChange={e => setCustomerFormData(p => ({ ...p, credit_limit: parseFloat(e.target.value) || 0 }))} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Notes</label>
+                  <input style={inputStyle} value={customerFormData.notes} onChange={e => setCustomerFormData(p => ({ ...p, notes: e.target.value }))} placeholder="Internal note" />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-                <textarea
-                  value={customerFormData.address}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none h-20"
-                />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+                <button type="button" onClick={() => setShowCustomerModal(false)} className="btn">Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Customer</button>
               </div>
-              <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition font-medium">
-                Save Customer
-              </button>
             </form>
-          </div>
-        </div>
-      )}
+          );
+        })()}
+      </Modal>
 
-      {showAgentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-slate-900">Add New Agent</h3>
-              <button onClick={() => setShowAgentModal(false)} className="p-1 hover:bg-slate-100 rounded-md transition">
-                <X className="w-6 h-6 text-slate-500" />
-              </button>
-            </div>
-            <form onSubmit={handleAgentSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
-                <input
-                  required
-                  type="text"
-                  value={agentFormData.name}
-                  onChange={(e) => setAgentFormData({ ...agentFormData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
-                />
+      <Modal isOpen={showAgentModal} onClose={() => setShowAgentModal(false)} title="Add Sales Staff" size="md">
+        {(() => {
+          const inputStyle: React.CSSProperties = { width: '100%', height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--ink)', background: 'var(--panel)', outline: 'none', boxSizing: 'border-box' };
+          const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
+          return (
+            <form onSubmit={handleAgentSubmit} style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={labelStyle}>Full Name *</label>
+                  <input required autoFocus style={inputStyle} value={agentFormData.name} onChange={e => setAgentFormData(p => ({ ...p, name: e.target.value }))} placeholder="Staff name" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Phone</label>
+                  <input style={inputStyle} type="tel" value={agentFormData.phone} onChange={e => setAgentFormData(p => ({ ...p, phone: e.target.value }))} placeholder="+94 7x xxx xxxx" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Commission Rate (%)</label>
+                  <input required style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} max={100} step={0.1} value={agentFormData.commission_rate} onChange={e => setAgentFormData(p => ({ ...p, commission_rate: parseFloat(e.target.value) || 0 }))} />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Commission Rate (%) *</label>
-                <input
-                  required
-                  type="number"
-                  value={agentFormData.commission_rate}
-                  onChange={(e) => setAgentFormData({ ...agentFormData, commission_rate: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
-                />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+                <button type="button" onClick={() => setShowAgentModal(false)} className="btn">Cancel</button>
+                <button type="submit" className="btn btn-primary">Add Staff</button>
               </div>
-              <button type="submit" className="w-full py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition font-medium">
-                Save Agent
-              </button>
             </form>
-          </div>
-        </div>
-      )}
+          );
+        })()}
+      </Modal>
 
       {/* Manual Item Modal */}
-      {showManualItemModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
-            <div className="p-5 border-b border-slate-200 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <Tag className="w-4 h-4 text-amber-600" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900">Add Manual Item</h3>
-              </div>
-              <button
-                onClick={() => setShowManualItemModal(false)}
-                className="p-1 hover:bg-slate-100 rounded-md transition"
-              >
-                <X className="w-5 h-5 text-slate-500" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
+      <Modal isOpen={showManualItemModal} onClose={() => setShowManualItemModal(false)} title="Add Manual Item" size="sm">
+        {(() => {
+          const inputStyle: React.CSSProperties = { width: '100%', height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--ink)', background: 'var(--panel)', outline: 'none', boxSizing: 'border-box' };
+          const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
+          return (
+            <div style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                <label style={labelStyle}>Description *</label>
                 <input
-                  type="text"
-                  autoFocus
-                  placeholder="e.g. Bus Fare, Repair Charge, Delivery"
+                  autoFocus required style={inputStyle}
+                  placeholder="e.g. Repair Charge, Delivery Fee"
                   value={manualItemForm.description}
-                  onChange={(e) => setManualItemForm({ ...manualItemForm, description: e.target.value })}
-                  onKeyDown={(e) => e.key === 'Enter' && addManualItem()}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none text-sm bg-white text-slate-900"
+                  onChange={e => setManualItemForm(p => ({ ...p, description: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && addManualItem()}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Unit Price (LKR) *</label>
+                  <label style={labelStyle}>Unit Price (LKR) *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
+                    type="number" step="0.01" min="0" placeholder="0.00"
+                    style={{ ...inputStyle, textAlign: 'right' }}
                     value={manualItemForm.price === 0 ? '' : manualItemForm.price}
-                    onChange={(e) => setManualItemForm({ ...manualItemForm, price: parseFloat(e.target.value) || 0 })}
-                    onKeyDown={(e) => e.key === 'Enter' && addManualItem()}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none text-sm bg-white text-slate-900"
+                    onChange={e => setManualItemForm(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))}
+                    onKeyDown={e => e.key === 'Enter' && addManualItem()}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
+                  <label style={labelStyle}>Quantity</label>
                   <input
-                    type="number"
-                    min="1"
-                    placeholder="1"
+                    type="number" min="1" placeholder="1"
+                    style={{ ...inputStyle, textAlign: 'right' }}
                     value={manualItemForm.quantity}
-                    onChange={(e) => setManualItemForm({ ...manualItemForm, quantity: parseInt(e.target.value) || 1 })}
-                    onKeyDown={(e) => e.key === 'Enter' && addManualItem()}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none text-sm bg-white text-slate-900"
+                    onChange={e => setManualItemForm(p => ({ ...p, quantity: parseInt(e.target.value) || 1 }))}
+                    onKeyDown={e => e.key === 'Enter' && addManualItem()}
                   />
                 </div>
               </div>
               {manualItemForm.price > 0 && manualItemForm.quantity > 0 && (
-                <p className="text-sm text-slate-500">
-                  Total: <span className="font-bold text-slate-900">LKR {(manualItemForm.price * manualItemForm.quantity).toFixed(2)}</span>
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line-2)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Total</span>
+                  <span className="num" style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
+                    LKR {(manualItemForm.price * manualItemForm.quantity).toFixed(2)}
+                  </span>
+                </div>
               )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+                <button type="button" onClick={() => setShowManualItemModal(false)} className="btn">Cancel</button>
+                <button type="button" onClick={addManualItem} className="btn btn-primary">Add to Cart</button>
+              </div>
             </div>
-            <div className="px-5 pb-5 flex gap-3">
-              <button
-                onClick={() => setShowManualItemModal(false)}
-                className="flex-1 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addManualItem}
-                className="flex-1 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition text-sm font-medium"
-              >
-                Add to Cart
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
+      </Modal>
 
       {variantPickerProduct && (
         <VariantPicker

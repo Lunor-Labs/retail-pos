@@ -6,7 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { Products } from './components/Products';
 import { Suppliers } from './components/Suppliers';
 import { Customers } from './components/Customers';
-import { ReferralAgents } from './components/ReferralAgents';
+import { SalesStaff } from './components/SalesStaff';
 import { POS } from './components/POS';
 import { Returns } from './components/Returns';
 import { SalesHistory } from './components/SalesHistory';
@@ -60,7 +60,7 @@ function AppContent() {
       )}
       {currentView === 'customers' && <Customers />}
       {currentView === 'suppliers' && <Suppliers />}
-      {currentView === 'referral-agents' && <ReferralAgents />}
+      {currentView === 'referral-agents' && <SalesStaff />}
       {currentView === 'returns' && <Returns />}
       {currentView === 'sales-history' && <SalesHistory />}
       {currentView === 'reports' && <Reports />}

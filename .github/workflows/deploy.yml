@@ -1,4 +1,4 @@
-name: Deploy gasithmotors.lk
+name: Deploy RIVONLAK
 
 on:
   push:
@@ -6,9 +6,12 @@ on:
       - dev
       - main
 
+env:
+  VERCEL_PROJECT_NAME: rivonlak
+
 jobs:
   # ====================================
-  # DEV DEPLOYMENT → vercel Preview
+  # DEV DEPLOYMENT → Vercel Preview
   # ====================================
   deploy-dev:
     if: github.ref == 'refs/heads/dev'
@@ -16,8 +19,6 @@ jobs:
     environment: dev
     permissions:
       contents: read
-      pages: write
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -31,52 +32,47 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Create .env file from GitHub Secrets
+      - name: Create .env file
         run: |
-          echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}" >> .env
-          echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}" >> .env
-          echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}" >> .env
-          echo "VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}" >> .env
-          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}" >> .env
-          echo "VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}" >> .env
-          echo "VITE_FIREBASE_MEASUREMENT_ID=${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_ID=${{ secrets.VITE_PAYHERE_MERCHANT_ID }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_SECRET=${{ secrets.VITE_PAYHERE_MERCHANT_SECRET }}" >> .env
-          echo "VITE_PAYHERE_SANDBOX=${{ secrets.VITE_PAYHERE_SANDBOX }}" >> .env
-          echo "VITE_PAYHERE_NOTIFY_URL=${{ secrets.VITE_PAYHERE_NOTIFY_URL }}" >> .env
-          echo "VITE_PAYHERE_RETURN_URL=${{ secrets.VITE_PAYHERE_RETURN_URL }}" >> .env
-          echo "VITE_PAYHERE_CANCEL_URL=${{ secrets.VITE_PAYHERE_CANCEL_URL }}" >> .env
-          echo "VITE_APP_ENV=${{ secrets.VITE_APP_ENV }}" >> .env
-          echo "VITE_APP_URL=${{ secrets.VITE_APP_URL }}" >> .env
-          echo "VITE_DAILY_API_KEY=${{ secrets.VITE_DAILY_API_KEY }}" >> .env
-          echo "VITE_DAILY_DOMAIN=${{ secrets.VITE_DAILY_DOMAIN }}" >> .env
-          echo "VERCEL_ORG_ID=${{ vars.VERCEL_ORG_ID }}" >> .env
-          echo "VERCEL_PROJECT_ID=${{ vars.VERCEL_PROJECT_ID }}" >> .env
           echo "VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}" >> .env
           echo "VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}" >> .env
-          echo "VITE_PAYHERE_MODE=${{ vars.VITE_PAYHERE_MODE }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_ID=${{ vars.VITE_PAYHERE_MERCHANT_ID }}" >> .env
-          echo "PAYHERE_MERCHANT_SECRET=${{ vars.PAYHERE_MERCHANT_SECRET }}" >> .env
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      - name: Pull Vercel Environment Info
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-        
+      - name: Link Vercel project
+        run: |
+          vercel link \
+            --yes \
+            --project=${{ env.VERCEL_PROJECT_NAME }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Pull Vercel Environment Info (Preview)
+        run: |
+          vercel pull \
+            --yes \
+            --environment=preview \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Build Project
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy to Vercel (Development/Preview)
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy to Vercel (Preview)
+        run: |
+          vercel deploy \
+            --prebuilt \
+            --target=preview \
+            --token=${{ secrets.VERCEL_TOKEN }}
 
   # ====================================
-  # PROD DEPLOYMENT → Vercel (CLI)
+  # PROD DEPLOYMENT → Vercel Production
   # ====================================
   deploy-prod:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: prod
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -90,41 +86,34 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Create .env file from GitHub Secrets
+      - name: Create .env file
         run: |
-          echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}" >> .env
-          echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}" >> .env
-          echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}" >> .env
-          echo "VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}" >> .env
-          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}" >> .env
-          echo "VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}" >> .env
-          echo "VITE_FIREBASE_MEASUREMENT_ID=${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_ID=${{ secrets.VITE_PAYHERE_MERCHANT_ID }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_SECRET=${{ secrets.VITE_PAYHERE_MERCHANT_SECRET }}" >> .env
-          echo "VITE_PAYHERE_SANDBOX=${{ secrets.VITE_PAYHERE_SANDBOX }}" >> .env
-          echo "VITE_PAYHERE_NOTIFY_URL=${{ secrets.VITE_PAYHERE_NOTIFY_URL }}" >> .env
-          echo "VITE_PAYHERE_RETURN_URL=${{ secrets.VITE_PAYHERE_RETURN_URL }}" >> .env
-          echo "VITE_PAYHERE_CANCEL_URL=${{ secrets.VITE_PAYHERE_CANCEL_URL }}" >> .env
-          echo "VITE_APP_ENV=${{ secrets.VITE_APP_ENV }}" >> .env
-          echo "VITE_APP_URL=${{ secrets.VITE_APP_URL }}" >> .env
-          echo "VITE_DAILY_API_KEY=${{ secrets.VITE_DAILY_API_KEY }}" >> .env
-          echo "VITE_DAILY_DOMAIN=${{ secrets.VITE_DAILY_DOMAIN }}" >> .env
-          echo "VERCEL_ORG_ID=${{ vars.VERCEL_ORG_ID }}" >> .env
-          echo "VERCEL_PROJECT_ID=${{ vars.VERCEL_PROJECT_ID }}" >> .env
           echo "VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}" >> .env
           echo "VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}" >> .env
-          echo "VITE_PAYHERE_MODE=${{ vars.VITE_PAYHERE_MODE }}" >> .env
-          echo "VITE_PAYHERE_MERCHANT_ID=${{ vars.VITE_PAYHERE_MERCHANT_ID }}" >> .env
-          echo "PAYHERE_MERCHANT_SECRET=${{ vars.PAYHERE_MERCHANT_SECRET }}" >> .env
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      - name: Pull Vercel Environment Info
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Link Vercel project
+        run: |
+          vercel link \
+            --yes \
+            --project=${{ env.VERCEL_PROJECT_NAME }} \
+            --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Pull Vercel Environment Info (Production)
+        run: |
+          vercel pull \
+            --yes \
+            --environment=production \
+            --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-        
-      - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to Vercel (Production)
+        run: |
+          vercel deploy \
+            --prebuilt \
+            --prod \
+            --token=${{ secrets.VERCEL_TOKEN }}

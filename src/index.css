@@ -213,3 +213,65 @@ html, body {
   .kpi-value        { font-size: 15px !important; }
   .kpi-spark        { display: none; }
 }
+
+/* ── Sales History split layout ─────────────────────────── */
+.sh-outer { padding: 0 16px 32px; }
+@media (min-width: 640px) { .sh-outer { padding: 0 24px 32px; } }
+
+.sh-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  align-items: stretch;
+}
+@media (min-width: 768px) {
+  .sh-split {
+    display: grid;
+    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+/* On mobile: when a sale is selected, hide the list and show only detail */
+@media (max-width: 767px) {
+  .sh-split.sh-detail-active .sh-list   { display: none; }
+  .sh-split:not(.sh-detail-active) .sh-detail { display: none; }
+  .sh-back { display: flex !important; }
+}
+@media (min-width: 768px) {
+  .sh-back { display: none !important; }
+}
+
+/* ── Dashboard section grids ────────────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+}
+@media (min-width: 768px) {
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ── Dashboard page header ──────────────────────────────── */
+@media (max-width: 639px) {
+  .dash-header h1  { font-size: 18px !important; }
+  .dash-header p   { font-size: 12px !important; }
+}
+
+/* ── Customers list card ─────────────────────────────────── */
+/* On desktop: fixed-height scrollable sidebar */
+@media (min-width: 768px) {
+  .cust-list-card { min-height: 600px; overflow: hidden; }
+  .cust-rows      { flex: 1; overflow: auto; min-height: 0; }
+}
+/* On mobile: natural flow, full height, paginated */
+.cust-list-card { display: flex; flex-direction: column; }
+.cust-rows      { display: block; }
+
+/* ── Reports KPI strip ───────────────────────────────────── */
+.rpt-kpi {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap);
+}
+@media (min-width: 640px)  { .rpt-kpi { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .rpt-kpi { grid-template-columns: repeat(5, 1fr); } }

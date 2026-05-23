@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, Upload, Download, Mail, Phone, MapPin, Clock, X, FileText, CheckCircle, Eye } from 'lucide-react';
+import { Plus, Search, Upload, Download, Mail, Phone, MapPin, Clock, X, FileText, CheckCircle, Eye, ChevronLeft } from 'lucide-react';
 import { customerService, salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { Modal, LoadingSpinner } from './ui';
@@ -121,7 +121,7 @@ function KPIRow({ customers }: { customers: EnrichedCustomer[] }) {
   ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--gap)' }}>
+    <div className="rpt-kpi">
       {kpis.map((k, i) => (
         <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -188,6 +188,8 @@ function SegmentBar({ customers, segment, setSegment }: {
   );
 }
 
+const PAGE_SIZE = 20;
+
 // ─── Customer list ──────────────────────────────────────────────────────
 function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onSelect }: {
   items: EnrichedCustomer[];
@@ -195,8 +197,16 @@ function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onS
   sort: string; setSort: (s: string) => void;
   selectedId: string; onSelect: (id: string) => void;
 }) {
+  const [page, setPage] = useState(1);
+
+  // Reset to page 1 when search/sort changes
+  useEffect(() => { setPage(1); }, [search, sort, items.length]);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const pageItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 600, overflow: 'hidden' }}>
+    <div className="card cust-list-card" style={{ padding: 0 }}>
       {/* Search + sort */}
       <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--line-2)', display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{
@@ -207,7 +217,7 @@ function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onS
           <Search size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} strokeWidth={1.6} />
           <input
             value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name, email, phone, ID…"
+            placeholder="Search name, email, phone…"
             style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 12.5, minWidth: 0, color: 'var(--ink)' }}
           />
           {search && (
@@ -230,22 +240,70 @@ function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onS
       </div>
 
       {/* Count bar */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--line-2)', background: 'var(--panel-2)', display: 'flex', alignItems: 'center' }}>
+      <div style={{ padding: '7px 16px', borderBottom: '1px solid var(--line-2)', background: 'var(--panel-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, letterSpacing: '.04em', textTransform: 'uppercase' }}>
           {items.length} {items.length === 1 ? 'customer' : 'customers'}
         </span>
+        {totalPages > 1 && (
+          <span style={{ fontSize: 11, color: 'var(--faint)' }}>
+            Page {page} of {totalPages}
+          </span>
+        )}
       </div>
 
       {/* Rows */}
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }} className="custom-scrollbar">
+      <div className="cust-rows custom-scrollbar">
         {items.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
             No customers match these filters.
           </div>
-        ) : items.map((c, i) => (
-          <CustomerRow key={c.id} c={c} isLast={i === items.length - 1} selected={c.id === selectedId} onClick={() => onSelect(c.id)} />
+        ) : pageItems.map((c, i) => (
+          <CustomerRow key={c.id} c={c} isLast={i === pageItems.length - 1} selected={c.id === selectedId} onClick={() => onSelect(c.id)} />
         ))}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{
+          padding: '10px 14px', borderTop: '1px solid var(--line-2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          background: 'var(--panel-2)',
+        }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="btn btn-sm"
+            style={{ opacity: page === 1 ? 0.4 : 1 }}
+          >
+            ← Prev
+          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+              // Show pages around current
+              let p = i + 1;
+              if (totalPages > 5) {
+                const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                p = start + i;
+              }
+              return (
+                <button key={p} onClick={() => setPage(p)} style={{
+                  width: 28, height: 28, borderRadius: 6, border: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  background: p === page ? 'var(--accent)' : 'transparent',
+                  color: p === page ? '#fff' : 'var(--ink-2)',
+                }}>{p}</button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="btn btn-sm"
+            style={{ opacity: page === totalPages ? 0.4 : 1 }}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -295,10 +353,11 @@ function CustomerRow({ c, isLast, selected, onClick }: { c: EnrichedCustomer; is
 }
 
 // ─── Customer detail ─────────────────────────────────────────────────────
-function CustomerDetail({ c, onEdit, onManageCredit }: {
+function CustomerDetail({ c, onEdit, onManageCredit, onBack }: {
   c: EnrichedCustomer;
   onEdit: (c: EnrichedCustomer) => void;
   onManageCredit: (c: EnrichedCustomer) => void;
+  onBack?: () => void;
 }) {
   const [tab, setTab] = useState<'orders' | 'notes' | 'activity'>('orders');
   const [orders, setOrders] = useState<any[]>([]);
@@ -330,6 +389,16 @@ function CustomerDetail({ c, onEdit, onManageCredit }: {
   ].filter(Boolean) as { icon: JSX.Element; text: string }[];
 
   return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* Mobile back button */}
+      {onBack && (
+        <button className="sh-back" onClick={onBack} style={{
+          display: 'none', alignItems: 'center', gap: 6, border: 0, background: 'transparent',
+          color: 'var(--accent-ink)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', padding: '4px 0 10px',
+        }}>
+          <ChevronLeft size={18} strokeWidth={2} /> Back to Customers
+        </button>
+      )}
     <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 600, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ padding: '20px 22px 18px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'flex-start', gap: 18 }}>
@@ -430,6 +499,7 @@ function CustomerDetail({ c, onEdit, onManageCredit }: {
         {tab === 'notes' && <NotesTab note={c.notes} />}
         {tab === 'activity' && <ActivityTab c={c} />}
       </div>
+    </div>
     </div>
   );
 }
@@ -736,17 +806,13 @@ export function Customers() {
   }, [customers, search, segment, sort]);
 
   const current = useMemo(() => {
-    return customers.find(c => c.id === selectedId) ?? filtered[0] ?? null;
-  }, [customers, selectedId, filtered]);
-
-  useEffect(() => {
-    if (!selectedId && filtered.length > 0) setSelectedId(filtered[0].id);
-  }, [filtered, selectedId]);
+    return customers.find(c => c.id === selectedId) ?? null;
+  }, [customers, selectedId]);
 
   if (loading) return <LoadingSpinner message="Loading customers…" />;
 
   return (
-    <div style={{ padding: '0 24px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="sh-outer" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Page header */}
       <div style={{ padding: '24px 0 0', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
@@ -770,19 +836,24 @@ export function Customers() {
       <SegmentBar customers={customers} segment={segment} setSegment={setSegment} />
 
       {/* Split pane */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 420px) minmax(0, 1fr)', gap: 'var(--gap)', alignItems: 'stretch' }}>
-        <CustomerList items={filtered} search={search} setSearch={setSearch} sort={sort} setSort={setSort} selectedId={current?.id ?? ''} onSelect={setSelectedId} />
-        {current ? (
-          <CustomerDetail
-            c={current}
-            onEdit={c => { setEditCustomer(c); setModalMode('edit'); setShowModal(true); }}
-            onManageCredit={c => setCreditCustomer(c)}
-          />
-        ) : (
-          <div className="card" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: 13, minHeight: 600 }}>
-            Select a customer to view their profile.
-          </div>
-        )}
+      <div className={`sh-split ${current ? 'sh-detail-active' : ''}`}>
+        <div className="sh-list">
+          <CustomerList items={filtered} search={search} setSearch={setSearch} sort={sort} setSort={setSort} selectedId={current?.id ?? ''} onSelect={setSelectedId} />
+        </div>
+        <div className="sh-detail">
+          {current ? (
+            <CustomerDetail
+              c={current}
+              onEdit={c => { setEditCustomer(c); setModalMode('edit'); setShowModal(true); }}
+              onManageCredit={c => setCreditCustomer(c)}
+              onBack={() => setSelectedId('')}
+            />
+          ) : (
+            <div className="card" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', fontSize: 13, minHeight: 600 }}>
+              Select a customer to view their profile.
+            </div>
+          )}
+        </div>
       </div>
 
       {showModal && (

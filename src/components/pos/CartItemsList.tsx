@@ -1,6 +1,5 @@
-import { Plus, Minus, Trash2, Tag } from 'lucide-react';
+import { Plus, Minus, X, Tag } from 'lucide-react';
 import { CartItem } from '../../types';
-import { ProductImage } from '../ProductImage';
 
 interface CartItemsListProps {
   items: CartItem[];
@@ -9,99 +8,103 @@ interface CartItemsListProps {
   onRemoveItem: (index: number) => void;
 }
 
+const mono: React.CSSProperties = { fontFamily: "'JetBrains Mono', monospace" };
+
 export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemoveItem }: CartItemsListProps) {
-  if (items.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-400">
-        <p>Cart is empty</p>
-      </div>
-    );
-  }
+  if (items.length === 0) return null;
 
   return (
-    <div className="space-y-3">
-      {items.map((item, index) => (
-        <div key={index} className={`border rounded-lg p-4 ${item.isManual ? 'border-amber-200 bg-amber-50/30' : 'border-slate-200'}`}>
-          <div className="flex justify-between items-start mb-2 gap-3">
-            <div className="flex items-start gap-3 flex-1">
-              {item.isManual ? (
-                <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Tag className="w-4 h-4 text-amber-600" />
-                </div>
-              ) : (
-                <ProductImage
-                  imageUrl={item.product.image_url}
-                  alt={item.product.name}
-                  size="sm"
-                />
-              )}
-              <div className="flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="font-medium text-slate-900">
-                    {item.isManual ? item.manualDescription : item.product.name}
-                  </p>
-                  {item.isManual && (
-                    <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-                      Manual
-                    </span>
-                  )}
-                </div>
-                {!item.isManual && (
-                  <p className="text-xs text-slate-500">
-                    {item.variant && [item.variant.color, item.variant.size].filter(Boolean).join(' · ')}
-                    {item.variant && ' • '}
-                    Batch: {item.batch.batch_number} • LKR {item.batch.selling_price.toFixed(2)} each
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => onRemoveItem(index)}
-              className="p-1 hover:bg-red-50 rounded transition"
-            >
-              <Trash2 className="w-4 h-4 text-red-600" />
-            </button>
-          </div>
+    <div>
+      {items.map((item, index) => {
+        const subtotal = item.price * item.quantity;
+        const isDiscounted = item.price < item.original_price;
+        const name = item.isManual ? item.manualDescription : item.product.name;
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        return (
+          <div
+            key={index}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '7px 18px',
+              borderBottom: '1px solid var(--line-2)',
+              borderLeft: item.isManual ? '3px solid var(--warn)' : '3px solid transparent',
+              background: item.isManual ? 'color-mix(in srgb, var(--warn) 4%, transparent)' : 'transparent',
+              minWidth: 0,
+            }}
+          >
+            {/* Qty stepper — compact, borderless */}
+            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
               <button
                 onClick={() => onUpdateQuantity(index, -1)}
-                className="p-1 bg-slate-100 hover:bg-slate-200 rounded transition"
+                style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
               >
-                <Minus className="w-4 h-4" />
+                <Minus size={10} strokeWidth={2.5} />
               </button>
-              <span className="w-12 text-center font-medium">{item.quantity}</span>
+              <span style={{ width: 28, textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--ink)', ...mono }}>
+                {item.quantity}
+              </span>
               <button
                 onClick={() => onUpdateQuantity(index, 1)}
-                className="p-1 bg-slate-100 hover:bg-slate-200 rounded transition"
+                style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
               >
-                <Plus className="w-4 h-4" />
+                <Plus size={10} strokeWidth={2.5} />
               </button>
             </div>
-            <div className="text-right">
-              <div className="flex items-center gap-2 justify-end">
-                <span className="text-slate-600 text-xs">Unit:</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={item.price}
-                  onChange={(e) => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
-                  className="w-20 text-right px-1 py-0.5 border border-slate-300 rounded text-sm focus:ring-1 focus:ring-slate-900 outline-none"
-                />
-              </div>
-              {item.price < item.original_price && (
-                <p className="text-xs text-slate-400 line-through text-right mt-0.5">
-                  LKR {item.original_price.toFixed(2)}
-                </p>
+
+            {/* Name + unit price — flex 1 */}
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, overflow: 'hidden' }}>
+              {item.isManual && (
+                <Tag size={11} strokeWidth={1.8} style={{ color: 'var(--warn)', flexShrink: 0 }} />
               )}
-              <p className="font-bold text-slate-900 mt-0.5">
-                LKR {(item.price * item.quantity).toFixed(2)}
-              </p>
+              <span style={{
+                fontSize: 13, fontWeight: 500, color: 'var(--ink)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1,
+              }}>
+                {name}
+              </span>
+              <span style={{ color: 'var(--line)', flexShrink: 0, fontSize: 11 }}>·</span>
+              {/* Ghost unit price input — looks like text, editable on focus */}
+              <input
+                type="number"
+                step="0.01"
+                value={item.price}
+                onChange={e => onUpdatePrice && onUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                title="Unit price (editable)"
+                style={{
+                  width: 52, border: 0, outline: 'none', background: 'transparent',
+                  fontSize: 11.5, color: isDiscounted ? 'var(--accent-ink)' : 'var(--muted)',
+                  textAlign: 'right', flexShrink: 0, ...mono,
+                  textDecoration: isDiscounted ? 'underline dotted' : 'none',
+                }}
+                onFocus={e => {
+                  e.currentTarget.style.color = 'var(--ink)';
+                  e.currentTarget.select();
+                }}
+                onBlur={e => {
+                  e.currentTarget.style.color = isDiscounted ? 'var(--accent-ink)' : 'var(--muted)';
+                }}
+              />
+            </div>
+
+            {/* Subtotal + remove */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', ...mono, minWidth: 60, textAlign: 'right' }}>
+                {subtotal.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <button
+                onClick={() => onRemoveItem(index)}
+                style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: 'var(--faint)', borderRadius: 4, cursor: 'default', flexShrink: 0 }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--danger) 10%, transparent)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--faint)'; e.currentTarget.style.background = 'transparent'; }}
+              >
+                <X size={12} strokeWidth={2.5} />
+              </button>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

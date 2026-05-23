@@ -2,408 +2,434 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, UserPlus, Users, Check, X, Star } from 'lucide-react';
-import { Database } from '../lib/database.types';
+import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { loyaltyService } from '../services';
 
-type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
+type UserProfile = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: 'admin' | 'cashier';
+  active: boolean;
+  created_at: string;
+};
 
-export function Settings() {
-  const { profile, createUser } = useAuth();
+type SectionId = 'account' | 'users' | 'loyalty';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
+function getTone(name: string) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xfffff;
+  return TONES[h % TONES.length];
+}
+function getInitials(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0] ?? '').join('').toUpperCase();
+}
+function fmtJoined(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// ─── Avatar ──────────────────────────────────────────────────────────────
+function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+  const tone = getTone(name);
+  const initials = getInitials(name);
+  const fontSize = size >= 44 ? 15 : size >= 36 ? 13 : 12;
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      background: `linear-gradient(135deg, ${tone}, color-mix(in oklab, ${tone} 65%, #000))`,
+      color: '#fff', display: 'grid', placeItems: 'center',
+      fontWeight: 600, fontSize, letterSpacing: '-0.01em',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18)',
+    }}>{initials}</div>
+  );
+}
+
+// ─── Shared input style ───────────────────────────────────────────────────
+const inputStyle: React.CSSProperties = {
+  width: '100%', height: 38, padding: '0 11px', borderRadius: 8,
+  border: '1px solid var(--line)', background: 'var(--panel-2)',
+  color: 'var(--ink)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box',
+};
+const labelStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginBottom: 6,
+  display: 'block', letterSpacing: '.06em', textTransform: 'uppercase',
+};
+
+// ─── Section: Account ─────────────────────────────────────────────────────
+function AccountSection({ profile }: { profile: UserProfile }) {
   const { showToast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [users, setUsers] = useState<UserProfile[]>([]);
-
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  const [cashierData, setCashierData] = useState({
-    email: '',
-    password: '',
-    fullName: '',
-  });
-
-  const [passwordMessage, setPasswordMessage] = useState('');
-  const [cashierMessage, setCashierMessage] = useState('');
-
-  const [loyaltyEarnRate, setLoyaltyEarnRate] = useState(100);
-  const [loyaltySavingRates, setLoyaltySavingRates] = useState(false);
-
-  useEffect(() => {
-    loadUsers();
-    loyaltyService.getEarnRate().then(setLoyaltyEarnRate).catch(() => {});
-  }, []);
-
-  async function loadUsers() {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error: any) {
-      console.error('Error loading users:', error);
-    }
-  }
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
 
   async function handlePasswordUpdate(e: React.FormEvent) {
     e.preventDefault();
-    setPasswordMessage('');
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordMessage('New passwords do not match');
-      return;
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      setPasswordMessage('Password must be at least 6 characters');
-      return;
-    }
-
-    setLoading(true);
-
+    setErr('');
+    if (newPw.length < 6) { setErr('Password must be at least 6 characters.'); return; }
+    if (newPw !== confirmPw) { setErr('Passwords do not match.'); return; }
+    setSaving(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: newPw });
       if (error) throw error;
-
-      setPasswordMessage('Password updated successfully');
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
-    } catch (error: any) {
-      setPasswordMessage(error.message || 'Failed to update password');
+      setNewPw(''); setConfirmPw('');
+      showToast('Password updated successfully', 'success');
+    } catch (e: any) {
+      setErr(e?.message ?? 'Failed to update password.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
-  async function handleAddCashier(e: React.FormEvent) {
-    e.preventDefault();
-    setCashierMessage('');
+  const pwInput = (value: string, setter: (v: string) => void, show: boolean, toggleShow: () => void, placeholder: string) => (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={e => setter(e.target.value)}
+        placeholder={placeholder}
+        style={{ ...inputStyle, paddingRight: 40 }}
+      />
+      <button type="button" onClick={toggleShow} style={{
+        position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+        border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 2, lineHeight: 0,
+      }}>
+        {show ? <EyeOff size={15} strokeWidth={1.6} /> : <Eye size={15} strokeWidth={1.6} />}
+      </button>
+    </div>
+  );
 
-    if (cashierData.password.length < 6) {
-      setCashierMessage('Password must be at least 6 characters');
-      return;
-    }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      {/* Profile card */}
+      <div className="card" style={{ padding: '22px 24px' }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 16 }}>Profile</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <Avatar name={profile.full_name} size={56} />
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>{profile.full_name}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3 }}>{profile.email}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+                background: profile.role === 'admin' ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+                color: profile.role === 'admin' ? 'var(--accent-ink)' : 'var(--ink-2)',
+                textTransform: 'capitalize',
+              }}>
+                {profile.role === 'admin' && <ShieldCheck size={11} strokeWidth={2} />}
+                {profile.role}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--faint)' }}>Member since {fmtJoined(profile.created_at)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-    setLoading(true);
+      {/* Change password */}
+      <div className="card" style={{ padding: '22px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <KeyRound size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Change Password</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>Set a new password for your account</div>
+          </div>
+        </div>
 
+        <form onSubmit={handlePasswordUpdate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {err && (
+            <div style={{ padding: '10px 13px', borderRadius: 8, background: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)', fontSize: 12.5 }}>
+              {err}
+            </div>
+          )}
+          <div>
+            <label style={labelStyle}>New Password</label>
+            {pwInput(newPw, setNewPw, showNew, () => setShowNew(v => !v), 'Minimum 6 characters')}
+          </div>
+          <div>
+            <label style={labelStyle}>Confirm Password</label>
+            {pwInput(confirmPw, setConfirmPw, showConfirm, () => setShowConfirm(v => !v), 'Repeat new password')}
+          </div>
+          <div>
+            <button type="submit" className="btn btn-primary" style={{ height: 38, fontSize: 13, minWidth: 160 }} disabled={saving}>
+              {saving ? 'Updating…' : 'Update Password'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Section: System Users ────────────────────────────────────────────────
+function UsersSection({ currentUserId }: { currentUserId: string }) {
+  const { showToast } = useToast();
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadUsers() {
+    const { data } = await supabase.from('user_profiles').select('*').order('created_at', { ascending: false });
+    setUsers((data ?? []) as UserProfile[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { loadUsers(); }, []);
+
+  async function toggleStatus(user: UserProfile) {
     try {
-      await createUser(cashierData.email, cashierData.password, cashierData.fullName, 'cashier');
-
-      setCashierMessage('Cashier added successfully');
-      setCashierData({
-        email: '',
-        password: '',
-        fullName: '',
-      });
-      loadUsers();
-    } catch (error: any) {
-      setCashierMessage(error.message || 'Failed to add cashier');
-    } finally {
-      setLoading(false);
+      const { error } = await (supabase.from('user_profiles') as any)
+        .update({ active: !user.active })
+        .eq('id', user.id);
+      if (error) throw error;
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, active: !u.active } : u));
+      showToast(`${user.full_name} ${!user.active ? 'activated' : 'deactivated'}`, 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to update user', 'error');
     }
   }
 
-  async function toggleUserStatus(userId: string, currentStatus: boolean) {
-    try {
-      const { error } = await (supabase
-        .from('user_profiles') as any)
-        .update({ active: !currentStatus })
-        .eq('id', userId);
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading…</div>;
 
-      if (error) throw error;
-      loadUsers();
-      showToast(`User ${!currentStatus ? 'activated' : 'deactivated'} successfully`, 'success');
-    } catch (error: any) {
-      showToast(error.message || 'Failed to update user status', 'error');
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>System Users</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+            {users.length} accounts · {users.filter(u => u.active).length} active
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)' }}>
+          <Users size={14} strokeWidth={1.6} />
+          Manage roles in Sales Staff
+        </div>
+      </div>
+
+      {/* Column headers */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 100px 110px',
+        padding: '9px 22px', gap: 12, background: 'var(--panel-2)',
+        borderBottom: '1px solid var(--line-2)',
+      }}>
+        {['User', 'Role', 'Status', ''].map((h, i) => (
+          <div key={i} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.06em', textTransform: 'uppercase', textAlign: i > 1 ? 'right' : 'left' }}>{h}</div>
+        ))}
+      </div>
+
+      {users.length === 0 ? (
+        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No users found</div>
+      ) : users.map((user, i) => {
+        const isSelf = user.id === currentUserId;
+        return (
+          <div key={user.id} style={{
+            display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 100px 110px',
+            padding: '13px 22px', gap: 12, alignItems: 'center',
+            borderBottom: i < users.length - 1 ? '1px solid var(--line-2)' : 'none',
+          }}>
+            {/* User */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+              <Avatar name={user.full_name} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.full_name}</span>
+                  {isSelf && <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--accent-soft)', color: 'var(--accent-ink)', padding: '1px 6px', borderRadius: 999, flexShrink: 0 }}>You</span>}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2, fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+              </div>
+            </div>
+
+            {/* Role */}
+            <div>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                padding: '3px 9px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+                background: user.role === 'admin' ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+                color: user.role === 'admin' ? 'var(--accent-ink)' : 'var(--ink-2)',
+                textTransform: 'capitalize',
+              }}>
+                {user.role === 'admin' && <ShieldCheck size={10} strokeWidth={2} />}
+                {user.role}
+              </span>
+            </div>
+
+            {/* Status */}
+            <div style={{ textAlign: 'right' }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '3px 9px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+                background: user.active ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+                color: user.active ? 'var(--accent-ink)' : 'var(--muted)',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.active ? 'var(--accent)' : 'var(--faint)', flexShrink: 0 }} />
+                {user.active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+
+            {/* Action */}
+            <div style={{ textAlign: 'right' }}>
+              {!isSelf && (
+                <button onClick={() => toggleStatus(user)} style={{
+                  height: 30, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  border: user.active
+                    ? '1px solid color-mix(in oklab, var(--danger) 35%, var(--line))'
+                    : '1px solid var(--line)',
+                  background: 'transparent',
+                  color: user.active ? 'var(--danger)' : 'var(--accent-ink)',
+                  transition: 'all .12s',
+                }}>
+                  {user.active ? 'Deactivate' : 'Activate'}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Section: Loyalty ─────────────────────────────────────────────────────
+function LoyaltySection() {
+  const { showToast } = useToast();
+  const [earnRate, setEarnRate] = useState(100);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    loyaltyService.getEarnRate().then(r => { setEarnRate(r); setLoaded(true); }).catch(() => setLoaded(true));
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await loyaltyService.setEarnRate(earnRate);
+      showToast('Loyalty settings saved', 'success');
+    } catch {
+      showToast('Failed to save loyalty settings', 'error');
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
-        <p className="text-slate-600 mt-1">Manage your account and system users</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-slate-100 rounded-lg">
-              <KeyRound className="w-6 h-6 text-slate-900" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Update Password</h2>
-              <p className="text-sm text-slate-600">Change your account password</p>
-            </div>
-          </div>
-
-          <form onSubmit={handlePasswordUpdate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                New Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={passwordData.newPassword}
-                onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                required
-                minLength={6}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Enter new password"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Confirm New Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={passwordData.confirmPassword}
-                onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                required
-                minLength={6}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Confirm new password"
-              />
-            </div>
-
-            {passwordMessage && (
-              <div className={`text-sm p-3 rounded-lg ${passwordMessage.includes('success')
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-700'
-                }`}>
-                {passwordMessage}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition disabled:opacity-50"
-            >
-              {loading ? 'Updating...' : 'Update Password'}
-            </button>
-          </form>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-slate-100 rounded-lg">
-              <UserPlus className="w-6 h-6 text-slate-900" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Add Cashier</h2>
-              <p className="text-sm text-slate-600">Create a new cashier account</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleAddCashier} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={cashierData.fullName}
-                onChange={(e) => setCashierData({ ...cashierData, fullName: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Enter full name"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={cashierData.email}
-                onChange={(e) => setCashierData({ ...cashierData, email: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Enter email address"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={cashierData.password}
-                onChange={(e) => setCashierData({ ...cashierData, password: e.target.value })}
-                required
-                minLength={6}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
-                placeholder="Enter password"
-              />
-            </div>
-
-            {cashierMessage && (
-              <div className={`text-sm p-3 rounded-lg ${cashierMessage.includes('success')
-                ? 'bg-green-50 text-green-700'
-                : 'bg-red-50 text-red-700'
-                }`}>
-                {cashierMessage}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition disabled:opacity-50"
-            >
-              {loading ? 'Adding...' : 'Add Cashier'}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-slate-100 rounded-lg">
-            <Users className="w-6 h-6 text-slate-900" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: '22px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', border: '1px solid color-mix(in oklab, var(--warn) 20%, var(--line))', display: 'grid', placeItems: 'center' }}>
+            <Star size={15} style={{ color: 'var(--warn)', fill: 'var(--warn)' }} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">System Users</h2>
-            <p className="text-sm text-slate-600">Manage all system users</p>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Loyalty Points</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>Configure how customers earn and redeem points</div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-200">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">Name</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">Email</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">Role</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-3 px-4 text-sm text-slate-900">{user.full_name}</td>
-                  <td className="py-3 px-4 text-sm text-slate-600">{user.email}</td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700'
-                      }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.active
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-red-100 text-red-700'
-                      }`}>
-                      {user.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    {user.id !== profile?.id && (
-                      <button
-                        onClick={() => toggleUserStatus(user.id, user.active)}
-                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium transition ${user.active
-                          ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                          : 'bg-green-50 text-green-700 hover:bg-green-100'
-                          }`}
-                      >
-                        {user.active ? (
-                          <>
-                            <X className="w-4 h-4" />
-                            Deactivate
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Activate
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 420 }}>
+          <div>
+            <label style={labelStyle}>Earn Rate (LKR per 1 point)</label>
+            <input
+              type="number" min={1} step={1} value={earnRate}
+              onChange={e => setEarnRate(Math.max(1, Number(e.target.value) || 1))}
+              disabled={!loaded}
+              style={inputStyle}
+            />
+          </div>
 
-          {users.length === 0 && (
-            <div className="text-center py-8 text-slate-500">
-              No users found
+          {/* Preview card */}
+          <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Preview</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { spend: 1000, pts: Math.floor(1000 / earnRate) },
+                { spend: 5000, pts: Math.floor(5000 / earnRate) },
+                { spend: 10000, pts: Math.floor(10000 / earnRate) },
+              ].map(({ spend, pts }) => (
+                <div key={spend} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, alignItems: 'center' }}>
+                  <span style={{ color: 'var(--muted)' }}>Spend <span className="num" style={{ color: 'var(--ink)', fontWeight: 500 }}>LKR {spend.toLocaleString()}</span></span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'color-mix(in oklab, var(--warn) 10%, var(--panel))', color: 'var(--warn)', padding: '2px 9px', borderRadius: 999, fontSize: 12, fontWeight: 600 }}>
+                    <Star size={10} strokeWidth={2} fill="currentColor" />
+                    {pts} pts
+                  </span>
+                </div>
+              ))}
             </div>
-          )}
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', paddingTop: 8, borderTop: '1px solid var(--line-2)' }}>
+              1 point = LKR 1 discount at redemption
+            </div>
+          </div>
+
+          <button onClick={handleSave} disabled={saving || !loaded} className="btn btn-primary" style={{ height: 38, fontSize: 13, alignSelf: 'flex-start', minWidth: 160 }}>
+            {saving ? 'Saving…' : 'Save Settings'}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Loyalty Rate Settings */}
-      {profile?.role === 'admin' && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-amber-100 p-2 rounded-lg">
-              <Star className="w-5 h-5 text-amber-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Loyalty Points Settings</h3>
-              <p className="text-sm text-slate-500">Configure how customers earn loyalty points</p>
-            </div>
-          </div>
+// ─── Main component ───────────────────────────────────────────────────────
+export function Settings() {
+  const { profile } = useAuth();
+  const [section, setSection] = useState<SectionId>('account');
 
-          <div className="space-y-4 max-w-sm">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Earn Rate (LKR per 1 point)
-              </label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={loyaltyEarnRate}
-                onChange={(e) => setLoyaltyEarnRate(Number(e.target.value) || 1)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Customer earns 1 point for every LKR {loyaltyEarnRate} spent. 1 point = LKR 1 off at redemption.
-              </p>
-            </div>
+  if (!profile) return null;
 
-            <button
-              disabled={loyaltySavingRates}
-              onClick={async () => {
-                setLoyaltySavingRates(true);
-                try {
-                  await loyaltyService.setEarnRate(loyaltyEarnRate);
-                  showToast('Loyalty rate updated', 'success');
-                } catch {
-                  showToast('Failed to update loyalty rate', 'error');
-                } finally {
-                  setLoyaltySavingRates(false);
-                }
+  const isAdmin = profile.role === 'admin';
+
+  const NAV: { id: SectionId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
+    { id: 'account', label: 'Account', icon: <KeyRound size={15} strokeWidth={1.7} /> },
+    { id: 'users', label: 'System Users', icon: <Users size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
+  ].filter(n => !n.adminOnly || isAdmin);
+
+  return (
+    <div style={{ padding: '0 24px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Header */}
+      <div style={{ padding: '24px 0 0' }}>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Settings</h1>
+        <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>Manage your account, users, and store configuration</p>
+      </div>
+
+      {/* Layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(0, 1fr)', gap: 'var(--gap)', alignItems: 'start' }}>
+        {/* Sidebar nav */}
+        <div className="card" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {NAV.map(n => {
+            const isA = section === n.id;
+            return (
+              <button key={n.id} onClick={() => setSection(n.id)} style={{
+                width: '100%', textAlign: 'left', padding: '9px 12px',
+                borderRadius: 7, border: 0, cursor: 'pointer',
+                background: isA ? 'var(--accent-soft)' : 'transparent',
+                color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
+                fontSize: 13, fontWeight: isA ? 600 : 500,
+                display: 'flex', alignItems: 'center', gap: 9,
+                transition: 'background .1s',
               }}
-              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition disabled:opacity-50 font-medium"
-            >
-              {loyaltySavingRates ? 'Saving...' : 'Save Loyalty Settings'}
-            </button>
-          </div>
+                onMouseEnter={e => { if (!isA) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                onMouseLeave={e => { if (!isA) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <span style={{ opacity: isA ? 1 : 0.7 }}>{n.icon}</span>
+                {n.label}
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        {/* Section content */}
+        <div>
+          {section === 'account' && <AccountSection profile={profile as UserProfile} />}
+          {section === 'users' && isAdmin && <UsersSection currentUserId={profile.id} />}
+          {section === 'loyalty' && isAdmin && <LoyaltySection />}
+        </div>
+      </div>
     </div>
   );
 }

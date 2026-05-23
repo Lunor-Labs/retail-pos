@@ -101,7 +101,7 @@ function RevenueChart({ data, period, onPeriod }: { data: { name: string; revenu
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)' }}>
+      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)', flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h3>Revenue &amp; Cost</h3>
           <div className="sub" style={{ marginTop: 2 }}>Sales performance over time</div>
@@ -606,7 +606,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
 
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', paddingBottom: 4 }}>
+      <div className="dash-header" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap', paddingBottom: 4 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
             Good morning, {firstName}
@@ -640,23 +640,19 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       </div>
 
       {/* Revenue chart + Top sellers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 'var(--gap)' }}>
-        <div style={{ minWidth: 0 }}>
-          <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} />
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <TopSellers items={topSellers} />
-        </div>
+      <div className="dash-grid">
+        <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} />
+        <TopSellers items={topSellers} />
       </div>
 
       {/* Invoices + Stock alerts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 'var(--gap)' }}>
+      <div className="dash-grid">
         <RecentInvoices items={recentSales} onViewAll={() => onNavigate?.('sales-history')} />
         <StockAlerts lowItems={lowStockItems} outItems={outOfStockItems} variantItems={variantLowStockItems} onNavigate={(f) => onFilterNavigate?.(f)} />
       </div>
 
       {/* Staff leaderboard + Activity feed */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 'var(--gap)' }}>
+      <div className="dash-grid">
         <StaffLeaderboard staff={staffList} />
         <ActivityFeed items={activityItems} />
       </div>

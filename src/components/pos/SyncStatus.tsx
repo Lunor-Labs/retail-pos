@@ -3,50 +3,54 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../lib/db';
 import { useState, useEffect } from 'react';
 
+const pill: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '5px 12px', borderRadius: 999,
+  fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap',
+};
+
 export function SyncStatus() {
-    const [isOnline, setIsOnline] = useState(navigator.onLine);
-    const pendingSalesCount = useLiveQuery(() => db.offline_sales.where('status').equals('pending').count());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const pendingSalesCount = useLiveQuery(() => db.offline_sales.where('status').equals('pending').count());
 
-    useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, []);
-
-    if (!isOnline) {
-        return (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-700 rounded-full border border-red-200 text-sm font-medium animate-pulse">
-                <CloudOff className="w-4 h-4" />
-                <span>Offline</span>
-                {pendingSalesCount && pendingSalesCount > 0 ? (
-                    <span className="bg-red-600 text-white px-2 py-0.5 rounded-full text-xs ml-1">
-                        {pendingSalesCount} pending
-                    </span>
-                ) : null}
-            </div>
-        );
-    }
-
-    if (pendingSalesCount && pendingSalesCount > 0) {
-        return (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full border border-amber-200 text-sm font-medium">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Syncing {pendingSalesCount} sales...</span>
-            </div>
-        );
-    }
-
+  if (!isOnline) {
     return (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-200 text-sm font-medium">
-            <Cloud className="w-4 h-4" />
-            <span>System Synced</span>
-        </div>
+      <div style={{ ...pill, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 25%, transparent)', color: 'var(--danger)' }}>
+        <CloudOff size={14} strokeWidth={1.8} />
+        <span>Offline</span>
+        {pendingSalesCount && pendingSalesCount > 0 ? (
+          <span style={{ background: 'var(--danger)', color: '#fff', padding: '1px 7px', borderRadius: 999, fontSize: 11 }}>
+            {pendingSalesCount} pending
+          </span>
+        ) : null}
+      </div>
     );
+  }
+
+  if (pendingSalesCount && pendingSalesCount > 0) {
+    return (
+      <div style={{ ...pill, background: 'color-mix(in srgb, var(--warn) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 25%, transparent)', color: 'var(--warn)' }}>
+        <RefreshCw size={14} strokeWidth={1.8} style={{ animation: 'spin 1s linear infinite' }} />
+        <span>Syncing {pendingSalesCount}…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...pill, background: 'color-mix(in srgb, var(--accent) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)', color: 'var(--accent-ink)' }}>
+      <Cloud size={14} strokeWidth={1.8} />
+      <span>Synced</span>
+    </div>
+  );
 }
