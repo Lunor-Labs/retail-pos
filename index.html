@@ -6,6 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RIVONLAK — Retail POS</title>
     <meta name="description" content="RIVONLAK Retail Point of Sale — inventory, sales, and customer management." />
+    <!-- Prevent iOS auto-zoom on input focus (triggered when font-size < 16px) -->
+    <style>
+      @media (max-width: 767px) {
+        input, select, textarea { font-size: 16px !important; }
+      }
+    </style>
 
     <!-- Open Graph (og:image must be absolute URL for WhatsApp/social crawlers) -->
     <meta property="og:type" content="website" />

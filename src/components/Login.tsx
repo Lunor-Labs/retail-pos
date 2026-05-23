@@ -26,11 +26,11 @@ export function Login() {
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    height: 42,
+    height: 44,
     padding: '0 12px',
     border: '1px solid var(--line)',
     borderRadius: 10,
-    fontSize: 14,
+    fontSize: 16,
     color: 'var(--ink)',
     background: 'var(--panel)',
     outline: 'none',
