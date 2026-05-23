@@ -81,7 +81,7 @@ export function Login() {
             <img src={logo} alt="RIVONLAK" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }} />
             <div>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>RIVONLAK</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>Motors & Auto Parts</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>Clothing Retail Shop</div>
             </div>
           </div>
 
@@ -113,7 +113,7 @@ export function Login() {
             <img src={logo} alt="RIVONLAK" style={{ width: 40, height: 40, borderRadius: 9, objectFit: 'cover' }} />
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.01em' }}>RIVONLAK</div>
-              <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Motors & Auto Parts</div>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Clothing Retail Shop</div>
             </div>
           </div>
 
