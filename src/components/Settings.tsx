@@ -212,12 +212,8 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
         </div>
       </div>
 
-      {/* Column headers */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 100px 110px',
-        padding: '9px 22px', gap: 12, background: 'var(--panel-2)',
-        borderBottom: '1px solid var(--line-2)',
-      }}>
+      {/* Column headers — desktop only */}
+      <div className="settings-user-row settings-col-header" style={{ background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)' }}>
         {['User', 'Role', 'Status', ''].map((h, i) => (
           <div key={i} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.06em', textTransform: 'uppercase', textAlign: i > 1 ? 'right' : 'left' }}>{h}</div>
         ))}
@@ -227,12 +223,31 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
         <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>No users found</div>
       ) : users.map((user, i) => {
         const isSelf = user.id === currentUserId;
-        return (
-          <div key={user.id} style={{
-            display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 90px 100px 110px',
-            padding: '13px 22px', gap: 12, alignItems: 'center',
-            borderBottom: i < users.length - 1 ? '1px solid var(--line-2)' : 'none',
+        const roleChip = (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+            background: user.role === 'admin' ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+            color: user.role === 'admin' ? 'var(--accent-ink)' : 'var(--ink-2)',
+            textTransform: 'capitalize',
           }}>
+            {user.role === 'admin' && <ShieldCheck size={10} strokeWidth={2} />}
+            {user.role}
+          </span>
+        );
+        const statusChip = (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+            background: user.active ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+            color: user.active ? 'var(--accent-ink)' : 'var(--muted)',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: user.active ? 'var(--accent)' : 'var(--faint)', flexShrink: 0 }} />
+            {user.active ? 'Active' : 'Inactive'}
+          </span>
+        );
+        return (
+          <div key={user.id} className="settings-user-row" style={{ borderBottom: i < users.length - 1 ? '1px solid var(--line-2)' : 'none' }}>
             {/* User */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
               <Avatar name={user.full_name} size={34} />
@@ -242,35 +257,16 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
                   {isSelf && <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--accent-soft)', color: 'var(--accent-ink)', padding: '1px 6px', borderRadius: 999, flexShrink: 0 }}>You</span>}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2, fontFamily: "'JetBrains Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+                {/* Chips visible on mobile only */}
+                <div className="settings-user-chips">{roleChip}{statusChip}</div>
               </div>
             </div>
 
-            {/* Role */}
-            <div>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '3px 9px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
-                background: user.role === 'admin' ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
-                color: user.role === 'admin' ? 'var(--accent-ink)' : 'var(--ink-2)',
-                textTransform: 'capitalize',
-              }}>
-                {user.role === 'admin' && <ShieldCheck size={10} strokeWidth={2} />}
-                {user.role}
-              </span>
-            </div>
+            {/* Role — desktop only */}
+            <div className="settings-col-role">{roleChip}</div>
 
-            {/* Status */}
-            <div style={{ textAlign: 'right' }}>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '3px 9px', borderRadius: 999, fontSize: 11.5, fontWeight: 600,
-                background: user.active ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
-                color: user.active ? 'var(--accent-ink)' : 'var(--muted)',
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: user.active ? 'var(--accent)' : 'var(--faint)', flexShrink: 0 }} />
-                {user.active ? 'Active' : 'Inactive'}
-              </span>
-            </div>
+            {/* Status — desktop only */}
+            <div className="settings-col-status" style={{ textAlign: 'right' }}>{statusChip}</div>
 
             {/* Action */}
             <div style={{ textAlign: 'right' }}>
@@ -282,7 +278,7 @@ function UsersSection({ currentUserId }: { currentUserId: string }) {
                     : '1px solid var(--line)',
                   background: 'transparent',
                   color: user.active ? 'var(--danger)' : 'var(--accent-ink)',
-                  transition: 'all .12s',
+                  transition: 'all .12s', whiteSpace: 'nowrap',
                 }}>
                   {user.active ? 'Deactivate' : 'Activate'}
                 </button>
@@ -390,22 +386,22 @@ export function Settings() {
   ].filter(n => !n.adminOnly || isAdmin);
 
   return (
-    <div style={{ padding: '0 24px 40px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+    <div className="sh-outer" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Header */}
-      <div style={{ padding: '24px 0 0' }}>
+      <div style={{ paddingTop: 24 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Settings</h1>
         <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>Manage your account, users, and store configuration</p>
       </div>
 
       {/* Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(0, 1fr)', gap: 'var(--gap)', alignItems: 'start' }}>
-        {/* Sidebar nav */}
-        <div className="card" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div className="settings-layout">
+        {/* Nav */}
+        <div className="card settings-nav">
           {NAV.map(n => {
             const isA = section === n.id;
             return (
               <button key={n.id} onClick={() => setSection(n.id)} style={{
-                width: '100%', textAlign: 'left', padding: '9px 12px',
+                textAlign: 'left', padding: '9px 12px',
                 borderRadius: 7, border: 0, cursor: 'pointer',
                 background: isA ? 'var(--accent-soft)' : 'transparent',
                 color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
