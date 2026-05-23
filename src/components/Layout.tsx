@@ -25,7 +25,9 @@ interface LayoutProps {
   onNavigate: (view: string) => void;
 }
 
-const NAV_GROUPS = [
+type NavItem = { id: string; label: string; Icon: React.ElementType; roles: string[]; desktopOnly?: boolean };
+
+const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
     items: [
@@ -35,7 +37,7 @@ const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
-      { id: 'pos',      label: 'Point of Sale', Icon: ShoppingCart, roles: ['admin', 'cashier'] },
+      { id: 'pos',      label: 'Point of Sale', Icon: ShoppingCart, roles: ['admin', 'cashier'], desktopOnly: true },
       { id: 'products', label: 'Products',       Icon: Package,     roles: ['admin', 'cashier'] },
       { id: 'returns',  label: 'Returns',        Icon: RotateCcw,   roles: ['admin', 'cashier'] },
     ],
@@ -145,6 +147,7 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
                     <button
                       key={item.id}
                       onClick={() => { onNavigate(item.id); setSidebarOpen(false); }}
+                      className={item.desktopOnly ? 'nav-desktop-only' : ''}
                       style={{
                         width: '100%',
                         display: 'flex',
