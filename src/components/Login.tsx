@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import loginImage from '../assets/login.jpg';
+import loginBg from '../assets/login_bg.mp4';
+import loginImage from '../assets/login-new.jpg';
 import logo from '../assets/revonlak.jpeg';
 
 export function Login() {
@@ -9,12 +10,12 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       await signIn(email, password);
     } catch (err: any) {
@@ -24,145 +25,197 @@ export function Login() {
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    height: 42,
+    padding: '0 12px',
+    border: '1px solid var(--line)',
+    borderRadius: 10,
+    fontSize: 14,
+    color: 'var(--ink)',
+    background: 'var(--panel)',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color .15s',
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 overflow-hidden bg-slate-900 relative">
-      {/* Background Video */}
-      {/* <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover"
-      >
-        <source src={loginBg} type="video/mp4" />
-      </video> */}
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#0E0F12' }}>
 
-      {/* Dark Overlay */}
-      <div className="absolute inset-0 bg-black/40"></div>
+      {/* ── Left brand panel ───────────────────────────────── */}
+      <div style={{
+        display: 'none',
+        position: 'relative',
+        overflow: 'hidden',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        padding: '40px 44px',
+        flex: '0 0 52%',
+      }} className="login-left">
 
-      {/* Main Container */}
-      <div className="relative z-10 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden w-full max-w-6xl border-4 border-white">
-        <div className="grid grid-cols-1 lg:grid-cols-2">
-          {/* Left Column - Image, Logo & Quote */}
-          <div className="hidden lg:flex flex-col justify-between p-12 relative overflow-hidden">
-            {/* Background Image - Full Fill */}
-            <div className="absolute inset-0 z-0">
-              <img
-                src={loginImage}
-                alt="Adventure"
-                className="w-full h-full object-cover blur-sm"
-              />
-            </div>
+        {/* Background video, fallback to image */}
+        <video
+          autoPlay loop muted playsInline
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => { (e.target as HTMLVideoElement).style.display = 'none'; }}
+        >
+          <source src={loginBg} type="video/mp4" />
+        </video>
+        <img
+          src={loginImage}
+          alt=""
+          aria-hidden
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+        />
 
-            {/* Content */}
-            <div className="relative z-10 flex flex-col justify-between h-full">
-              <div className="flex items-center gap-3">
-                <img
-                  src={logo}
-                  alt="RIVONLAK Logo"
-                  className="w-12 h-12 rounded-lg object-cover"
-                />
-                <div>
-                  <h2 className="text-2xl font-bold text-white">RIVONLAK</h2>
-                  <p className="text-sm text-white/80">Fashion Retail POS</p>
-                </div>
-              </div>
+        {/* Gradient overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(160deg, rgba(10,12,14,0.72) 0%, rgba(10,12,14,0.45) 50%, rgba(10,12,14,0.8) 100%)',
+        }} />
 
-              <div className="text-white space-y-3">
-                <p className="text-4xl font-bold leading-tight">
-                  YOUR STYLE <br />
-                  STARTS <br />
-                  HERE!
-                </p>
-                <p className="text-white/80 text-sm leading-relaxed">
-                  Log in to manage your fashion inventory, track sales, and grow your retail business with RIVONLAK POS.
-                </p>
-              </div>
+        {/* Content */}
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <img src={logo} alt="RIVONLAK" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }} />
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em' }}>RIVONLAK</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>Motors & Auto Parts</div>
             </div>
           </div>
 
-          {/* Right Column - Login Form */}
-          <div className="flex flex-col items-center justify-center p-8 lg:p-12">
-            {/* Mobile Logo */}
-            <div className="lg:hidden flex justify-center mb-6">
-              <img
-                src={logo}
-                alt="RIVONLAK Logo"
-                className="w-14 h-14 rounded-lg object-cover"
-              />
-            </div>
-
-            <div className="w-full max-w-sm">
-              <h1 className="text-3xl lg:text-4xl font-bold text-center text-slate-900 mb-2">
-                WELCOME BACK!
-              </h1>
-              <p className="text-center text-slate-600 mb-8">
-                Welcome back! Please enter your details.
-              </p>
-
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
-                    Email
-                  </label>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-600 focus:border-transparent outline-none transition text-slate-900 placeholder-slate-500"
-                    placeholder="Enter your email"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
-                    Password
-                  </label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-600 focus:border-transparent outline-none transition text-slate-900 placeholder-slate-500"
-                    placeholder="••••••••"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between text-sm">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300" />
-                    <span className="text-slate-600">Remember me</span>
-                  </label>
-                  <a href="#" className="text-teal-600 hover:text-teal-700 font-medium">
-                    Forgot password?
-                  </a>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-teal-700 text-white py-2.5 rounded-lg hover:bg-teal-800 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold mt-6"
-                >
-                  {loading ? 'Signing in...' : 'Sign in'}
-                </button>
-              </form>
-
-              <div className="mt-6 pt-6 border-t border-slate-200 text-center text-xs text-slate-600">
-                <p>Demo credentials: <strong>admin@gasith.lk</strong> / <strong>gasith@123</strong></p>
-              </div>
-            </div>
+          {/* Tagline */}
+          <div>
+            <p style={{ fontSize: 38, fontWeight: 800, color: '#fff', lineHeight: 1.15, letterSpacing: '-0.03em', marginBottom: 16 }}>
+              Drive your<br />business<br />forward.
+            </p>
+            <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, maxWidth: 340 }}>
+              Manage inventory, process sales, and track performance — all from one place.
+            </p>
           </div>
         </div>
       </div>
+
+      {/* ── Right form panel ───────────────────────────────── */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '32px 24px',
+        background: 'var(--bg)',
+      }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+
+          {/* Mobile logo */}
+          <div className="login-mobile-logo" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
+            <img src={logo} alt="RIVONLAK" style={{ width: 40, height: 40, borderRadius: 9, objectFit: 'cover' }} />
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.01em' }}>RIVONLAK</div>
+              <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>Motors & Auto Parts</div>
+            </div>
+          </div>
+
+          {/* Heading */}
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.02em', marginBottom: 6 }}>
+            Welcome back
+          </h1>
+          <p style={{ fontSize: 13.5, color: 'var(--muted)', marginBottom: 28 }}>
+            Sign in to your account to continue.
+          </p>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: 'var(--danger-soft)', border: '1px solid rgba(176,52,31,0.2)',
+              color: 'var(--danger)', borderRadius: 9, padding: '10px 14px',
+              fontSize: 13, marginBottom: 18,
+            }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Email */}
+            <div>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)', marginBottom: 6 }}>
+                Email address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--line)')}
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-2)' }}>
+                  Password
+                </label>
+                <button
+                  type="button"
+                  style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
+                  onClick={() => setShowPw(v => !v)}
+                >
+                  {showPw ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--line)')}
+              />
+            </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary"
+              style={{
+                width: '100%', height: 44, borderRadius: 10, marginTop: 4,
+                fontSize: 14.5, fontWeight: 700, letterSpacing: '-0.01em',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                border: 'none',
+                justifyContent: 'center',
+              }}
+            >
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+
+          {/* Demo credentials */}
+          <div style={{
+            marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--line)',
+            fontSize: 12, color: 'var(--muted)', textAlign: 'center', lineHeight: 1.7,
+          }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink-2)' }}>admin@chameera.lk</span>
+            {' '}·{' '}
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink-2)' }}>admin@123</span>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @media (min-width: 768px) {
+          .login-left { display: flex !important; }
+          .login-mobile-logo { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
