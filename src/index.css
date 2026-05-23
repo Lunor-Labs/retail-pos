@@ -219,6 +219,9 @@ html, body {
 .dash-mobile-hero { display: block; }
 @media (min-width: 640px) { .dash-mobile-hero { display: none; } }
 
+/* Desktop-only nav items (e.g. POS) */
+@media (max-width: 1023px) { .nav-desktop-only { display: none !important; } }
+
 /* ── Sales History split layout ─────────────────────────── */
 .sh-outer { padding: 0 16px 32px; }
 @media (min-width: 640px) { .sh-outer { padding: 0 24px 32px; } }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Login } from './components/Login';
 import { Layout } from './components/Layout';
@@ -25,6 +25,18 @@ function AppContent() {
     setInitialStockFilter(filter);
     setCurrentView(view);
   };
+
+  // Redirect away from POS on mobile (< 1024px)
+  useEffect(() => {
+    const check = () => {
+      if (window.innerWidth < 1024 && currentView === 'pos') {
+        setCurrentView('dashboard');
+      }
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [currentView]);
 
   if (loading) {
     return (
