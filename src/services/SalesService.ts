@@ -602,8 +602,12 @@ export class SalesService {
     async getPendingReturnsCount(): Promise<number> {
         try {
             const adapter = (this.saleRepo as any).adapter;
+            const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
             const returns = await adapter.query('returns', {
-                where: [{ field: 'status', operator: '=', value: 'pending' }]
+                where: [
+                    { field: 'status', operator: '=', value: 'pending' },
+                    { field: 'created_at', operator: '>=', value: todayStart.toISOString() },
+                ]
             });
             return returns.length;
         } catch (error) {
