@@ -19,6 +19,8 @@ export const purchaseOrderService = new PurchaseOrderService(purchaseOrderReposi
 export const returnService = new ReturnService(returnRepository, productService, customerService);
 export const variantService = new VariantService(variantRepository);
 export const loyaltyService = new LoyaltyService(loyaltyRepository);
+export { referenceDataService } from './ReferenceDataService';
+export type { RefType, ReferenceItem } from './ReferenceDataService';
 
 // Export service classes for testing
 export { ProductService, SalesService, InventoryService, CustomerService, SupplierService, PurchaseOrderService, ReturnService, VariantService, LoyaltyService };

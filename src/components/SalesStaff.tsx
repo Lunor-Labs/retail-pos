@@ -1,21 +1,24 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users } from 'lucide-react';
+import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check } from 'lucide-react';
 import { salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from './ui';
 import { supabase } from '../lib/supabase';
 
-type UserProfile = {
+type StaffRole = 'admin' | 'cashier' | 'stock_manager' | 'staff';
+type StaffSource = 'profile' | 'member';
+
+interface StaffMember {
   id: string;
   email: string;
   full_name: string;
-  role: 'admin' | 'cashier';
+  role: StaffRole;
   active: boolean;
+  daily_target: number;
   created_at: string;
-};
-
-interface StaffMember extends UserProfile {
+  source: StaffSource;
+  // enriched
   initials: string;
   tone: string;
   today: { sales: number; revenue: number };
@@ -43,6 +46,12 @@ function fmtK(n: number) {
 function fmtJoined(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
+const ROLE_LABEL: Record<StaffRole, string> = {
+  admin: 'Admin',
+  cashier: 'Cashier',
+  stock_manager: 'Stock Manager',
+  staff: 'Staff',
+};
 
 // ─── Avatar ──────────────────────────────────────────────────────────────
 function Avatar({ initials, tone, size = 40, active }: { initials: string; tone: string; size?: number; active?: boolean }) {
@@ -103,40 +112,38 @@ function StaffModal({ mode, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { createUser } = useAuth();
   const { showToast } = useToast();
   const isAdd = mode.kind === 'add';
 
   const [fullName, setFullName] = useState(isAdd ? '' : mode.member.full_name);
-  const [email] = useState(isAdd ? '' : mode.member.email);
   const [emailInput, setEmailInput] = useState(isAdd ? '' : mode.member.email);
-  const [role, setRole] = useState<'admin' | 'cashier'>(isAdd ? 'cashier' : mode.member.role);
   const [active, setActive] = useState(isAdd ? true : mode.member.active);
-  const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   async function handleSave() {
     setErr('');
     if (!fullName.trim()) { setErr('Full name is required.'); return; }
-    if (isAdd) {
-      if (!emailInput.trim()) { setErr('Email is required.'); return; }
-      if (password.length < 6) { setErr('Password must be at least 6 characters.'); return; }
-    }
+    if (isAdd && !emailInput.trim()) { setErr('Email is required.'); return; }
     setSaving(true);
     try {
       if (isAdd) {
-        await createUser(emailInput.trim(), password, fullName.trim(), role);
-      } else {
-        const { error } = await supabase
-          .from('user_profiles')
-          .update({ full_name: fullName.trim(), role, active } as any)
-          .eq('id', (mode as { kind: 'edit'; member: StaffMember }).member.id);
+        const { error } = await (supabase.from('staff_members') as any)
+          .insert({ full_name: fullName.trim(), email: emailInput.trim().toLowerCase(), active: true });
         if (error) throw error;
+        showToast(`${fullName.trim()} added to staff`, 'success');
+        onSaved();
+        onClose();
+      } else {
+        const table = mode.member.source === 'member' ? 'staff_members' : 'user_profiles';
+        const { error } = await (supabase.from(table) as any)
+          .update({ full_name: fullName.trim(), active })
+          .eq('id', mode.member.id);
+        if (error) throw error;
+        showToast('Staff member updated', 'success');
+        onSaved();
+        onClose();
       }
-      showToast(isAdd ? 'Staff member added' : 'Staff member updated', 'success');
-      onSaved();
-      onClose();
     } catch (e: any) {
       setErr(e?.message ?? 'An error occurred.');
     } finally {
@@ -185,45 +192,37 @@ function StaffModal({ mode, onClose, onSaved }: {
           </div>
           <div>
             <label style={labelStyle}>Email</label>
-            <input value={isAdd ? emailInput : email} onChange={e => isAdd && setEmailInput(e.target.value)}
+            <input value={emailInput} onChange={e => isAdd && setEmailInput(e.target.value)}
               placeholder="e.g. kasun@example.com" type="email" disabled={!isAdd}
               style={{ ...inputStyle, opacity: isAdd ? 1 : 0.6 }} />
           </div>
-          {isAdd && (
-            <div>
-              <label style={labelStyle}>Password</label>
-              <input style={inputStyle} value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters" type="password" />
-            </div>
-          )}
-          <div>
-            <label style={labelStyle}>Role</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(['cashier', 'admin'] as const).map(r => (
-                <button key={r} onClick={() => setRole(r)} style={{
-                  flex: 1, height: 36, borderRadius: 7,
-                  border: role === r ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                  background: role === r ? 'var(--accent-soft)' : 'var(--panel-2)',
-                  color: role === r ? 'var(--accent-ink)' : 'var(--ink-2)',
-                  fontSize: 13, fontWeight: role === r ? 600 : 500, cursor: 'pointer', textTransform: 'capitalize',
-                }}>{r}</button>
-              ))}
-            </div>
-          </div>
           {!isAdd && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
-              <span style={{ fontSize: 13, color: 'var(--ink)' }}>Active account</span>
-              <button onClick={() => setActive(v => !v)} style={{
-                width: 40, height: 22, borderRadius: 99, border: 0, cursor: 'pointer',
-                background: active ? 'var(--accent)' : 'var(--faint)',
-                position: 'relative', transition: 'background .15s',
-              }}>
-                <span style={{
-                  position: 'absolute', top: 3, left: active ? 21 : 3,
-                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                  transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-                }} />
-              </button>
+            <>
+              <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--muted)' }}>
+                {mode.member.source === 'member'
+                  ? 'To give system access, use Settings → Staff Access.'
+                  : <>Role is managed in <strong style={{ color: 'var(--ink-2)' }}>Settings → Staff Access</strong></>
+                }
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+                <span style={{ fontSize: 13, color: 'var(--ink)' }}>Active</span>
+                <button onClick={() => setActive(v => !v)} style={{
+                  width: 40, height: 22, borderRadius: 99, border: 0, cursor: 'pointer',
+                  background: active ? 'var(--accent)' : 'var(--faint)',
+                  position: 'relative', transition: 'background .15s',
+                }}>
+                  <span style={{
+                    position: 'absolute', top: 3, left: active ? 21 : 3,
+                    width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                    transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                  }} />
+                </button>
+              </div>
+            </>
+          )}
+          {isAdd && (
+            <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Added as <strong style={{ color: 'var(--ink-2)' }}>Staff</strong> — no system login. Upgrade to Cashier or Stock Manager in Settings → Staff Access.
             </div>
           )}
         </div>
@@ -240,7 +239,47 @@ function StaffModal({ mode, onClose, onSaved }: {
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────
-function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: () => void; onBack: () => void }) {
+function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved }: {
+  member: StaffMember;
+  isAdmin: boolean;
+  onEdit: () => void;
+  onBack: () => void;
+  onTargetSaved: (id: string, target: number) => void;
+}) {
+  const { showToast } = useToast();
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetInput, setTargetInput] = useState(member.daily_target.toString());
+  const [savingTarget, setSavingTarget] = useState(false);
+
+  useEffect(() => {
+    setTargetInput(member.daily_target.toString());
+    setEditingTarget(false);
+  }, [member.id]);
+
+  async function saveTarget() {
+    const val = Math.max(0, Number(targetInput) || 0);
+    setSavingTarget(true);
+    try {
+      const table = member.source === 'member' ? 'staff_members' : 'user_profiles';
+      const { error } = await (supabase.from(table) as any)
+        .update({ daily_target: val })
+        .eq('id', member.id);
+      if (error) throw error;
+      onTargetSaved(member.id, val);
+      setEditingTarget(false);
+      showToast('Daily target updated', 'success');
+    } catch {
+      showToast('Failed to update target', 'error');
+    } finally {
+      setSavingTarget(false);
+    }
+  }
+
+  const targetPct = member.daily_target > 0
+    ? Math.min(100, (member.today.revenue / member.daily_target) * 100)
+    : 0;
+  const targetMet = member.daily_target > 0 && member.today.revenue >= member.daily_target;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)', padding: '0 0 24px' }}>
       <button className="sh-back" onClick={onBack} style={{
@@ -249,6 +288,7 @@ function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: 
       }}>
         <ChevronLeft size={18} strokeWidth={2} /> Back to Staff
       </button>
+
       {/* Identity card */}
       <div className="card" style={{ padding: '20px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -256,23 +296,39 @@ function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: 
             <Avatar initials={member.initials} tone={member.tone} size={52} active={member.isActiveToday} />
             <div>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>{member.full_name}</h2>
-              <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3, textTransform: 'capitalize' }}>{member.role}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                  background: member.role === 'admin' ? 'var(--accent-soft)' : member.role === 'staff' ? 'rgba(20,22,26,0.06)' : 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))',
+                  color: member.role === 'admin' ? 'var(--accent-ink)' : member.role === 'staff' ? 'var(--ink-2)' : 'var(--warn)',
+                }}>
+                  {ROLE_LABEL[member.role]}
+                </span>
+                {!member.active && (
+                  <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: 'rgba(20,22,26,0.06)', color: 'var(--muted)' }}>Inactive</span>
+                )}
+              </div>
               <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 4 }}>Joined {fmtJoined(member.created_at)}</div>
             </div>
           </div>
-          <button onClick={onEdit} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px',
-            border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel-2)',
-            color: 'var(--ink-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
-          }}>
-            <Pencil size={12} strokeWidth={1.7} /> Edit
-          </button>
+          {isAdmin && (
+            <button onClick={onEdit} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px',
+              border: '1px solid var(--line)', borderRadius: 7, background: 'var(--panel-2)',
+              color: 'var(--ink-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+            }}>
+              <Pencil size={12} strokeWidth={1.7} /> Edit
+            </button>
+          )}
         </div>
 
         <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--line-2)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--ink-2)' }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Email</span>
-            <a href={`mailto:${member.email}`} style={{ color: 'var(--accent-ink)', textDecoration: 'none' }}>{member.email}</a>
+            {member.email
+              ? <a href={`mailto:${member.email}`} style={{ color: 'var(--accent-ink)', textDecoration: 'none' }}>{member.email}</a>
+              : <span style={{ color: 'var(--faint)' }}>—</span>
+            }
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Status</span>
@@ -284,6 +340,82 @@ function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: 
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Daily target */}
+      <div className="card" style={{ padding: '16px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Target size={14} style={{ color: 'var(--muted)' }} strokeWidth={1.7} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.03em', textTransform: 'uppercase' }}>Daily Target</span>
+          </div>
+          {isAdmin && !editingTarget && (
+            <button onClick={() => { setTargetInput(member.daily_target.toString()); setEditingTarget(true); }} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px',
+              border: '1px solid var(--line)', borderRadius: 6, background: 'transparent',
+              color: 'var(--ink-2)', fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+            }}>
+              <Pencil size={11} strokeWidth={1.7} /> {member.daily_target > 0 ? 'Edit' : 'Set target'}
+            </button>
+          )}
+        </div>
+
+        {editingTarget ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, height: 36, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
+              <span style={{ padding: '0 10px', fontSize: 12.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: '100%', display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input
+                type="number" min={0} step={1000}
+                value={targetInput}
+                onChange={e => setTargetInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveTarget(); if (e.key === 'Escape') setEditingTarget(false); }}
+                autoFocus
+                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', padding: '0 10px', fontSize: 13, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace" }}
+              />
+            </div>
+            <button onClick={saveTarget} disabled={savingTarget} style={{
+              width: 36, height: 36, borderRadius: 7, border: 0, background: 'var(--accent)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0,
+            }}>
+              <Check size={15} strokeWidth={2.5} />
+            </button>
+            <button onClick={() => setEditingTarget(false)} style={{
+              width: 36, height: 36, borderRadius: 7, border: '1px solid var(--line)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0,
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+        ) : member.daily_target > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span className="num" style={{ fontSize: 18, fontWeight: 600, color: targetMet ? 'var(--accent-ink)' : 'var(--ink)', letterSpacing: '-0.02em' }}>
+                  {fmtLKR(member.today.revenue)}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>of {fmtLKR(member.daily_target)}</span>
+              </div>
+              <span style={{
+                fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace",
+                color: targetMet ? 'var(--accent-ink)' : targetPct >= 70 ? 'var(--warn)' : 'var(--muted)',
+              }}>{targetPct.toFixed(0)}%</span>
+            </div>
+            <div style={{ height: 6, background: 'var(--line-2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                width: targetPct + '%', height: '100%', borderRadius: 3,
+                background: targetMet ? 'var(--accent)' : targetPct >= 70 ? 'var(--warn)' : 'var(--accent)',
+                transition: 'width .3s',
+              }} />
+            </div>
+            {targetMet && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--accent-ink)', fontWeight: 600 }}>
+                <Check size={12} strokeWidth={2.5} /> Target achieved
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--faint)' }}>
+            {isAdmin ? 'No target set — click "Set target" above.' : 'No daily target assigned.'}
+          </div>
+        )}
       </div>
 
       {/* Stats row */}
@@ -313,6 +445,7 @@ function DetailPanel({ member, onEdit, onBack }: { member: StaffMember; onEdit: 
 // ─── Main page ────────────────────────────────────────────────────────────
 export function SalesStaff() {
   const { showToast } = useToast();
+  const { isAdmin } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -325,17 +458,13 @@ export function SalesStaff() {
     try {
       const client = (salesService as any).saleRepo.adapter.getClient();
 
-      const { data: profiles } = await client
-        .from('user_profiles')
-        .select('*')
-        .eq('active', true)
-        .order('created_at');
-
-      const users: UserProfile[] = profiles ?? [];
+      const [{ data: profiles }, { data: members }] = await Promise.all([
+        client.from('user_profiles').select('*').order('created_at'),
+        client.from('staff_members').select('*').order('created_at'),
+      ]);
 
       const today = new Date().toISOString().split('T')[0];
       const monthStart = today.slice(0, 7) + '-01';
-
       const weekDays: string[] = [];
       for (let d = 6; d >= 0; d--) {
         const dt = new Date(); dt.setDate(dt.getDate() - d);
@@ -371,15 +500,23 @@ export function SalesStaff() {
         if (idx >= 0) weekMap[id][idx] += Number(s.total_amount);
       }
 
-      const enriched: StaffMember[] = users.map(u => ({
+      const enrich = (u: any, role: StaffRole, source: StaffSource): StaffMember => ({
         ...u,
+        role,
+        source,
+        daily_target: u.daily_target ?? 0,
         initials: getInitials(u.full_name),
         tone: getTone(u.full_name),
         today: todayMap[u.id] ?? { sales: 0, revenue: 0 },
         month: monthMap[u.id] ?? { sales: 0, revenue: 0 },
         week: weekMap[u.id] ?? new Array(7).fill(0),
         isActiveToday: !!(todayMap[u.id]?.sales),
-      }));
+      });
+
+      const enriched: StaffMember[] = [
+        ...(profiles ?? []).map((p: any) => enrich(p, p.role as StaffRole, 'profile')),
+        ...(members ?? []).map((m: any) => enrich(m, 'staff', 'member')),
+      ];
 
       setStaff(enriched);
       setSelected(prev => prev ? (enriched.find(s => s.id === prev.id) ?? null) : null);
@@ -392,7 +529,9 @@ export function SalesStaff() {
 
   useEffect(() => { load(); }, [load]);
 
-  const roles = ['All', ...Array.from(new Set(staff.map(s => s.role)))];
+  const roles = ['All', 'admin', 'cashier', 'stock_manager', 'staff'].filter(r =>
+    r === 'All' || staff.some(s => s.role === r)
+  );
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -425,17 +564,17 @@ export function SalesStaff() {
             <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{activeToday} active today</span>
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        {isAdmin && (
           <button onClick={() => setModal({ kind: 'add' })} className="btn btn-primary" style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Plus size={14} /> Add Staff
           </button>
-        </div>
+        )}
       </div>
 
       {/* KPI row */}
       <div className="rpt-kpi">
         {[
-          { label: 'Staff Members', value: staff.length.toString(), sub: `${staff.filter(s => s.role === 'admin').length} admin · ${staff.filter(s => s.role === 'cashier').length} cashier` },
+          { label: 'Total Staff', value: staff.length.toString(), sub: `${staff.filter(s => s.source === 'profile').length} with system access` },
           { label: 'Active Today', value: activeToday.toString(), sub: `of ${staff.length} staff` },
           { label: 'Revenue · Today', value: 'LKR ' + fmtK(totalRevToday), sub: 'all cashiers combined' },
           { label: 'Revenue · MTD', value: 'LKR ' + fmtK(totalRevMTD), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
@@ -452,7 +591,6 @@ export function SalesStaff() {
       <div className={`sh-split ${selected ? 'sh-detail-active' : ''}`}>
         {/* Left: list */}
         <div className="sh-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Search + sort */}
           <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 12px',
@@ -478,8 +616,7 @@ export function SalesStaff() {
                 }}>{l}</button>
               ))}
             </div>
-            {/* Role chips */}
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {roles.map(r => {
                 const isA = r === roleFilter;
                 const count = r === 'All' ? staff.length : staff.filter(s => s.role === r).length;
@@ -489,10 +626,10 @@ export function SalesStaff() {
                     border: isA ? '1px solid var(--accent)' : '1px solid var(--line)',
                     background: isA ? 'var(--accent-soft)' : 'var(--panel)',
                     color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
-                    fontSize: 11.5, fontWeight: isA ? 600 : 500, cursor: 'pointer', textTransform: 'capitalize',
+                    fontSize: 11.5, fontWeight: isA ? 600 : 500, cursor: 'pointer',
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                   }}>
-                    {r}
+                    {r === 'All' ? 'All' : ROLE_LABEL[r as StaffRole]}
                     <span className="num" style={{ fontSize: 10.5, color: isA ? 'inherit' : 'var(--faint)' }}>{count}</span>
                   </button>
                 );
@@ -500,7 +637,6 @@ export function SalesStaff() {
             </div>
           </div>
 
-          {/* Staff rows */}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             {filtered.length === 0 ? (
               <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
@@ -522,15 +658,21 @@ export function SalesStaff() {
                 >
                   <Avatar initials={s.initials} tone={s.tone} size={38} active={s.isActiveToday} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: s.active ? 'var(--ink)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {s.full_name}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span style={{ textTransform: 'capitalize' }}>{s.role}</span>
+                      <span>{ROLE_LABEL[s.role]}</span>
                       {s.isActiveToday && (
                         <>
                           <span style={{ color: 'var(--faint)' }}>·</span>
                           <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>Active today</span>
+                        </>
+                      )}
+                      {!s.active && (
+                        <>
+                          <span style={{ color: 'var(--faint)' }}>·</span>
+                          <span style={{ color: 'var(--faint)' }}>Inactive</span>
                         </>
                       )}
                     </div>
@@ -554,8 +696,13 @@ export function SalesStaff() {
           {selected ? (
             <DetailPanel
               member={selected}
+              isAdmin={isAdmin}
               onEdit={() => setModal({ kind: 'edit', member: selected })}
               onBack={() => setSelected(null)}
+              onTargetSaved={(id, target) => {
+                setStaff(prev => prev.map(s => s.id === id ? { ...s, daily_target: target } : s));
+                setSelected(prev => prev?.id === id ? { ...prev, daily_target: target } : prev);
+              }}
             />
           ) : (
             <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
@@ -569,7 +716,6 @@ export function SalesStaff() {
         </div>
       </div>
 
-      {/* Modal */}
       {modal && (
         <StaffModal
           mode={modal}

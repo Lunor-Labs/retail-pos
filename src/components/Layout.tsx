@@ -31,29 +31,29 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
   {
     label: null,
     items: [
-      { id: 'dashboard', label: 'Dashboard', Icon: BarChart3, roles: ['admin', 'cashier'] },
+      { id: 'dashboard', label: 'Dashboard', Icon: BarChart3, roles: ['admin'] },
     ],
   },
   {
     label: 'Operations',
     items: [
       { id: 'pos',      label: 'Point of Sale', Icon: ShoppingCart, roles: ['admin', 'cashier'], desktopOnly: true },
-      { id: 'products', label: 'Products',       Icon: Package,     roles: ['admin', 'cashier'] },
-      { id: 'returns',  label: 'Returns',        Icon: RotateCcw,   roles: ['admin', 'cashier'] },
+      { id: 'products', label: 'Products',       Icon: Package,     roles: ['admin', 'stock_manager'] },
+      { id: 'returns',  label: 'Returns',        Icon: RotateCcw,   roles: ['admin'] },
     ],
   },
   {
     label: 'Parties',
     items: [
-      { id: 'customers',       label: 'Customers',  Icon: Users,    roles: ['admin', 'cashier'] },
-      { id: 'suppliers',       label: 'Suppliers',  Icon: Truck,    roles: ['admin', 'cashier'] },
+      { id: 'customers',       label: 'Customers',   Icon: Users,     roles: ['admin'] },
+      { id: 'suppliers',       label: 'Suppliers',   Icon: Truck,     roles: ['admin', 'stock_manager'] },
       { id: 'referral-agents', label: 'Sales Staff', Icon: UserCheck, roles: ['admin'] },
     ],
   },
   {
     label: 'Insights',
     items: [
-      { id: 'sales-history', label: 'Sales History', Icon: FileText,   roles: ['admin', 'cashier'] },
+      { id: 'sales-history', label: 'Sales History', Icon: FileText,   roles: ['admin'] },
       { id: 'reports',       label: 'Reports',       Icon: TrendingUp, roles: ['admin'] },
     ],
   },
@@ -266,14 +266,16 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
                       <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>{profile?.email}</div>
                     </div>
                     <div style={{ padding: 6 }}>
-                      <button
-                        onClick={() => { setProfileMenuOpen(false); onNavigate('settings'); }}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7, border: 0, background: 'transparent', fontSize: 13, color: 'var(--ink-2)', textAlign: 'left', cursor: 'default' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <Settings size={14} /> Settings
-                      </button>
+                      {role === 'admin' && (
+                        <button
+                          onClick={() => { setProfileMenuOpen(false); onNavigate('settings'); }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7, border: 0, background: 'transparent', fontSize: 13, color: 'var(--ink-2)', textAlign: 'left', cursor: 'default' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <Settings size={14} /> Settings
+                        </button>
+                      )}
                       <button
                         onClick={() => { setProfileMenuOpen(false); signOut(); }}
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7, border: 0, background: 'transparent', fontSize: 13, color: 'var(--danger)', textAlign: 'left', cursor: 'default' }}

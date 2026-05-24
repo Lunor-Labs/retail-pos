@@ -12,11 +12,8 @@ import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
 import { ProductImporter } from './products/ProductImporter';
 import { AddProductPage, DefaultPricing } from './products/AddProductPage';
-import { QuickStockModal } from './products/QuickStockModal';
+import { RestockModal } from './products/RestockModal';
 import { productService, supplierService } from '../services';
-import { VariantGrid } from './products/VariantGrid';
-import { useVariants } from '../hooks/useVariants';
-import { Product } from '../types';
 import { logger } from '../lib/logger';
 import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
 import { playScannerBeep } from '../utils/audio';
@@ -92,19 +89,6 @@ function FilterDropdown({ value, onChange, options, placeholder }: {
   );
 }
 
-function ProductVariantSection({ product }: { product: Product }) {
-  const { variants, loading, addVariant, updateVariant } = useVariants(product.id);
-  if (loading) return <p className="text-xs text-slate-400 p-3">Loading variants…</p>;
-  return (
-    <VariantGrid
-      product={product}
-      variants={variants}
-      onAddVariant={data => addVariant({ ...data, product_id: product.id })}
-      onUpdateVariant={updateVariant}
-    />
-  );
-}
-
 interface ProductsProps {
   initialStockFilter?: StockFilter;
 }
@@ -139,7 +123,6 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
-  const [showAddStockInView, setShowAddStockInView] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithStock | null>(null);
   const [formData, setFormData] = useState({
     sku: '',
@@ -314,7 +297,6 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setSelectedProduct(product);
     setModalMode('view');
     setShowModal(true);
-    setShowAddStockInView(false);
   }
 
   function openAddStockModal(product: ProductWithStock) {
@@ -645,6 +627,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           <div className="overflow-x-auto">
             <ProductTable
               products={products as ProductWithStock[]}
+              onView={openViewModal}
               onEdit={openEditPage}
               onAddStock={openAddStockModal}
               onPrintBarcode={handlePrintBarcode}
@@ -674,17 +657,11 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         size={modalMode === 'view' ? '4xl' : '3xl'}
       >
         {modalMode === 'view' && selectedProduct ? (
-          <>
-            <ProductDetailsView
-              product={selectedProduct}
-              defaultShowAddStock={showAddStockInView}
-              onClose={() => setShowModal(false)}
-              onUpdate={refetch}
-            />
-            <div className="px-6 pb-6 border-t border-slate-200 mt-4 pt-4">
-              <ProductVariantSection product={selectedProduct} />
-            </div>
-          </>
+          <ProductDetailsView
+            product={selectedProduct}
+            onClose={() => setShowModal(false)}
+            onUpdate={refetch}
+          />
         ) : (
           <ProductForm
             mode={modalMode as 'add' | 'edit'}
@@ -727,9 +704,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         />
       )}
 
-      {/* Quick Stock Modal */}
+      {/* Restock Modal */}
       {quickStockProduct && (
-        <QuickStockModal
+        <RestockModal
           product={quickStockProduct}
           onClose={() => setQuickStockProduct(null)}
           onSuccess={refetch}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -13,20 +13,38 @@ interface DropdownSelectProps {
   placeholder?: string;
   disabled?: boolean;
   style?: React.CSSProperties;
+  searchThreshold?: number; // show search box when option count >= this (default 6)
 }
 
-export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style }: DropdownSelectProps) {
+export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label ?? '';
+  const showSearch = options.length >= searchThreshold;
+
+  const filtered = search.trim()
+    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+
+  useEffect(() => {
+    if (open && showSearch) {
+      setTimeout(() => searchRef.current?.focus(), 30);
+    }
+    if (!open) setSearch('');
+  }, [open, showSearch]);
 
   return (
     <div ref={ref} style={{ position: 'relative', ...style }}>
@@ -75,51 +93,80 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
           border: '1px solid var(--line)',
           borderRadius: 10,
           boxShadow: '0 8px 24px rgba(20,22,26,0.12)',
-          padding: 4,
-          maxHeight: 240,
-          overflowY: 'auto',
-        }}
-          className="custom-scrollbar"
-        >
-          {/* Clear option */}
-          {placeholder && (
-            <button
-              type="button"
-              onClick={() => { onChange(''); setOpen(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '7px 10px', border: 0, borderRadius: 7,
-                background: value === '' ? 'var(--accent-soft)' : 'transparent',
-                color: value === '' ? 'var(--accent-ink)' : 'var(--muted)',
-                fontSize: 13, fontWeight: value === '' ? 600 : 400,
-                cursor: 'default',
-              }}
-              onMouseEnter={e => { if (value !== '') e.currentTarget.style.background = 'var(--panel-2)'; }}
-              onMouseLeave={e => { if (value !== '') e.currentTarget.style.background = 'transparent'; }}
-            >
-              {placeholder}
-            </button>
+          overflow: 'hidden',
+        }}>
+          {/* Search input */}
+          {showSearch && (
+            <div style={{ padding: '8px 8px 4px', borderBottom: '1px solid var(--line-2)' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+                <input
+                  ref={searchRef}
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+                    if (e.key === 'Enter' && filtered.length === 1) {
+                      onChange(filtered[0].value);
+                      setOpen(false);
+                      setSearch('');
+                    }
+                  }}
+                  placeholder="Search…"
+                  style={{
+                    width: '100%', height: 30, padding: '0 9px 0 28px', border: '1px solid var(--line)',
+                    borderRadius: 6, background: 'var(--panel-2)', color: 'var(--ink)',
+                    fontSize: 12.5, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
           )}
 
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '7px 10px', border: 0, borderRadius: 7,
-                background: value === opt.value ? 'var(--accent-soft)' : 'transparent',
-                color: value === opt.value ? 'var(--accent-ink)' : 'var(--ink-2)',
-                fontSize: 13, fontWeight: value === opt.value ? 600 : 400,
-                cursor: 'default',
-              }}
-              onMouseEnter={e => { if (value !== opt.value) e.currentTarget.style.background = 'var(--panel-2)'; }}
-              onMouseLeave={e => { if (value !== opt.value) e.currentTarget.style.background = 'transparent'; }}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {/* Options list */}
+          <div style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }} className="custom-scrollbar">
+            {/* Clear option */}
+            {placeholder && !search && (
+              <button
+                type="button"
+                onClick={() => { onChange(''); setOpen(false); }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '7px 10px', border: 0, borderRadius: 7,
+                  background: value === '' ? 'var(--accent-soft)' : 'transparent',
+                  color: value === '' ? 'var(--accent-ink)' : 'var(--muted)',
+                  fontSize: 13, fontWeight: value === '' ? 600 : 400,
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => { if (value !== '') e.currentTarget.style.background = 'var(--panel-2)'; }}
+                onMouseLeave={e => { if (value !== '') e.currentTarget.style.background = 'transparent'; }}
+              >
+                {placeholder}
+              </button>
+            )}
+
+            {filtered.length === 0 ? (
+              <div style={{ padding: '10px 10px', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center' }}>No results</div>
+            ) : filtered.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setOpen(false); setSearch(''); }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '7px 10px', border: 0, borderRadius: 7,
+                  background: value === opt.value ? 'var(--accent-soft)' : 'transparent',
+                  color: value === opt.value ? 'var(--accent-ink)' : 'var(--ink-2)',
+                  fontSize: 13, fontWeight: value === opt.value ? 600 : 400,
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => { if (value !== opt.value) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                onMouseLeave={e => { if (value !== opt.value) e.currentTarget.style.background = 'transparent'; }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -4,13 +4,14 @@ import { ProductImage } from '../ProductImage';
 
 interface ProductTableProps {
   products: ProductWithStock[];
+  onView: (product: ProductWithStock) => void;
   onEdit: (product: ProductWithStock) => void;
   onAddStock: (product: ProductWithStock) => void;
   onPrintBarcode: (product: ProductWithStock) => void;
   isAdmin: boolean;
 }
 
-export function ProductTable({ products, onEdit, onAddStock, onPrintBarcode, isAdmin }: ProductTableProps) {
+export function ProductTable({ products, onView, onEdit, onAddStock, onPrintBarcode, isAdmin }: ProductTableProps) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
@@ -39,8 +40,8 @@ export function ProductTable({ products, onEdit, onAddStock, onPrintBarcode, isA
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-2)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              {/* Product name + meta */}
-              <td style={{ padding: '12px 16px' }}>
+              {/* Product name + meta — click to view details */}
+              <td style={{ padding: '12px 16px', cursor: 'pointer' }} onClick={() => onView(product)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <ProductImage imageUrl={product.image_url} alt={product.name} size="sm" />
                   <div style={{ minWidth: 0 }}>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
@@ -11,11 +11,12 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
-  createUser: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
+  createUser: (email: string, password: string, fullName: string, role: 'admin' | 'cashier' | 'stock_manager' | 'staff') => Promise<void>;
   signupTenant: (email: string, password: string, fullName: string, businessName: string, slug: string, businessType: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isCashier: boolean;
+  isStockManager: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const suppressAuthChange = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (suppressAuthChange.current) return;
       (async () => {
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -94,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function createUser(email: string, password: string, fullName: string, role: 'admin' | 'cashier') {
+  async function createUser(email: string, password: string, fullName: string, role: 'admin' | 'cashier' | 'stock_manager') {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     if (!currentSession) {
       throw new Error('You must be logged in to create users');
@@ -103,35 +106,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const savedRefreshToken = currentSession.refresh_token;
     const savedAccessToken = currentSession.access_token;
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    suppressAuthChange.current = true;
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
 
-    if (error) {
+      if (error) throw error;
+
+      if (data.user) {
+        const { error: profileError } = await (supabase.from('user_profiles') as any)
+          .insert({
+            id: data.user.id,
+            email,
+            full_name: fullName,
+            role,
+            active: true,
+          });
+
+        if (profileError) throw profileError;
+      }
+    } finally {
+      suppressAuthChange.current = false;
       await supabase.auth.setSession({
         access_token: savedAccessToken,
         refresh_token: savedRefreshToken,
       });
-      throw error;
-    }
-
-    if (data.user) {
-      await supabase.auth.setSession({
-        access_token: savedAccessToken,
-        refresh_token: savedRefreshToken,
-      });
-
-      const { error: profileError } = await (supabase.from('user_profiles') as any)
-        .insert({
-          id: data.user.id,
-          email,
-          full_name: fullName,
-          role,
-          active: true,
-        });
-
-      if (profileError) throw profileError;
     }
   }
 
@@ -158,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     isAdmin: profile?.role === 'admin',
     isCashier: profile?.role === 'cashier',
+    isStockManager: profile?.role === 'stock_manager',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -602,8 +602,12 @@ export class SalesService {
     async getPendingReturnsCount(): Promise<number> {
         try {
             const adapter = (this.saleRepo as any).adapter;
+            const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
             const returns = await adapter.query('returns', {
-                where: [{ field: 'status', operator: '=', value: 'pending' }]
+                where: [
+                    { field: 'status', operator: '=', value: 'pending' },
+                    { field: 'created_at', operator: '>=', value: todayStart.toISOString() },
+                ]
             });
             return returns.length;
         } catch (error) {
@@ -632,15 +636,32 @@ export class SalesService {
         }
     }
 
-    async getTopSellingWithRevenue(limit = 5): Promise<{ name: string; sku: string; units: number; rev: number; color: string }[]> {
+    async getTopSellingWithRevenue(limit = 5, period: 'today' | 'week' | 'month' = 'today'): Promise<{ name: string; sku: string; units: number; rev: number; color: string }[]> {
         try {
             const adapter = (this.saleRepo as any).adapter;
-            const items: any[] = await adapter.query('sale_items', {
-                select: 'quantity, unit_price, products(name, sku)',
-            });
+            const client = adapter.getClient();
+
+            const now = new Date();
+            let startDate: Date;
+            if (period === 'today') {
+                startDate = new Date(now);
+                startDate.setHours(0, 0, 0, 0);
+            } else if (period === 'week') {
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - 6);
+                startDate.setHours(0, 0, 0, 0);
+            } else {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            }
+            const startStr = startDate.toISOString().split('T')[0];
+
+            const { data: items } = await (client.from('sale_items') as any)
+                .select('quantity, unit_price, products(name, sku), sales!inner(sale_date)')
+                .gte('sales.sale_date', startStr);
+
             const colors = ['#1B6B4F', '#3340A6', '#7A2A56', '#C68A2E', '#3A4E6B'];
             const map = new Map<string, { name: string; sku: string; units: number; rev: number }>();
-            for (const it of items) {
+            for (const it of (items || [])) {
                 const name = it.products?.name || 'Unknown';
                 const sku = it.products?.sku || '';
                 const qty = Number(it.quantity) || 0;
