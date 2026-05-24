@@ -18,25 +18,40 @@ import { ToastContainer } from './components/ui';
 
 function AppContent() {
   const { user, profile, loading } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard');
+  const role = profile?.role;
+  const defaultView = role === 'cashier' ? 'pos' : role === 'stock_manager' ? 'products' : 'dashboard';
+  const [currentView, setCurrentView] = useState(defaultView);
   const [initialStockFilter, setInitialStockFilter] = useState<StockFilter>('all');
 
+  // Lock restricted roles to their single allowed view
+  const ALLOWED: Record<string, string[]> = {
+    cashier: ['pos'],
+    stock_manager: ['products', 'suppliers'],
+  };
+
   const handleNavigate = (view: string, filter: StockFilter = 'all') => {
+    const allowed = role ? ALLOWED[role] : null;
+    if (allowed && !allowed.includes(view)) return;
     setInitialStockFilter(filter);
     setCurrentView(view);
   };
 
-  // Redirect away from POS on mobile (< 1024px)
+  // Sync default view when profile loads
+  useEffect(() => {
+    if (profile) setCurrentView(defaultView);
+  }, [profile?.role]);
+
+  // Redirect away from POS on mobile (< 1024px) — only for admin
   useEffect(() => {
     const check = () => {
-      if (window.innerWidth < 1024 && currentView === 'pos') {
+      if (window.innerWidth < 1024 && currentView === 'pos' && role === 'admin') {
         setCurrentView('dashboard');
       }
     };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
-  }, [currentView]);
+  }, [currentView, role]);
 
   if (loading) {
     return (

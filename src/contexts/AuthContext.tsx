@@ -11,11 +11,12 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
-  createUser: (email: string, password: string, fullName: string, role: 'admin' | 'cashier') => Promise<void>;
+  createUser: (email: string, password: string, fullName: string, role: 'admin' | 'cashier' | 'stock_manager' | 'staff') => Promise<void>;
   signupTenant: (email: string, password: string, fullName: string, businessName: string, slug: string, businessType: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isCashier: boolean;
+  isStockManager: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -94,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function createUser(email: string, password: string, fullName: string, role: 'admin' | 'cashier') {
+  async function createUser(email: string, password: string, fullName: string, role: 'admin' | 'cashier' | 'stock_manager') {
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     if (!currentSession) {
       throw new Error('You must be logged in to create users');
@@ -158,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     isAdmin: profile?.role === 'admin',
     isCashier: profile?.role === 'cashier',
+    isStockManager: profile?.role === 'stock_manager',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

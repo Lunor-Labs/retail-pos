@@ -184,16 +184,31 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 }
 
 // ── Top Sellers ───────────────────────────────────────────
-function TopSellers({ items }: { items: { name: string; sku: string; units: number; rev: number; color: string }[] }) {
+function TopSellers({ items, period, onPeriod }: {
+  items: { name: string; sku: string; units: number; rev: number; color: string }[];
+  period: 'today' | 'week' | 'month';
+  onPeriod: (p: 'today' | 'week' | 'month') => void;
+}) {
   const maxRev = Math.max(...items.map(i => i.rev), 1);
   const fmtLKR = (v: number) => `LKR ${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v.toLocaleString()}`;
+  const periodLabels: Record<'today' | 'week' | 'month', string> = { today: 'Today', week: '7D', month: 'MTD' };
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)' }}>
+      <div className="card-h" style={{ borderBottom: '1px solid var(--line-2)', flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h3>Top Sellers</h3>
-          <div className="sub" style={{ marginTop: 2 }}>by revenue · this period</div>
+          <div className="sub" style={{ marginTop: 2 }}>by revenue · {periodLabels[period].toLowerCase()}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['today', 'week', 'month'] as const).map(p => (
+            <button key={p} onClick={() => onPeriod(p)} className="btn btn-sm" style={{
+              background: p === period ? 'var(--accent-soft)' : 'transparent',
+              borderColor: p === period ? 'transparent' : 'var(--line)',
+              color: p === period ? 'var(--accent-ink)' : 'var(--ink-2)',
+              fontWeight: p === period ? 600 : 500,
+            }}>{periodLabels[p]}</button>
+          ))}
         </div>
       </div>
       <div style={{ padding: '4px 0' }}>
@@ -484,6 +499,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   const [outOfStockItems, setOutOfStockItems] = useState<any[]>([]);
   const [variantLowStockItems, setVariantLowStockItems] = useState<any[]>([]);
   const [topSellers, setTopSellers] = useState<{ name: string; sku: string; units: number; rev: number; color: string }[]>([]);
+  const [topSellerPeriod, setTopSellerPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [cashierStats, setCashierStats] = useState<{ cashier_id: string; full_name: string; sales: number; revenue: number }[]>([]);
   const [activityItems, setActivityItems] = useState<{ type: ActivityType; text: string; time: string; by: string }[]>([]);
 
@@ -491,6 +507,10 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
     const days = chartPeriod === '7D' ? 7 : chartPeriod === '90D' ? 90 : chartPeriod === 'YTD' ? Math.ceil((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000) : 30;
     load(days);
   }, [chartPeriod]);
+
+  useEffect(() => {
+    salesService.getTopSellingWithRevenue(5, topSellerPeriod).then(setTopSellers);
+  }, [topSellerPeriod]);
 
   const timeAgo = (iso: string) => {
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -513,7 +533,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         salesService.getPendingReturnsCount(),
         salesService.getRecentSales(8),
         salesService.getSalesHistoryWithCost(days),
-        salesService.getTopSellingWithRevenue(5),
+        salesService.getTopSellingWithRevenue(5, topSellerPeriod),
         variantService.getLowStockVariants(),
         salesService.getCashierStats(),
       ]);
@@ -680,7 +700,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
       {/* Revenue chart + Top sellers */}
       <div className="dash-grid">
         <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} />
-        <TopSellers items={topSellers} />
+        <TopSellers items={topSellers} period={topSellerPeriod} onPeriod={setTopSellerPeriod} />
       </div>
 
       {/* Invoices + Stock alerts */}

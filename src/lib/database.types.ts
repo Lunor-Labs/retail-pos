@@ -14,8 +14,9 @@ export interface Database {
           id: string
           email: string
           full_name: string
-          role: 'admin' | 'cashier'
+          role: 'admin' | 'cashier' | 'stock_manager' | 'staff'
           active: boolean
+          daily_target: number
           created_at: string
           updated_at: string
         }
@@ -23,8 +24,9 @@ export interface Database {
           id: string
           email: string
           full_name: string
-          role: 'admin' | 'cashier'
+          role: 'admin' | 'cashier' | 'stock_manager' | 'staff'
           active?: boolean
+          daily_target?: number
           created_at?: string
           updated_at?: string
         }
@@ -32,8 +34,38 @@ export interface Database {
           id?: string
           email?: string
           full_name?: string
-          role?: 'admin' | 'cashier'
+          role?: 'admin' | 'cashier' | 'stock_manager'
           active?: boolean
+          daily_target?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      staff_members: {
+        Row: {
+          id: string
+          full_name: string
+          email: string
+          active: boolean
+          daily_target: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          full_name: string
+          email?: string
+          active?: boolean
+          daily_target?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          full_name?: string
+          email?: string
+          active?: boolean
+          daily_target?: number
           created_at?: string
           updated_at?: string
         }
