@@ -659,6 +659,32 @@ export interface Database {
           created_at?: string
         }
       }
+      reference_data: {
+        Row: {
+          id: string
+          type: 'brand' | 'category' | 'material' | 'product_name'
+          name: string
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          type: 'brand' | 'category' | 'material' | 'product_name'
+          name: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          type?: 'brand' | 'category' | 'material' | 'product_name'
+          name?: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       app_settings: {
         Row: {
           id: string

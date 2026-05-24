@@ -2,15 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DropdownSelect } from '../ui';
-import { productService, supplierService } from '../../services';
+import { productService, supplierService, referenceDataService } from '../../services';
 import { VariantInput } from '../../services/ProductService';
 import { VariantTableRow, VariantRowData } from './VariantTableRow';
-
-const CATEGORIES = [
-  'T-Shirts', 'Shirts', 'Pants', 'Dresses', 'Skirts',
-  'Jackets', 'Shoes', 'Belts', 'Bags', 'Sunglasses',
-  'Underwear', 'Socks', 'Fabric', 'Accessories', 'Other',
-];
 
 const UNITS = [
   { value: 'piece', label: 'Piece' },
@@ -66,6 +60,10 @@ export function AddProductPage({
   const { showToast } = useToast();
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [refBrands, setRefBrands] = useState<string[]>([]);
+  const [refCategories, setRefCategories] = useState<string[]>([]);
+  const [refMaterials, setRefMaterials] = useState<string[]>([]);
+  const [refNames, setRefNames] = useState<string[]>([]);
 
   const [info, setInfo] = useState<ProductInfo>({
     sku: '', name: '', brand: initialBrand, description: '',
@@ -82,6 +80,10 @@ export function AddProductPage({
 
   useEffect(() => {
     supplierService.getActiveSuppliers().then(s => setSuppliers(s)).catch(() => {});
+    referenceDataService.getActiveNames('brand').then(setRefBrands).catch(() => {});
+    referenceDataService.getActiveNames('category').then(setRefCategories).catch(() => {});
+    referenceDataService.getActiveNames('material').then(setRefMaterials).catch(() => {});
+    referenceDataService.getActiveNames('product_name').then(setRefNames).catch(() => {});
   }, []);
 
   // Generate SKU on mount and whenever brand/category changes (add mode only, not manually edited)
@@ -288,7 +290,12 @@ export function AddProductPage({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div>
             <label style={labelStyle}>Brand</label>
-            <input style={inputStyle} value={info.brand} onChange={e => setInfo(p => ({ ...p, brand: e.target.value }))} placeholder="Moose, Zara…" />
+            <DropdownSelect
+              value={info.brand}
+              onChange={v => setInfo(p => ({ ...p, brand: v }))}
+              options={refBrands.map(b => ({ value: b, label: b }))}
+              placeholder="Select brand…"
+            />
           </div>
           <div>
             <label style={labelStyle}>SKU <span style={{ color: 'var(--danger)' }}>*</span></label>
@@ -309,14 +316,19 @@ export function AddProductPage({
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={labelStyle}>Product Name <span style={{ color: 'var(--danger)' }}>*</span></label>
-            <input style={inputStyle} value={info.name} onChange={e => setInfo(p => ({ ...p, name: e.target.value }))} placeholder="Slim Fit Trouser" />
+            <DropdownSelect
+              value={info.name}
+              onChange={v => setInfo(p => ({ ...p, name: v }))}
+              options={refNames.map(n => ({ value: n, label: n }))}
+              placeholder="Select product name…"
+            />
           </div>
           <div>
             <label style={labelStyle}>Category</label>
             <DropdownSelect
               value={info.category}
               onChange={v => setInfo(p => ({ ...p, category: v }))}
-              options={CATEGORIES.map(c => ({ value: c, label: c }))}
+              options={refCategories.map(c => ({ value: c, label: c }))}
               placeholder="Select category…"
             />
           </div>
@@ -336,7 +348,12 @@ export function AddProductPage({
           </div>
           <div>
             <label style={labelStyle}>Material</label>
-            <input style={inputStyle} value={info.material} onChange={e => setInfo(p => ({ ...p, material: e.target.value }))} placeholder="Cotton, Denim…" />
+            <DropdownSelect
+              value={info.material}
+              onChange={v => setInfo(p => ({ ...p, material: v }))}
+              options={refMaterials.map(m => ({ value: m, label: m }))}
+              placeholder="Select material…"
+            />
           </div>
           <div>
             <label style={labelStyle}>Unit</label>

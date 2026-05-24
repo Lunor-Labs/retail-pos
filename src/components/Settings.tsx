@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check } from 'lucide-react';
-import { loyaltyService } from '../services';
+import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil } from 'lucide-react';
+import { loyaltyService, referenceDataService } from '../services';
+import type { RefType, ReferenceItem } from '../services';
 
 type UserProfile = {
   id: string;
@@ -30,7 +31,7 @@ const ROLE_CONFIG: Record<UnifiedStaff['role'], { label: string; desc: string; b
   admin:         { label: 'Admin',         desc: 'Full access',          bg: 'var(--accent-soft)',                                   color: 'var(--accent-ink)' },
 };
 
-type SectionId = 'account' | 'staff-access' | 'loyalty';
+type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
@@ -594,6 +595,182 @@ function StaffAccessSection({ currentUserId }: { currentUserId: string }) {
   );
 }
 
+// ─── Section: Catalog ─────────────────────────────────────────────────────
+const CATALOG_TABS: { type: RefType; label: string }[] = [
+  { type: 'brand',        label: 'Brands' },
+  { type: 'category',     label: 'Categories' },
+  { type: 'material',     label: 'Materials' },
+  { type: 'product_name', label: 'Product Names' },
+];
+
+function CatalogSection() {
+  const { showToast } = useToast();
+  const [activeType, setActiveType] = useState<RefType>('brand');
+  const [items, setItems] = useState<ReferenceItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+
+  async function load(type: RefType) {
+    setLoading(true);
+    try {
+      setItems(await referenceDataService.getByType(type));
+    } catch {
+      showToast('Failed to load catalog data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(activeType); }, [activeType]);
+
+  async function handleAdd() {
+    const name = newName.trim();
+    if (!name) return;
+    setAdding(true);
+    try {
+      const item = await referenceDataService.add(activeType, name);
+      setItems(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewName('');
+    } catch (e: any) {
+      showToast(e?.message?.includes('unique') ? 'Already exists' : (e?.message ?? 'Failed to add'), 'error');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleRename(id: string) {
+    const name = editName.trim();
+    if (!name) return;
+    setSaving(prev => ({ ...prev, [id]: true }));
+    try {
+      await referenceDataService.rename(id, name);
+      setItems(prev => prev.map(i => i.id === id ? { ...i, name } : i).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditId(null);
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to rename', 'error');
+    } finally {
+      setSaving(prev => ({ ...prev, [id]: false }));
+    }
+  }
+
+  async function handleToggle(item: ReferenceItem) {
+    setSaving(prev => ({ ...prev, [item.id]: true }));
+    try {
+      await referenceDataService.setActive(item.id, !item.active);
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, active: !i.active } : i));
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to update', 'error');
+    } finally {
+      setSaving(prev => ({ ...prev, [item.id]: false }));
+    }
+  }
+
+  const active = items.filter(i => i.active);
+  const inactive = items.filter(i => !i.active);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', padding: '0 4px' }}>
+          {CATALOG_TABS.map(tab => {
+            const isActive = tab.type === activeType;
+            return (
+              <button key={tab.type} onClick={() => { setActiveType(tab.type); setEditId(null); setNewName(''); }} style={{
+                padding: '12px 16px', border: 0, background: 'transparent', cursor: 'pointer',
+                fontSize: 13, fontWeight: isActive ? 600 : 500,
+                color: isActive ? 'var(--accent-ink)' : 'var(--ink-2)',
+                borderBottom: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+                marginBottom: -1, transition: 'color .1s',
+              }}>
+                {tab.label}
+                <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: isActive ? 'var(--accent)' : 'var(--faint)', background: isActive ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)', padding: '1px 6px', borderRadius: 999 }}>
+                  {items.filter(i => i.active).length || 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Add new */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--line-2)', display: 'flex', gap: 8 }}>
+          <input
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+            placeholder={`Add new ${CATALOG_TABS.find(t => t.type === activeType)?.label.slice(0, -1).toLowerCase()}…`}
+            style={{ flex: 1, height: 34, padding: '0 10px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+          />
+          <button onClick={handleAdd} disabled={!newName.trim() || adding} className="btn btn-primary" style={{ height: 34, fontSize: 12.5, minWidth: 72 }}>
+            {adding ? '…' : '+ Add'}
+          </button>
+        </div>
+
+        {/* List */}
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+        ) : items.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+            No {CATALOG_TABS.find(t => t.type === activeType)?.label.toLowerCase()} yet — add one above
+          </div>
+        ) : (
+          <div>
+            {[...active, ...inactive].map((item, i) => {
+              const isEditing = editId === item.id;
+              const isSaving = saving[item.id];
+              return (
+                <div key={item.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px',
+                  borderBottom: i < items.length - 1 ? '1px solid var(--line-2)' : 'none',
+                  opacity: isSaving ? 0.6 : item.active ? 1 : 0.45, transition: 'opacity .15s',
+                }}>
+                  {isEditing ? (
+                    <>
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleRename(item.id); if (e.key === 'Escape') setEditId(null); }}
+                        style={{ flex: 1, height: 30, padding: '0 9px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <button onClick={() => handleRename(item.id)} disabled={isSaving} className="btn btn-primary" style={{ height: 28, fontSize: 12, padding: '0 10px' }}>Save</button>
+                      <button onClick={() => setEditId(null)} className="btn" style={{ height: 28, fontSize: 12, padding: '0 10px' }}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ flex: 1, fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>{item.name}</span>
+                      <button onClick={() => { setEditId(item.id); setEditName(item.name); }} style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: 4, color: 'var(--muted)', lineHeight: 0, borderRadius: 5 }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--panel-2)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <Pencil size={13} strokeWidth={1.8} />
+                      </button>
+                      <button onClick={() => handleToggle(item)} disabled={isSaving} style={{
+                        width: 36, height: 20, borderRadius: 99, border: 0, cursor: 'pointer',
+                        background: item.active ? 'var(--accent)' : 'var(--faint)',
+                        position: 'relative', transition: 'background .15s', flexShrink: 0,
+                      }}>
+                        <span style={{
+                          position: 'absolute', top: 2, left: item.active ? 18 : 2,
+                          width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                          transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                        }} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Section: Loyalty ─────────────────────────────────────────────────────
 function LoyaltySection() {
   const { showToast } = useToast();
@@ -685,6 +862,7 @@ export function Settings() {
   const NAV: { id: SectionId; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { id: 'account', label: 'Account', icon: <KeyRound size={15} strokeWidth={1.7} /> },
     { id: 'staff-access', label: 'Staff Access', icon: <Users size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'catalog', label: 'Catalog', icon: <Tag size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
   ].filter(n => !n.adminOnly || isAdmin);
 
@@ -726,6 +904,7 @@ export function Settings() {
         <div>
           {section === 'account' && <AccountSection profile={profile as UserProfile} />}
           {section === 'staff-access' && isAdmin && <StaffAccessSection currentUserId={profile.id} />}
+          {section === 'catalog' && isAdmin && <CatalogSection />}
           {section === 'loyalty' && isAdmin && <LoyaltySection />}
         </div>
       </div>
