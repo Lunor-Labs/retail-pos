@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export interface VariantRowData {
   id?: string;
@@ -15,13 +14,6 @@ export interface VariantRowData {
   existing_stock?: number;
 }
 
-interface StockIntakeData {
-  supplier_id: string;
-  qty: number;
-  cost_price: number;
-  markup_percentage: number;
-}
-
 interface VariantTableRowProps {
   row: VariantRowData;
   index: number;
@@ -30,9 +22,9 @@ interface VariantTableRowProps {
   mode: 'add' | 'edit';
   parentSku: string;
   isOnly: boolean;
+  showPricing?: boolean;
   onChange: (index: number, row: VariantRowData) => void;
   onDelete: (index: number) => void;
-  onAddStock?: (index: number, intake: StockIntakeData) => Promise<void>;
   onTabFromLastCell?: () => void;
 }
 
@@ -43,14 +35,8 @@ function autoSku(parentSku: string, size: string, color: string): string {
 
 export function VariantTableRow({
   row, index, defaultSupplierId,
-  suppliers, mode, parentSku, isOnly, onChange, onDelete, onAddStock, onTabFromLastCell,
+  suppliers, mode, parentSku, isOnly, showPricing = true, onChange, onDelete, onTabFromLastCell,
 }: VariantTableRowProps) {
-  const [showStockIntake, setShowStockIntake] = useState(false);
-  const [intakeSupplierId, setIntakeSupplierId] = useState(defaultSupplierId);
-  const [intakeQty, setIntakeQty] = useState(0);
-  const [intakeCost, setIntakeCost] = useState(row.cost_price);
-  const [intakeMarkup, setIntakeMarkup] = useState(row.markup_percentage);
-  const [intakeSaving, setIntakeSaving] = useState(false);
 
   function update(patch: Partial<VariantRowData>) {
     const updated = { ...row, ...patch };
@@ -75,23 +61,6 @@ export function VariantTableRow({
       ? parseFloat(((selling - row.cost_price) / row.cost_price * 100).toFixed(2))
       : 0;
     update({ selling_price: selling, markup_percentage: markup });
-  }
-
-  async function submitStockIntake() {
-    if (!onAddStock || intakeQty <= 0) return;
-    setIntakeSaving(true);
-    try {
-      await onAddStock(index, {
-        supplier_id: intakeSupplierId,
-        qty: intakeQty,
-        cost_price: intakeCost,
-        markup_percentage: intakeMarkup,
-      });
-      setShowStockIntake(false);
-      setIntakeQty(0);
-    } finally {
-      setIntakeSaving(false);
-    }
   }
 
   const cellStyle: React.CSSProperties = { padding: '6px 4px', verticalAlign: 'middle' };
@@ -136,60 +105,58 @@ export function VariantTableRow({
         </td>
 
         {/* Qty / Stock */}
-        <td style={{ ...cellStyle, width: 80 }}>
-          {mode === 'edit' && row.id ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {showPricing && (
+          <td style={{ ...cellStyle, width: 80 }}>
+            {mode === 'edit' && row.id ? (
               <span className="num" style={{ fontSize: 12.5, color: (row.existing_stock ?? 0) === 0 ? 'var(--danger)' : 'var(--pos)', fontWeight: 600 }}>
                 {row.existing_stock ?? 0}
               </span>
-              <button
-                type="button"
-                onClick={() => setShowStockIntake(s => !s)}
-                title="Add stock"
-                style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid var(--line)', background: showStockIntake ? 'var(--accent-soft)' : 'var(--panel)', color: showStockIntake ? 'var(--accent)' : 'var(--muted)', display: 'grid', placeItems: 'center', cursor: 'default', flexShrink: 0 }}
-              >
-                <Plus size={11} />
-              </button>
-            </div>
-          ) : (
-            <input
-              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0}
-              value={row.qty || ''}
-              onChange={e => update({ qty: parseInt(e.target.value) || 0 })}
-              placeholder="0"
-            />
-          )}
-        </td>
+            ) : (
+              <input
+                style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0}
+                value={row.qty || ''}
+                onChange={e => update({ qty: parseInt(e.target.value) || 0 })}
+                placeholder="0"
+              />
+            )}
+          </td>
+        )}
 
         {/* Cost (LKR) */}
-        <td style={{ ...cellStyle, width: 96 }}>
-          <input
-            style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
-            value={row.cost_price || ''}
-            onChange={e => updateCost(parseFloat(e.target.value) || 0)}
-            placeholder="0"
-          />
-        </td>
+        {showPricing && (
+          <td style={{ ...cellStyle, width: 96 }}>
+            <input
+              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
+              value={row.cost_price || ''}
+              onChange={e => updateCost(parseFloat(e.target.value) || 0)}
+              placeholder="0"
+            />
+          </td>
+        )}
 
         {/* Markup % */}
-        <td style={{ ...cellStyle, width: 80 }}>
-          <input
-            style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
-            value={row.markup_percentage || ''}
-            onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
-            placeholder="0"
-          />
-        </td>
+        {showPricing && (
+          <td style={{ ...cellStyle, width: 80 }}>
+            <input
+              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
+              value={row.markup_percentage || ''}
+              onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
+              placeholder="0"
+            />
+          </td>
+        )}
 
         {/* Selling (LKR) */}
-        <td style={{ ...cellStyle, width: 96 }}>
-          <input
-            style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
-            value={row.selling_price || ''}
-            onChange={e => updateSelling(parseFloat(e.target.value) || 0)}
-            placeholder="0"
-          />
-        </td>
+        {showPricing && (
+          <td style={{ ...cellStyle, width: 96 }}>
+            <input
+              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
+              value={row.selling_price || ''}
+              onChange={e => updateSelling(parseFloat(e.target.value) || 0)}
+              placeholder="0"
+            />
+          </td>
+        )}
 
         {/* Delete */}
         <td style={{ ...cellStyle, width: 32, paddingLeft: 4 }}>
@@ -207,43 +174,6 @@ export function VariantTableRow({
         </td>
       </tr>
 
-      {/* Inline stock intake — edit mode only */}
-      {showStockIntake && (
-        <tr>
-          <td colSpan={9} style={{ padding: '0 4px 10px', background: 'var(--panel-2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', flexShrink: 0 }}>
-                {[row.size, row.color].filter(Boolean).join(' · ') || 'Default'}
-              </span>
-              <select
-                value={intakeSupplierId}
-                onChange={e => setIntakeSupplierId(e.target.value)}
-                style={{ height: 30, padding: '0 8px', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, color: 'var(--ink)', background: 'var(--panel)' }}
-              >
-                <option value="">Supplier</option>
-                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <input type="number" min={1} value={intakeQty || ''} onChange={e => setIntakeQty(parseInt(e.target.value) || 0)}
-                placeholder="Qty" style={{ width: 64, height: 30, padding: '0 8px', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, textAlign: 'right', background: 'var(--panel)' }} />
-              <input type="number" min={0} step="any" value={intakeCost || ''} onChange={e => setIntakeCost(parseFloat(e.target.value) || 0)}
-                placeholder="Cost" style={{ width: 80, height: 30, padding: '0 8px', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, textAlign: 'right', background: 'var(--panel)' }} />
-              <input type="number" min={0} step="any" value={intakeMarkup || ''} onChange={e => setIntakeMarkup(parseFloat(e.target.value) || 0)}
-                placeholder="Markup %" style={{ width: 80, height: 30, padding: '0 8px', border: '1px solid var(--line)', borderRadius: 6, fontSize: 12, textAlign: 'right', background: 'var(--panel)' }} />
-              <button
-                type="button" onClick={submitStockIntake}
-                disabled={intakeSaving || intakeQty <= 0 || !intakeSupplierId}
-                className="btn btn-sm btn-primary" style={{ flexShrink: 0 }}
-              >
-                {intakeSaving ? 'Saving…' : 'Add Batch'}
-              </button>
-              <button type="button" onClick={() => setShowStockIntake(false)}
-                style={{ width: 26, height: 26, borderRadius: 5, border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'default', display: 'grid', placeItems: 'center' }}>
-                <X size={13} />
-              </button>
-            </div>
-          </td>
-        </tr>
-      )}
     </>
   );
 }

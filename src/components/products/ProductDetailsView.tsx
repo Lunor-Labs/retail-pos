@@ -1,435 +1,242 @@
 import { useState, useEffect } from 'react';
-import { ProductWithStock } from '../../types';
+import { ProductWithStock, VariantWithStock, ProductBatch } from '../../types';
 import { ProductImage } from '../ProductImage';
-import { Plus, Pencil, Check, X } from 'lucide-react';
-import { SupplierForm } from '../suppliers/SupplierForm';
+import { Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { supplierService, productService } from '../../services';
-import { Modal } from '../ui';
+import { productService } from '../../services';
 
 interface ProductDetailsViewProps {
   product: ProductWithStock;
   onClose: () => void;
   onUpdate?: () => void;
-  defaultShowAddStock?: boolean;
 }
 
-export function ProductDetailsView({ product, onClose, onUpdate, defaultShowAddStock = false }: ProductDetailsViewProps) {
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+interface BatchRowProps {
+  batch: ProductBatch;
+  isAdmin: boolean;
+  onSave: (id: string, data: Partial<ProductBatch>) => Promise<void>;
+}
+
+function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
+  const [editing, setEditing] = useState(false);
+  const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price });
+  const [saving, setSaving] = useState(false);
+
+  function updateCost(cost: number) {
+    const selling = parseFloat((cost * (1 + d.markup_percentage / 100)).toFixed(2));
+    setD(p => ({ ...p, cost_price: cost, selling_price: selling }));
+  }
+  function updateMarkup(markup: number) {
+    const selling = parseFloat((d.cost_price * (1 + markup / 100)).toFixed(2));
+    setD(p => ({ ...p, markup_percentage: markup, selling_price: selling }));
+  }
+  function updateSelling(selling: number) {
+    const markup = d.cost_price > 0 ? parseFloat(((selling - d.cost_price) / d.cost_price * 100).toFixed(2)) : 0;
+    setD(p => ({ ...p, selling_price: selling, markup_percentage: markup }));
+  }
+
+  async function save() {
+    setSaving(true);
+    try { await onSave(batch.id, d); setEditing(false); }
+    finally { setSaving(false); }
+  }
+
+  const isEmpty = batch.current_quantity === 0;
+
+  return (
+    <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--line-2)', background: isEmpty ? 'rgba(20,22,26,0.02)' : 'transparent', opacity: isEmpty ? 0.5 : 1 }}>
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>#{batch.batch_number}</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setEditing(false)} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><X size={14} /></button>
+              <button onClick={save} disabled={saving} style={{ border: 0, background: 'transparent', color: 'var(--pos)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><Check size={14} /></button>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Qty', val: d.current_quantity, set: (v: number) => setD(p => ({ ...p, current_quantity: v })) },
+              { label: 'Cost (LKR)', val: d.cost_price, set: updateCost },
+              { label: 'Markup %', val: d.markup_percentage, set: updateMarkup },
+              { label: 'Selling (LKR)', val: d.selling_price, set: updateSelling },
+            ].map(({ label, val, set }) => (
+              <div key={label}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+                <input type="number" min={0} step="any" value={val || ''} onChange={e => set(parseFloat(e.target.value) || 0)}
+                  style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500 }}>
+              {fmtDate(batch.received_date)}
+              {batch.supplier && <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· {batch.supplier.name}</span>}
+            </div>
+            {isAdmin && (
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                Cost LKR {batch.cost_price.toLocaleString()} · {batch.markup_percentage ?? 0}% markup
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>LKR {batch.selling_price.toLocaleString()}</div>
+              <div style={{ fontSize: 11, color: batch.current_quantity === 0 ? 'var(--danger)' : 'var(--pos)', fontWeight: 600, marginTop: 1 }}>
+                {batch.current_quantity} left
+              </div>
+            </div>
+            {isAdmin && (
+              <button onClick={() => setEditing(true)} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}
+                onMouseEnter={e => e.currentTarget.style.color = 'var(--ink)'}
+                onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}>
+                <Pencil size={13} strokeWidth={1.8} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface VariantSectionProps {
+  variant: VariantWithStock;
+  isAdmin: boolean;
+  onBatchSave: (batchId: string, data: Partial<ProductBatch>) => Promise<void>;
+}
+
+function VariantSection({ variant, isAdmin, onBatchSave }: VariantSectionProps) {
+  const [expanded, setExpanded] = useState(true);
+  const label = [variant.size, variant.color].filter(Boolean).join(' · ') || variant.sku;
+
+  return (
+    <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
+      {/* Variant header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--panel-2)', cursor: 'pointer' }} onClick={() => setExpanded(v => !v)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {expanded ? <ChevronDown size={14} style={{ color: 'var(--muted)' }} /> : <ChevronRight size={14} style={{ color: 'var(--muted)' }} />}
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace" }}>{variant.sku}</span>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, color: variant.total_stock === 0 ? 'var(--danger)' : 'var(--pos)' }}>
+          {variant.total_stock} in stock
+        </span>
+      </div>
+
+      {expanded && (
+        <>
+          {/* Batch list */}
+          {variant.batches.length === 0 ? (
+            <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center' }}>No batches yet</div>
+          ) : variant.batches
+            .slice()
+            .sort((a, b) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime())
+            .map(batch => (
+              <BatchRow key={batch.id} batch={batch} isAdmin={isAdmin} onSave={onBatchSave} />
+            ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetailsViewProps) {
   const { profile } = useAuth();
   const { showToast } = useToast();
   const isAdmin = profile?.role === 'admin';
-  const [showAddStock, setShowAddStock] = useState(defaultShowAddStock);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [showQuickAddSupplier, setShowQuickAddSupplier] = useState(false);
-  const [stockFormData, setStockFormData] = useState({
-    supplier_id: '',
-    quantity: 0,
-    cost_price: 0,
-    markup_percentage: 0,
-    selling_price: 0,
-  });
-
-  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
-  const [editBatchData, setEditBatchData] = useState({
-    current_quantity: 0,
-    cost_price: 0,
-    markup_percentage: 0,
-    selling_price: 0,
-  });
+  const [variants, setVariants] = useState<VariantWithStock[]>([]);
+  const [loadingVariants, setLoadingVariants] = useState(true);
 
   useEffect(() => {
-    loadSuppliers();
-  }, []);
+    loadVariants();
+  }, [product.id]);
 
-  async function loadSuppliers() {
+  async function loadVariants() {
+    setLoadingVariants(true);
     try {
-      const data = await supplierService.getActiveSuppliers();
-      setSuppliers(data || []);
-    } catch (error) {
-      console.error('Failed to load suppliers', error);
+      const p = await productService.getProductWithVariants(product.id);
+      setVariants(p?.variants ?? []);
+    } catch {
+      setVariants([]);
+    } finally {
+      setLoadingVariants(false);
     }
   }
 
-  const handleQuickAddSupplier = async (data: any) => {
+  async function handleBatchSave(batchId: string, data: Partial<ProductBatch>) {
     try {
-      const newSupplier = await supplierService.createSupplier({
-        name: data.name,
-        contact_person: data.contact_person || null,
-        phone: data.phone || null,
-        email: data.email || null,
-        address: data.address || null,
-        notes: data.notes || null,
-      });
-
-      await loadSuppliers();
-      setStockFormData({ ...stockFormData, supplier_id: newSupplier.id });
-      setShowQuickAddSupplier(false);
-      showToast('Supplier added successfully!', 'success');
-    } catch (error: any) {
-      showToast('Error adding supplier: ' + error.message, 'error');
-    }
-  };
-
-  async function handleAddStock(e: React.FormEvent) {
-    e.preventDefault();
-    try {
-      const batchNumber = `ADD-${product.sku}-${new Date().getTime().toString().slice(-4)}`;
-      await productService.createBatch({
-        product_id: product.id,
-        batch_number: batchNumber,
-        supplier_id: stockFormData.supplier_id,
-        cost_price: stockFormData.cost_price,
-        markup_percentage: stockFormData.markup_percentage,
-        selling_price: stockFormData.selling_price,
-        initial_quantity: stockFormData.quantity,
-        current_quantity: stockFormData.quantity,
-        received_date: new Date().toISOString().split('T')[0],
-      });
-
-      showToast('Stock added successfully!', 'success');
-      setShowAddStock(false);
-      setStockFormData({
-        supplier_id: '',
-        quantity: 0,
-        cost_price: 0,
-        markup_percentage: 0,
-        selling_price: 0,
-      });
-      if (onUpdate) onUpdate();
-    } catch (error: any) {
-      showToast(error.message || 'Failed to add stock', 'error');
-    }
-  }
-
-  async function handleUpdateBatch(batchId: string) {
-    try {
-      await productService.updateBatch(batchId, {
-        current_quantity: editBatchData.current_quantity,
-        cost_price: editBatchData.cost_price,
-        markup_percentage: editBatchData.markup_percentage,
-        selling_price: editBatchData.selling_price,
-      });
-      showToast('Batch updated successfully!', 'success');
-      setEditingBatchId(null);
-      if (onUpdate) onUpdate();
-    } catch (error: any) {
-      showToast(error.message || 'Failed to update batch', 'error');
+      await productService.updateBatch(batchId, data as any);
+      showToast('Batch updated', 'success');
+      loadVariants();
+      onUpdate?.();
+    } catch (e: any) {
+      showToast(e.message || 'Failed to update batch', 'error');
     }
   }
 
   return (
-    <>
-      <div className="p-6">
+    <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Product header */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
         {product.image_url && (
-          <div className="mb-6 flex justify-center">
-            <ProductImage
-              imageUrl={product.image_url}
-              alt={product.name}
-              size="xl"
-            />
-          </div>
+          <ProductImage imageUrl={product.image_url} alt={product.name} size="lg" />
         )}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <p className="text-sm text-slate-500">Product Name</p>
-            <p className="font-medium text-slate-900">{product.name}</p>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--ink)', letterSpacing: '-0.01em' }}>{product.name}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 3 }}>
+            {[(product as any).brand, product.category, product.material].filter(Boolean).join(' · ')}
           </div>
-          <div>
-            <p className="text-sm text-slate-500">SKU</p>
-            <p className="font-medium text-slate-900">{product.sku}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Brand</p>
-            <p className="font-medium text-slate-900">{(product as any).brand || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Category</p>
-            <p className="font-medium text-slate-900">{product.category || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Total Stock</p>
-            <p className="font-medium text-slate-900 font-bold text-lg text-emerald-600">{product.total_stock}</p>
-          </div>
-          <div>
-            <p className="text-sm text-slate-500">Unit</p>
-            <p className="font-medium text-slate-900">{product.unit}</p>
-          </div>
-        </div>
-
-        <div className="border-t border-slate-200 pt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="font-semibold text-slate-900">Stock Batches ({product.batches.length})</h4>
-            <button
-              onClick={() => setShowAddStock(!showAddStock)}
-              className="flex items-center gap-1 text-sm font-medium text-slate-900 bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition"
-            >
-              <Plus className="w-4 h-4" />
-              {showAddStock ? 'Cancel' : 'Add Stock'}
-            </button>
-          </div>
-
-          {showAddStock && (
-            <form onSubmit={handleAddStock} className="bg-slate-50 p-4 rounded-lg mb-4 border border-slate-200 animate-in fade-in slide-in-from-top-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Supplier</label>
-                  <div className="flex gap-2">
-                    <select
-                      required
-                      value={stockFormData.supplier_id}
-                      onChange={(e) => setStockFormData({ ...stockFormData, supplier_id: e.target.value })}
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                    >
-                      <option value="">Select supplier</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickAddSupplier(true)}
-                      className="p-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition"
-                      title="Add new supplier"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
-                  <input
-                    required
-                    type="number"
-                    min="1"
-                    value={stockFormData.quantity || ''}
-                    onChange={(e) => setStockFormData({ ...stockFormData, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Cost (LKR)</label>
-                  <input
-                    required
-                    type="number"
-                    step="any"
-                    value={stockFormData.cost_price || ''}
-                    onChange={(e) => {
-                      const cost = parseFloat(e.target.value) || 0;
-                      const markup = stockFormData.markup_percentage || 0;
-                      const selling = cost * (1 + markup / 100);
-                      setStockFormData({ ...stockFormData, cost_price: cost, selling_price: parseFloat(selling.toFixed(2)) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Markup (%)</label>
-                  <input
-                    required
-                    type="number"
-                    step="any"
-                    value={stockFormData.markup_percentage || ''}
-                    onChange={(e) => {
-                      const markup = parseFloat(e.target.value) || 0;
-                      const cost = stockFormData.cost_price || 0;
-                      const selling = cost * (1 + markup / 100);
-                      setStockFormData({ ...stockFormData, markup_percentage: markup, selling_price: parseFloat(selling.toFixed(2)) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Selling (LKR)</label>
-                  <input
-                    required
-                    type="number"
-                    step="any"
-                    value={stockFormData.selling_price || ''}
-                    onChange={(e) => {
-                      const selling = parseFloat(e.target.value) || 0;
-                      const cost = stockFormData.cost_price || 0;
-                      const markup = cost > 0 ? ((selling - cost) / cost) * 100 : 0;
-                      setStockFormData({ ...stockFormData, selling_price: selling, markup_percentage: parseFloat(markup.toFixed(2)) });
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                  />
-                </div>
-                <div className="col-span-2 flex justify-end">
-                  <button
-                    type="submit"
-                    className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-slate-800 transition"
-                  >
-                    Confirm Stock Intake
-                  </button>
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+            {[
+              { label: 'SKU', value: product.sku, mono: true },
+              { label: 'Total Stock', value: String(product.total_stock), highlight: true },
+              { label: 'Unit', value: product.unit },
+              { label: 'Gender', value: (product as any).gender || null },
+            ].filter(f => f.value).map(f => (
+              <div key={f.label}>
+                <div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>{f.label}</div>
+                <div style={{ fontSize: 13, fontWeight: f.highlight ? 700 : 500, color: f.highlight ? 'var(--pos)' : 'var(--ink)', fontFamily: f.mono ? "'JetBrains Mono',monospace" : undefined, marginTop: 2 }}>
+                  {f.value}
                 </div>
               </div>
-            </form>
-          )}
-
-          <div className="space-y-3">
-            {product.batches.map((batch) => {
-              const isEditing = editingBatchId === batch.id;
-              
-              return (
-                <div key={batch.id} className="bg-slate-50 p-4 rounded-lg relative">
-                  {isAdmin && !isEditing && (
-                    <button
-                      onClick={() => {
-                        setEditingBatchId(batch.id);
-                        setEditBatchData({
-                          current_quantity: batch.current_quantity,
-                          cost_price: batch.cost_price,
-                          markup_percentage: batch.markup_percentage,
-                          selling_price: batch.selling_price,
-                        });
-                      }}
-                      className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition"
-                      title="Edit Batch"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {isEditing ? (
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="font-medium text-slate-900">Edit Batch: {batch.batch_number}</p>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => setEditingBatchId(null)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
-                            title="Cancel"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleUpdateBatch(batch.id)}
-                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition"
-                            title="Save Changes"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Quantity</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={editBatchData.current_quantity}
-                            onChange={(e) => setEditBatchData({ ...editBatchData, current_quantity: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Cost (LKR)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            value={editBatchData.cost_price}
-                            onChange={(e) => {
-                              const cost = parseFloat(e.target.value) || 0;
-                              const markup = editBatchData.markup_percentage || 0;
-                              const selling = cost * (1 + markup / 100);
-                              setEditBatchData({ ...editBatchData, cost_price: cost, selling_price: parseFloat(selling.toFixed(2)) });
-                            }}
-                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Markup (%)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            value={editBatchData.markup_percentage}
-                            onChange={(e) => {
-                              const markup = parseFloat(e.target.value) || 0;
-                              const cost = editBatchData.cost_price || 0;
-                              const selling = cost * (1 + markup / 100);
-                              setEditBatchData({ ...editBatchData, markup_percentage: markup, selling_price: parseFloat(selling.toFixed(2)) });
-                            }}
-                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Selling (LKR)</label>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0"
-                            value={editBatchData.selling_price}
-                            onChange={(e) => {
-                              const selling = parseFloat(e.target.value) || 0;
-                              const cost = editBatchData.cost_price || 0;
-                              const markup = cost > 0 ? ((selling - cost) / cost) * 100 : 0;
-                              setEditBatchData({ ...editBatchData, selling_price: selling, markup_percentage: parseFloat(markup.toFixed(2)) });
-                            }}
-                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between items-start mb-2 pr-8">
-                      <div>
-                        <p className="font-medium text-slate-900">Batch: {batch.batch_number}</p>
-                        <p className="text-sm text-slate-500">
-                          Received: {new Date(batch.received_date).toLocaleDateString()}
-                        </p>
-                        {batch.supplier && (
-                          <p className="text-sm text-slate-500">
-                            Supplier: {batch.supplier.name}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-slate-900">{batch.current_quantity} units</p>
-                        {isAdmin && (
-                          <p className="text-xs text-slate-500">
-                            Cost: LKR {batch.cost_price.toFixed(2)} ({batch.markup_percentage || 0}%)
-                          </p>
-                        )}
-                        <p className="text-sm font-bold text-slate-900">
-                          LKR {batch.selling_price.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {product.batches.length === 0 && !showAddStock && (
-              <p className="text-slate-500 text-center py-4">No batches available</p>
-            )}
+            ))}
           </div>
-        </div>
-
-        <div className="flex justify-end mt-6 pt-6 border-t border-slate-200">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition"
-          >
-            Close
-          </button>
         </div>
       </div>
 
-      <Modal
-        isOpen={showQuickAddSupplier}
-        onClose={() => setShowQuickAddSupplier(false)}
-        title="Quick Add Supplier"
-        size="2xl"
-      >
-        <SupplierForm
-          mode="add"
-          onSubmit={handleQuickAddSupplier}
-          onCancel={() => setShowQuickAddSupplier(false)}
-        />
-      </Modal>
-    </>
+      {/* Variants + batches */}
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+          Variants & Batches
+        </div>
+        {loadingVariants ? (
+          <div style={{ padding: '24px 0', textAlign: 'center' }}>
+            <div className="animate-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)', margin: '0 auto' }} />
+          </div>
+        ) : variants.length === 0 ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 13, color: 'var(--muted)' }}>No variants found</div>
+        ) : variants.map(v => (
+          <VariantSection
+            key={v.id}
+            variant={v}
+            isAdmin={isAdmin}
+            onBatchSave={handleBatchSave}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 4 }}>
+        <button onClick={onClose} className="btn" style={{ height: 34, fontSize: 13 }}>Close</button>
+      </div>
+    </div>
   );
 }

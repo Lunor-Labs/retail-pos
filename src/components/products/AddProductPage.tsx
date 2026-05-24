@@ -148,33 +148,6 @@ export function AddProductPage({
     setRows(prev => prev.map((r, i) => i === index ? row : r));
   }
 
-  async function handleAddStock(index: number, intake: { supplier_id: string; qty: number; cost_price: number; markup_percentage: number }) {
-    if (!productId) return;
-    const row = rows[index];
-    if (!row.id) return;
-    const client = (productService as any).productRepo.adapter.getClient();
-    const selling = parseFloat((intake.cost_price * (1 + intake.markup_percentage / 100)).toFixed(2));
-    const { error } = await client.from('product_batches').insert({
-      variant_id: row.id,
-      supplier_id: intake.supplier_id,
-      batch_number: `B-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
-      cost_price: intake.cost_price,
-      markup_percentage: intake.markup_percentage,
-      selling_price: selling,
-      initial_quantity: intake.qty,
-      current_quantity: intake.qty,
-      received_date: new Date().toISOString().split('T')[0],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    if (error) throw new Error(error.message);
-    setRows(prev => prev.map((r, i) => i === index
-      ? { ...r, existing_stock: (r.existing_stock ?? 0) + intake.qty }
-      : r
-    ));
-    showToast(`Added ${intake.qty} units to stock`, 'success');
-  }
-
   function buildVariantInputs(): VariantInput[] {
     return rows
       .filter(r => !r.id)
@@ -351,22 +324,24 @@ export function AddProductPage({
         </div>
       </div>
 
-      {/* Supplier */}
-      <div style={sectionStyle}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Supplier</div>
-        <div style={{ maxWidth: 320 }}>
-          <label style={labelStyle}>Default Supplier</label>
-          <DropdownSelect
-            value={pricing.supplier_id}
-            onChange={v => setPricing({ supplier_id: v })}
-            options={suppliers.map(s => ({ value: s.id, label: s.name }))}
-            placeholder="Select supplier…"
-          />
+      {/* Supplier — add mode only (for initial stock intake) */}
+      {mode === 'add' && (
+        <div style={sectionStyle}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Supplier</div>
+          <div style={{ maxWidth: 320 }}>
+            <label style={labelStyle}>Default Supplier</label>
+            <DropdownSelect
+              value={pricing.supplier_id}
+              onChange={v => setPricing({ supplier_id: v })}
+              options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+              placeholder="Select supplier…"
+            />
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+            Set cost, markup, and selling price per variant below.
+          </div>
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--muted)' }}>
-          Set cost, markup, and selling price per variant below.
-        </div>
-      </div>
+      )}
 
       {/* Variants */}
       <div style={{ ...sectionStyle, padding: 0, overflow: 'hidden' }}>
@@ -380,11 +355,15 @@ export function AddProductPage({
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: mode === 'edit' ? 520 : 860 }}>
             <thead>
               <tr style={{ background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)' }}>
-                {['Size', 'Colour', 'SKU', 'Min Stock', mode === 'edit' ? 'Stock' : 'Qty', 'Cost (LKR)', 'Markup %', 'Selling (LKR)', ''].map(h => (
-                  <th key={h} style={{ padding: '8px 4px', textAlign: h === '' ? 'left' : ['Cost (LKR)', 'Markup %', 'Selling (LKR)', 'Min Stock', mode === 'edit' ? 'Stock' : 'Qty'].includes(h) ? 'right' : 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                {[
+                  'Size', 'Colour', 'SKU', 'Min Stock',
+                  ...(mode === 'add' ? ['Qty', 'Cost (LKR)', 'Markup %', 'Selling (LKR)'] : []),
+                  '',
+                ].map(h => (
+                  <th key={h} style={{ padding: '8px 4px', textAlign: h === '' ? 'left' : ['Cost (LKR)', 'Markup %', 'Selling (LKR)', 'Min Stock', 'Qty'].includes(h) ? 'right' : 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}
@@ -401,9 +380,9 @@ export function AddProductPage({
                   mode={mode}
                   parentSku={info.sku}
                   isOnly={rows.length === 1}
+                  showPricing={mode === 'add'}
                   onChange={updateRow}
                   onDelete={deleteRow}
-                  onAddStock={mode === 'edit' ? handleAddStock : undefined}
                   onTabFromLastCell={i === rows.length - 1 ? addRow : undefined}
                 />
               ))}
