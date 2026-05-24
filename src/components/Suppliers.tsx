@@ -18,24 +18,29 @@ type Supplier = {
   created_at: string;
 };
 
-type PurchaseOrder = {
+type BatchDelivery = {
   id: string;
-  po_number: string;
-  supplier_id: string;
-  order_date: string;
-  received_date: string | null;
-  status: 'pending' | 'received' | 'cancelled';
-  total_amount: number;
-  notes: string | null;
+  batch_number: string;
+  received_date: string;
+  initial_quantity: number;
+  current_quantity: number;
+  cost_price: number;
+  selling_price: number;
+  markup_percentage: number;
+  variant: {
+    sku: string;
+    size: string | null;
+    color: string | null;
+    product: { name: string; sku: string } | null;
+  } | null;
 };
 
 type EnrichedSupplier = Supplier & {
   initials: string;
   tone: string;
-  totalSpend: number;
-  orderCount: number;
-  pendingCount: number;
-  lastOrder: string | null;
+  totalCost: number;
+  batchCount: number;
+  lastDelivery: string | null;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -60,11 +65,6 @@ function fmtDate(iso: string | null) {
 }
 function fmtJoined(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-}
-function statusColor(s: string) {
-  if (s === 'received') return { bg: 'var(--accent-soft)', color: 'var(--accent-ink)' };
-  if (s === 'pending') return { bg: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', color: 'var(--warn)' };
-  return { bg: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)' };
 }
 
 // ─── Avatar ──────────────────────────────────────────────────────────────
@@ -216,9 +216,9 @@ function SupplierModal({ mode, onClose, onSaved }: {
 }
 
 // ─── Supplier detail panel ────────────────────────────────────────────────
-function DetailPanel({ supplier, orders, onEdit }: {
+function DetailPanel({ supplier, batches, onEdit }: {
   supplier: EnrichedSupplier;
-  orders: PurchaseOrder[];
+  batches: BatchDelivery[];
   onEdit: () => void;
 }) {
   const infoRow = (icon: React.ReactNode, value: string | null, href?: string) => {
@@ -233,9 +233,8 @@ function DetailPanel({ supplier, orders, onEdit }: {
     );
   };
 
-  const receivedOrders = orders.filter(o => o.status === 'received');
-  const pendingOrders = orders.filter(o => o.status === 'pending');
-  const totalSpend = receivedOrders.reduce((s, o) => s + Number(o.total_amount), 0);
+  const totalCost = batches.reduce((s, b) => s + b.cost_price * b.initial_quantity, 0);
+  const totalUnits = batches.reduce((s, b) => s + b.initial_quantity, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)', height: '100%', overflowY: 'auto', padding: '0 0 24px' }}>
@@ -281,9 +280,9 @@ function DetailPanel({ supplier, orders, onEdit }: {
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--gap)' }}>
         {[
-          { label: 'Total Spend', value: fmtLKR(totalSpend), sub: `${receivedOrders.length} received orders` },
-          { label: 'Pending Orders', value: pendingOrders.length.toString(), sub: pendingOrders.length > 0 ? fmtLKR(pendingOrders.reduce((s, o) => s + Number(o.total_amount), 0)) : 'All clear' },
-          { label: 'Last Order', value: supplier.lastOrder ? fmtDate(supplier.lastOrder)! : '—', sub: `${orders.length} orders total` },
+          { label: 'Total Cost', value: fmtLKR(totalCost), sub: 'stock cost value' },
+          { label: 'Units Received', value: totalUnits.toLocaleString(), sub: `${batches.length} batch${batches.length !== 1 ? 'es' : ''}` },
+          { label: 'Last Delivery', value: supplier.lastDelivery ? fmtDate(supplier.lastDelivery)! : '—', sub: supplier.batchCount > 0 ? `${supplier.batchCount} total batches` : 'No deliveries yet' },
         ].map((s, i) => (
           <div key={i} className="card" style={{ padding: '12px 14px' }}>
             <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500, marginBottom: 6, letterSpacing: '.03em' }}>{s.label}</div>
@@ -293,49 +292,65 @@ function DetailPanel({ supplier, orders, onEdit }: {
         ))}
       </div>
 
-      {/* PO history */}
+      {/* Stock received history */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>Purchase Orders</h3>
-          <span className="num" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{orders.length} total</span>
+          <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>Stock Received</h3>
+          <span className="num" style={{ fontSize: 11.5, color: 'var(--muted)' }}>{batches.length} batch{batches.length !== 1 ? 'es' : ''}</span>
         </div>
 
-        {orders.length === 0 ? (
+        {batches.length === 0 ? (
           <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
             <Package size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
-            <div>No purchase orders yet</div>
+            <div>No stock received yet</div>
           </div>
         ) : (
-          <div>
-            {orders.slice(0, 10).map((o, i) => {
-              const sc = statusColor(o.status);
-              return (
-                <div key={o.id} style={{
-                  display: 'grid', gridTemplateColumns: '1fr auto auto',
-                  gap: 12, padding: '12px 18px', alignItems: 'center',
-                  borderBottom: i < Math.min(orders.length, 10) - 1 ? '1px solid var(--line-2)' : 'none',
-                }}>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink)', fontFamily: "'JetBrains Mono', monospace" }}>{o.po_number}</div>
-                    <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
-                      {fmtDate(o.order_date)}{o.received_date ? ` · received ${fmtDate(o.received_date)}` : ''}
-                    </div>
-                  </div>
-                  <div style={{ ...sc, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
-                    {o.status}
-                  </div>
-                  <div className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {fmtLKR(Number(o.total_amount))}
-                  </div>
-                </div>
-              );
-            })}
-            {orders.length > 10 && (
-              <div style={{ padding: '10px 18px', textAlign: 'center', fontSize: 12, color: 'var(--muted)', borderTop: '1px solid var(--line-2)' }}>
-                +{orders.length - 10} more orders
-              </div>
-            )}
-          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--panel-2)' }}>
+                {['Product', 'Variant', 'Date', 'Qty', 'Cost/unit', 'Selling'].map(h => (
+                  <th key={h} style={{ padding: '8px 14px', textAlign: ['Qty', 'Cost/unit', 'Selling'].includes(h) ? 'right' : 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--line-2)' }}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((b, i) => {
+                const variantLabel = [b.variant?.size, b.variant?.color].filter(Boolean).join(' · ') || b.variant?.sku || '—';
+                return (
+                  <tr key={b.id} style={{ borderBottom: i < batches.length - 1 ? '1px solid var(--line-2)' : 'none' }}>
+                    <td style={{ padding: '10px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {b.variant?.product?.name ?? '—'}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace", marginTop: 1 }}>
+                        {b.batch_number}
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{variantLabel}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>{fmtDate(b.received_date)}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      <span className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{b.initial_quantity}</span>
+                      {b.current_quantity < b.initial_quantity && (
+                        <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 1 }}>{b.current_quantity} left</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      <span className="num" style={{ fontSize: 12, color: 'var(--ink-2)' }}>LKR {b.cost_price.toLocaleString()}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      <span className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>LKR {b.selling_price.toLocaleString()}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
     </div>
@@ -350,29 +365,28 @@ export function Suppliers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<EnrichedSupplier | null>(null);
-  const [selectedOrders, setSelectedOrders] = useState<PurchaseOrder[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [selectedBatches, setSelectedBatches] = useState<BatchDelivery[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
   const [modal, setModal] = useState<ModalMode | null>(null);
-  const [sort, setSort] = useState<'name' | 'spend' | 'orders'>('spend');
+  const [sort, setSort] = useState<'name' | 'spend' | 'batches'>('spend');
 
   const load = useCallback(async () => {
     try {
       const raw = await supplierService.getActiveSuppliers();
 
-      // Fetch PO aggregates per supplier
-      const { data: pos } = await supabase
-        .from('purchase_orders')
-        .select('supplier_id, total_amount, status, order_date')
-        .not('status', 'eq', 'cancelled');
+      // Aggregate batch stats per supplier
+      const { data: agg } = await supabase
+        .from('product_batches')
+        .select('supplier_id, cost_price, initial_quantity, received_date');
 
-      const poMap: Record<string, { spend: number; count: number; pending: number; lastOrder: string | null }> = {};
-      for (const p of (pos ?? [])) {
-        if (!poMap[p.supplier_id]) poMap[p.supplier_id] = { spend: 0, count: 0, pending: 0, lastOrder: null };
-        if (p.status === 'received') poMap[p.supplier_id].spend += Number(p.total_amount);
-        poMap[p.supplier_id].count++;
-        if (p.status === 'pending') poMap[p.supplier_id].pending++;
-        if (!poMap[p.supplier_id].lastOrder || p.order_date > poMap[p.supplier_id].lastOrder!) {
-          poMap[p.supplier_id].lastOrder = p.order_date;
+      const batchMap: Record<string, { cost: number; count: number; lastDate: string | null }> = {};
+      for (const b of (agg ?? [])) {
+        if (!b.supplier_id) continue;
+        if (!batchMap[b.supplier_id]) batchMap[b.supplier_id] = { cost: 0, count: 0, lastDate: null };
+        batchMap[b.supplier_id].cost += Number(b.cost_price) * Number(b.initial_quantity);
+        batchMap[b.supplier_id].count++;
+        if (!batchMap[b.supplier_id].lastDate || b.received_date > batchMap[b.supplier_id].lastDate!) {
+          batchMap[b.supplier_id].lastDate = b.received_date;
         }
       }
 
@@ -380,14 +394,12 @@ export function Suppliers() {
         ...s,
         initials: getInitials(s.name),
         tone: getTone(s.name),
-        totalSpend: poMap[s.id]?.spend ?? 0,
-        orderCount: poMap[s.id]?.count ?? 0,
-        pendingCount: poMap[s.id]?.pending ?? 0,
-        lastOrder: poMap[s.id]?.lastOrder ?? null,
+        totalCost: batchMap[s.id]?.cost ?? 0,
+        batchCount: batchMap[s.id]?.count ?? 0,
+        lastDelivery: batchMap[s.id]?.lastDate ?? null,
       }));
 
       setSuppliers(enriched);
-      // Keep selected in sync after reload
       setSelected(prev => prev ? (enriched.find(s => s.id === prev.id) ?? null) : null);
     } catch {
       showToast('Failed to load suppliers', 'error');
@@ -398,17 +410,17 @@ export function Suppliers() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load orders for selected supplier
+  // Load batch details for selected supplier
   useEffect(() => {
-    if (!selected) { setSelectedOrders([]); return; }
-    setOrdersLoading(true);
+    if (!selected) { setSelectedBatches([]); return; }
+    setBatchesLoading(true);
     supabase
-      .from('purchase_orders')
-      .select('*')
+      .from('product_batches')
+      .select('id, batch_number, received_date, initial_quantity, current_quantity, cost_price, selling_price, markup_percentage, variant:product_variants(sku, size, color, product:products(name, sku))')
       .eq('supplier_id', selected.id)
-      .order('order_date', { ascending: false })
-      .then(({ data }) => { setSelectedOrders((data ?? []) as PurchaseOrder[]); })
-      .finally(() => setOrdersLoading(false));
+      .order('received_date', { ascending: false })
+      .then(({ data }) => { setSelectedBatches((data ?? []) as BatchDelivery[]); })
+      .finally(() => setBatchesLoading(false));
   }, [selected?.id]);
 
   const filtered = useMemo(() => {
@@ -420,14 +432,13 @@ export function Suppliers() {
     );
     return rows.sort((a, b) => {
       if (sort === 'name') return a.name.localeCompare(b.name);
-      if (sort === 'orders') return b.orderCount - a.orderCount;
-      return b.totalSpend - a.totalSpend;
+      if (sort === 'batches') return b.batchCount - a.batchCount;
+      return b.totalCost - a.totalCost;
     });
   }, [suppliers, search, sort]);
 
-  const totalSpend = suppliers.reduce((s, x) => s + x.totalSpend, 0);
-  const totalPending = suppliers.reduce((s, x) => s + x.pendingCount, 0);
-  const totalOrders = suppliers.reduce((s, x) => s + x.orderCount, 0);
+  const totalCost = suppliers.reduce((s, x) => s + x.totalCost, 0);
+  const totalBatches = suppliers.reduce((s, x) => s + x.batchCount, 0);
 
   if (loading) return <LoadingSpinner message="Loading suppliers…" />;
 
@@ -439,7 +450,7 @@ export function Suppliers() {
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Suppliers</h1>
           <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>
             <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{suppliers.length} suppliers</span>{' · '}
-            <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{totalPending} pending orders</span>
+            <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{totalBatches} batches received</span>
           </p>
         </div>
         {isAdmin && (
@@ -453,9 +464,8 @@ export function Suppliers() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--gap)' }}>
         {[
           { label: 'Total Suppliers', value: suppliers.length.toString(), sub: 'active vendors' },
-          { label: 'Total Spend', value: 'LKR ' + fmtK(totalSpend), sub: 'received orders only' },
-          { label: 'Pending Orders', value: totalPending.toString(), sub: totalPending > 0 ? 'awaiting receipt' : 'all clear' },
-          { label: 'Total Orders', value: totalOrders.toString(), sub: 'across all suppliers' },
+          { label: 'Total Stock Cost', value: 'LKR ' + fmtK(totalCost), sub: 'across all batches' },
+          { label: 'Total Batches', value: totalBatches.toString(), sub: 'stock deliveries received' },
         ].map((k, i) => (
           <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
@@ -485,7 +495,7 @@ export function Suppliers() {
               )}
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              {([['spend', 'Top Spend'], ['orders', 'Most Orders'], ['name', 'A–Z']] as const).map(([k, l]) => (
+              {([['spend', 'Top Spend'], ['batches', 'Most Batches'], ['name', 'A–Z']] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setSort(k)} style={{
                   flex: 1, height: 28, borderRadius: 6, border: sort === k ? '1.5px solid var(--accent)' : '1px solid var(--line)',
                   background: sort === k ? 'var(--accent-soft)' : 'var(--panel-2)',
@@ -523,20 +533,15 @@ export function Suppliers() {
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
                       {s.contact_person && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 120 }}>{s.contact_person}</span>}
-                      {s.contact_person && s.orderCount > 0 && <span style={{ color: 'var(--faint)' }}>·</span>}
-                      {s.orderCount > 0 && <span className="num">{s.orderCount} orders</span>}
-                      {s.pendingCount > 0 && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', color: 'var(--warn)', padding: '1px 6px', borderRadius: 999, fontSize: 10.5, fontWeight: 600 }}>
-                          {s.pendingCount} pending
-                        </span>
-                      )}
+                      {s.contact_person && s.batchCount > 0 && <span style={{ color: 'var(--faint)' }}>·</span>}
+                      {s.batchCount > 0 && <span className="num">{s.batchCount} batch{s.batchCount !== 1 ? 'es' : ''}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    {s.totalSpend > 0 ? (
-                      <div className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>LKR {fmtK(s.totalSpend)}</div>
+                    {s.totalCost > 0 ? (
+                      <div className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>LKR {fmtK(s.totalCost)}</div>
                     ) : (
-                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>No orders</div>
+                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>No stock</div>
                     )}
                     <ChevronRight size={14} style={{ color: 'var(--faint)', marginTop: 2 }} />
                   </div>
@@ -548,14 +553,14 @@ export function Suppliers() {
 
         {/* Right: detail */}
         {selected ? (
-          ordersLoading ? (
+          batchesLoading ? (
             <div style={{ display: 'grid', placeItems: 'center', minHeight: 200 }}>
-              <LoadingSpinner message="Loading orders…" />
+              <LoadingSpinner message="Loading batches…" />
             </div>
           ) : (
             <DetailPanel
               supplier={selected}
-              orders={selectedOrders}
+              batches={selectedBatches}
               onEdit={() => isAdmin && setModal({ kind: 'edit', supplier: selected })}
             />
           )
