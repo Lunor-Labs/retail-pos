@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check } from 'lucide-react';
+import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check, ChevronDown, Printer, TrendingUp } from 'lucide-react';
 import { salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +16,7 @@ interface StaffMember {
   role: StaffRole;
   active: boolean;
   daily_target: number;
+  commission_rate: number;
   created_at: string;
   source: StaffSource;
   // enriched
@@ -239,21 +240,27 @@ function StaffModal({ mode, onClose, onSaved }: {
 }
 
 // ─── Detail panel ─────────────────────────────────────────────────────────
-function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved }: {
+function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved, onCommissionRateSaved }: {
   member: StaffMember;
   isAdmin: boolean;
   onEdit: () => void;
   onBack: () => void;
   onTargetSaved: (id: string, target: number) => void;
+  onCommissionRateSaved: (id: string, rate: number) => void;
 }) {
   const { showToast } = useToast();
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState(member.daily_target.toString());
   const [savingTarget, setSavingTarget] = useState(false);
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState(member.commission_rate.toString());
+  const [savingRate, setSavingRate] = useState(false);
 
   useEffect(() => {
     setTargetInput(member.daily_target.toString());
     setEditingTarget(false);
+    setRateInput(member.commission_rate.toString());
+    setEditingRate(false);
   }, [member.id]);
 
   async function saveTarget() {
@@ -272,6 +279,25 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved }: {
       showToast('Failed to update target', 'error');
     } finally {
       setSavingTarget(false);
+    }
+  }
+
+  async function saveRate() {
+    const val = Math.max(0, Math.min(100, Number(rateInput) || 0));
+    setSavingRate(true);
+    try {
+      const table = member.source === 'member' ? 'staff_members' : 'user_profiles';
+      const { error } = await (supabase.from(table) as any)
+        .update({ commission_rate: val })
+        .eq('id', member.id);
+      if (error) throw error;
+      onCommissionRateSaved(member.id, val);
+      setEditingRate(false);
+      showToast('Commission rate updated', 'success');
+    } catch {
+      showToast('Failed to update commission rate', 'error');
+    } finally {
+      setSavingRate(false);
     }
   }
 
@@ -418,6 +444,60 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved }: {
         )}
       </div>
 
+      {/* Commission Rate */}
+      <div className="card" style={{ padding: '16px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TrendingUp size={14} style={{ color: 'var(--muted)' }} strokeWidth={1.7} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.03em', textTransform: 'uppercase' }}>Commission Rate</span>
+          </div>
+          {isAdmin && !editingRate && (
+            <button onClick={() => { setRateInput(member.commission_rate.toString()); setEditingRate(true); }} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px',
+              border: '1px solid var(--line)', borderRadius: 6, background: 'transparent',
+              color: 'var(--ink-2)', fontSize: 11.5, fontWeight: 500, cursor: 'pointer',
+            }}>
+              <Pencil size={11} strokeWidth={1.7} /> {member.commission_rate > 0 ? 'Edit' : 'Set rate'}
+            </button>
+          )}
+        </div>
+
+        {editingRate ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, height: 36, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
+              <input
+                type="number" min={0} max={100} step={0.5}
+                value={rateInput}
+                onChange={e => setRateInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveRate(); if (e.key === 'Escape') setEditingRate(false); }}
+                autoFocus
+                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', padding: '0 10px', fontSize: 13, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace" }}
+              />
+              <span style={{ padding: '0 10px', fontSize: 12.5, color: 'var(--muted)', borderLeft: '1px solid var(--line-2)', height: '100%', display: 'flex', alignItems: 'center', flexShrink: 0 }}>%</span>
+            </div>
+            <button onClick={saveRate} disabled={savingRate} style={{
+              width: 36, height: 36, borderRadius: 7, border: 0, background: 'var(--accent)', color: '#fff', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0,
+            }}>
+              <Check size={15} strokeWidth={2.5} />
+            </button>
+            <button onClick={() => setEditingRate(false)} style={{
+              width: 36, height: 36, borderRadius: 7, border: '1px solid var(--line)', background: 'transparent', color: 'var(--muted)', cursor: 'pointer', display: 'grid', placeItems: 'center', flexShrink: 0,
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+        ) : member.commission_rate > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span className="num" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent-ink)', letterSpacing: '-0.02em' }}>{member.commission_rate}%</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>of qualifying day revenue</span>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--faint)' }}>
+            {isAdmin ? 'No rate set — click "Set rate" above.' : 'No commission rate assigned.'}
+          </div>
+        )}
+      </div>
+
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--gap)' }}>
         {[
@@ -442,6 +522,408 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved }: {
   );
 }
 
+// ─── Commission Report ────────────────────────────────────────────────────
+interface DayData {
+  date: string;
+  revenue: number;
+  hit: boolean;
+  commission: number;
+}
+
+interface CommissionRow {
+  member: StaffMember;
+  days: DayData[];
+  totalRevenue: number;
+  qualifyingDays: number;
+  commissionBase: number;
+  commissionAmount: number;
+  isPaid: boolean;
+}
+
+function monthLabel(ym: string) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function fmtDay(dateStr: string) {
+  const [, m, d] = dateStr.split('-').map(Number);
+  return new Date(2000, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function CommissionReport({ staff }: { staff: StaffMember[] }) {
+  const { showToast } = useToast();
+  const { isAdmin } = useAuth();
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [loading, setLoading] = useState(false);
+  const [salesByStaffDay, setSalesByStaffDay] = useState<Record<string, Record<string, number>>>({});
+  const [payments, setPayments] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  const loadCommissionData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const client = (salesService as any).saleRepo.adapter.getClient();
+      const [y, m] = month.split('-').map(Number);
+      const monthStart = new Date(y, m - 1, 1).toISOString();
+      const monthEnd = new Date(y, m, 1).toISOString();
+
+      const [{ data: sales }, { data: paidRecs }] = await Promise.all([
+        client.from('sales')
+          .select('cashier_id, total_amount, sale_date')
+          .gte('sale_date', monthStart)
+          .lt('sale_date', monthEnd)
+          .not('cashier_id', 'is', null),
+        client.from('staff_commission_payments')
+          .select('staff_id')
+          .eq('month', month),
+      ]);
+
+      const map: Record<string, Record<string, number>> = {};
+      for (const s of (sales ?? [])) {
+        const dayStr = new Date(s.sale_date).toISOString().split('T')[0];
+        if (!map[s.cashier_id]) map[s.cashier_id] = {};
+        map[s.cashier_id][dayStr] = (map[s.cashier_id][dayStr] ?? 0) + Number(s.total_amount);
+      }
+      setSalesByStaffDay(map);
+
+      const pmap: Record<string, boolean> = {};
+      for (const p of (paidRecs ?? [])) pmap[p.staff_id] = true;
+      setPayments(pmap);
+    } catch {
+      showToast('Failed to load commission data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [month, showToast]);
+
+  useEffect(() => { loadCommissionData(); }, [loadCommissionData]);
+
+  const rows = useMemo((): CommissionRow[] => {
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const today = new Date().toISOString().slice(0, 10);
+    const isCurrentMonth = month === currentMonth;
+
+    return staff.map(member => {
+      const salesMap = salesByStaffDay[member.id] ?? {};
+      const days: DayData[] = [];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (isCurrentMonth && dateStr > today) break;
+
+        const revenue = salesMap[dateStr] ?? 0;
+        const hit = member.daily_target > 0 && revenue >= member.daily_target;
+        const commission = hit ? revenue * (member.commission_rate / 100) : 0;
+        days.push({ date: dateStr, revenue, hit, commission });
+      }
+
+      const qualifyingDays = days.filter(d => d.hit).length;
+      const commissionBase = days.reduce((s, d) => s + (d.hit ? d.revenue : 0), 0);
+      const commissionAmount = commissionBase * (member.commission_rate / 100);
+      const totalRevenue = days.reduce((s, d) => s + d.revenue, 0);
+
+      return {
+        member,
+        days,
+        totalRevenue,
+        qualifyingDays,
+        commissionBase,
+        commissionAmount,
+        isPaid: !!payments[member.id],
+      };
+    }).sort((a, b) => b.commissionAmount - a.commissionAmount);
+  }, [staff, month, salesByStaffDay, payments, currentMonth]);
+
+  const totalDue = rows.reduce((s, r) => s + r.commissionAmount, 0);
+  const totalPaid = rows.filter(r => r.isPaid).reduce((s, r) => s + r.commissionAmount, 0);
+  const pendingPayout = totalDue - totalPaid;
+  const earningCount = rows.filter(r => r.commissionAmount > 0).length;
+
+  async function markPaid(row: CommissionRow) {
+    setPaying(row.member.id);
+    try {
+      const client = (salesService as any).saleRepo.adapter.getClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await (client.from('staff_commission_payments') as any).insert({
+        staff_id: row.member.id,
+        staff_source: row.member.source,
+        month,
+        commission_amount: Math.round(row.commissionAmount * 100) / 100,
+        paid_by: user?.id ?? null,
+      });
+      if (error) throw error;
+      showToast(`Commission marked as paid for ${row.member.full_name}`, 'success');
+      setConfirming(null);
+      loadCommissionData();
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to mark as paid', 'error');
+    } finally {
+      setPaying(null);
+    }
+  }
+
+  function navMonth(delta: number) {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setMonth(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+    setExpanded(new Set());
+    setConfirming(null);
+  }
+
+  const colTemplate = '1fr 60px 110px 130px 120px 90px 100px';
+
+  const headerCellStyle: React.CSSProperties = {
+    fontSize: 10.5, fontWeight: 600, color: 'var(--muted)',
+    letterSpacing: '.04em', textTransform: 'uppercase',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Month nav + print */}
+      <div className="commission-print-hide" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => navMonth(-1)} style={{
+            width: 32, height: 32, borderRadius: 8, border: '1px solid var(--line)',
+            background: 'var(--panel-2)', cursor: 'pointer', display: 'grid', placeItems: 'center', color: 'var(--ink-2)',
+          }}>
+            <ChevronLeft size={15} />
+          </button>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', minWidth: 130, textAlign: 'center' }}>
+            {monthLabel(month)}
+          </span>
+          <button onClick={() => navMonth(1)} disabled={month >= currentMonth} style={{
+            width: 32, height: 32, borderRadius: 8, border: '1px solid var(--line)',
+            background: 'var(--panel-2)', cursor: 'pointer', display: 'grid', placeItems: 'center', color: 'var(--ink-2)',
+            opacity: month >= currentMonth ? 0.35 : 1,
+          }}>
+            <ChevronRight size={15} />
+          </button>
+        </div>
+        <button onClick={() => window.print()} className="btn" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+          <Printer size={13} /> Print Report
+        </button>
+      </div>
+
+      {/* Print header (only visible in print) */}
+      <div className="commission-print-only" style={{ display: 'none' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Commission Report — {monthLabel(month)}</h2>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)' }}>Generated {new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}</p>
+      </div>
+
+      {/* KPI strip */}
+      <div className="rpt-kpi rpt-kpi-4">
+        {[
+          { label: 'Total Commissions Due', value: fmtLKR(totalDue), sub: monthLabel(month) },
+          { label: 'Staff Earning', value: earningCount.toString(), sub: 'with commission > 0' },
+          { label: 'Total Paid', value: fmtLKR(totalPaid), sub: 'marked as paid' },
+          { label: 'Pending Payout', value: fmtLKR(pendingPayout), sub: 'awaiting payment' },
+        ].map((k, i) => (
+          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
+            <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.05, color: 'var(--ink)' }}>{k.value}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Commission table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Table header */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: colTemplate,
+          padding: '10px 16px', borderBottom: '1px solid var(--line)', background: 'var(--panel-2)',
+          gap: 8,
+        }}>
+          {['Staff', 'Rate', 'Revenue', 'Qualifying Days', 'Commission', 'Status', ''].map((h, i) => (
+            <div key={i} style={headerCellStyle}>{h}</div>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading…</div>
+        ) : rows.map((row, i) => {
+          const isExpanded = expanded.has(row.member.id);
+          const isConfirming = confirming === row.member.id;
+          const isPaying = paying === row.member.id;
+          const hasTarget = row.member.daily_target > 0;
+          const hasRate = row.member.commission_rate > 0;
+
+          return (
+            <div key={row.member.id} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--line-2)' : 'none' }}>
+              {/* Main row */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: colTemplate,
+                padding: '12px 16px', alignItems: 'center', gap: 8,
+              }}>
+                {/* Staff */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <Avatar initials={row.member.initials} tone={row.member.tone} size={32} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {row.member.full_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)' }}>{ROLE_LABEL[row.member.role]}</div>
+                  </div>
+                </div>
+                {/* Rate */}
+                <div className="num" style={{ fontSize: 12.5, color: hasRate ? 'var(--ink-2)' : 'var(--faint)' }}>
+                  {hasRate ? `${row.member.commission_rate}%` : '—'}
+                </div>
+                {/* Revenue */}
+                <div className="num" style={{ fontSize: 12.5, color: row.totalRevenue > 0 ? 'var(--ink-2)' : 'var(--faint)' }}>
+                  {row.totalRevenue > 0 ? fmtLKR(row.totalRevenue) : '—'}
+                </div>
+                {/* Qualifying Days */}
+                <div style={{ fontSize: 12.5 }}>
+                  {hasTarget
+                    ? <span style={{ color: 'var(--ink-2)' }}>{row.qualifyingDays} <span style={{ color: 'var(--faint)', fontSize: 11 }}>/ {row.days.length} days</span></span>
+                    : <span style={{ color: 'var(--faint)', fontSize: 12 }}>No target</span>}
+                </div>
+                {/* Commission */}
+                <div className="num" style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: row.commissionAmount > 0 ? 'var(--accent-ink)' : 'var(--faint)',
+                }}>
+                  {row.commissionAmount > 0 ? fmtLKR(row.commissionAmount) : '—'}
+                </div>
+                {/* Status */}
+                <div>
+                  {row.isPaid ? (
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5,
+                      fontWeight: 600, color: 'var(--accent-ink)', padding: '3px 8px',
+                      borderRadius: 999, background: 'var(--accent-soft)',
+                    }}>
+                      <Check size={10} strokeWidth={2.5} /> Paid
+                    </span>
+                  ) : row.commissionAmount > 0 ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--warn)', fontWeight: 500 }}>Pending</span>
+                  ) : (
+                    <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>—</span>
+                  )}
+                </div>
+                {/* Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} className="commission-print-hide">
+                  {isAdmin && !row.isPaid && row.commissionAmount > 0 && !isConfirming && (
+                    <button onClick={() => setConfirming(row.member.id)} className="btn" style={{ height: 28, padding: '0 10px', fontSize: 11.5 }}>
+                      Pay
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setExpanded(prev => {
+                      const s = new Set(prev);
+                      s.has(row.member.id) ? s.delete(row.member.id) : s.add(row.member.id);
+                      return s;
+                    })}
+                    style={{
+                      width: 28, height: 28, borderRadius: 6, border: '1px solid var(--line)',
+                      background: isExpanded ? 'var(--panel-2)' : 'transparent',
+                      cursor: 'pointer', display: 'grid', placeItems: 'center', color: 'var(--muted)',
+                    }}
+                  >
+                    <ChevronDown size={14} style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Pay confirmation */}
+              {isConfirming && (
+                <div className="commission-print-hide" style={{
+                  margin: '0 16px 12px', padding: '10px 14px', borderRadius: 8,
+                  background: 'color-mix(in oklab, var(--accent) 8%, var(--panel-2))',
+                  border: '1px solid color-mix(in oklab, var(--accent) 40%, transparent)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--ink)' }}>
+                    Mark <strong>{fmtLKR(row.commissionAmount)}</strong> as paid for <strong>{row.member.full_name}</strong> — {monthLabel(month)}?
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => markPaid(row)} disabled={isPaying} className="btn btn-primary" style={{ height: 30, fontSize: 12, padding: '0 12px' }}>
+                      {isPaying ? 'Saving…' : 'Confirm'}
+                    </button>
+                    <button onClick={() => setConfirming(null)} className="btn" style={{ height: 30, fontSize: 12, padding: '0 10px' }}>Cancel</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Day-by-day breakdown */}
+              {isExpanded && (
+                <div style={{ margin: '0 16px 14px', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--line)' }}>
+                  {/* Breakdown header */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '110px 1fr 1fr 50px 1fr',
+                    background: 'var(--panel-2)', padding: '8px 14px', borderBottom: '1px solid var(--line)', gap: 8,
+                  }}>
+                    {['Date', 'Revenue', 'Target', 'Hit?', 'Commission'].map(h => (
+                      <div key={h} style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase' }}>{h}</div>
+                    ))}
+                  </div>
+
+                  {row.days.map((day, di) => (
+                    <div key={day.date} style={{
+                      display: 'grid', gridTemplateColumns: '110px 1fr 1fr 50px 1fr',
+                      padding: '8px 14px', gap: 8,
+                      background: day.hit
+                        ? 'color-mix(in oklab, var(--accent) 5%, var(--panel))'
+                        : 'var(--panel)',
+                      borderBottom: di < row.days.length - 1 ? '1px solid var(--line-2)' : 'none',
+                    }}>
+                      <div style={{ fontSize: 12, color: day.hit ? 'var(--ink)' : 'var(--ink-2)', fontWeight: day.hit ? 600 : 400 }}>
+                        {fmtDay(day.date)}
+                      </div>
+                      <div className="num" style={{ fontSize: 12, color: day.revenue > 0 ? 'var(--ink)' : 'var(--faint)' }}>
+                        {day.revenue > 0 ? fmtLKR(day.revenue) : '—'}
+                      </div>
+                      <div className="num" style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        {hasTarget ? fmtLKR(row.member.daily_target) : '—'}
+                      </div>
+                      <div style={{ fontSize: 13 }}>
+                        {!hasTarget
+                          ? <span style={{ color: 'var(--faint)' }}>—</span>
+                          : day.hit
+                            ? <span style={{ color: 'var(--accent-ink)', fontWeight: 700 }}>✓</span>
+                            : <span style={{ color: 'var(--faint)' }}>✗</span>}
+                      </div>
+                      <div className="num" style={{
+                        fontSize: 12,
+                        color: day.commission > 0 ? 'var(--accent-ink)' : 'var(--faint)',
+                        fontWeight: day.commission > 0 ? 600 : 400,
+                      }}>
+                        {day.commission > 0 ? fmtLKR(day.commission) : '—'}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Totals row */}
+                  <div style={{
+                    display: 'grid', gridTemplateColumns: '110px 1fr 1fr 50px 1fr',
+                    padding: '9px 14px', borderTop: '2px solid var(--line)', background: 'var(--panel-2)', gap: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-2)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total</div>
+                    <div className="num" style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink)' }}>
+                      {fmtLKR(row.totalRevenue)}
+                    </div>
+                    <div />
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>{row.qualifyingDays}d</div>
+                    <div className="num" style={{ fontSize: 12, fontWeight: 700, color: row.commissionAmount > 0 ? 'var(--accent-ink)' : 'var(--faint)' }}>
+                      {row.commissionAmount > 0 ? fmtLKR(row.commissionAmount) : '—'}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────
 export function SalesStaff() {
   const { showToast } = useToast();
@@ -453,6 +935,7 @@ export function SalesStaff() {
   const [selected, setSelected] = useState<StaffMember | null>(null);
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [sort, setSort] = useState<'revenue' | 'sales' | 'name'>('revenue');
+  const [tab, setTab] = useState<'staff' | 'commission'>('staff');
 
   const load = useCallback(async () => {
     try {
@@ -496,7 +979,8 @@ export function SalesStaff() {
       for (const s of (weekSales ?? [])) {
         const id = s.cashier_id;
         if (!weekMap[id]) weekMap[id] = new Array(7).fill(0);
-        const idx = weekDays.indexOf(s.sale_date);
+        const dayStr = new Date(s.sale_date).toISOString().split('T')[0];
+        const idx = weekDays.indexOf(dayStr);
         if (idx >= 0) weekMap[id][idx] += Number(s.total_amount);
       }
 
@@ -505,6 +989,7 @@ export function SalesStaff() {
         role,
         source,
         daily_target: u.daily_target ?? 0,
+        commission_rate: u.commission_rate ?? 0,
         initials: getInitials(u.full_name),
         tone: getTone(u.full_name),
         today: todayMap[u.id] ?? { sales: 0, revenue: 0 },
@@ -564,157 +1049,182 @@ export function SalesStaff() {
             <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{activeToday} active today</span>
           </p>
         </div>
-        {isAdmin && (
-          <button onClick={() => setModal({ kind: 'add' })} className="btn btn-primary" style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={14} /> Add Staff
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {isAdmin && tab === 'staff' && (
+            <button onClick={() => setModal({ kind: 'add' })} className="btn btn-primary" style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={14} /> Add Staff
+            </button>
+          )}
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 2, padding: '2px', borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+            {([['staff', 'Staff'], ['commission', 'Commission']] as const).map(([t, l]) => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                height: 30, padding: '0 14px', borderRadius: 7, border: 0,
+                background: tab === t ? 'var(--panel)' : 'transparent',
+                color: tab === t ? 'var(--ink)' : 'var(--muted)',
+                fontSize: 12.5, fontWeight: tab === t ? 600 : 500, cursor: 'pointer',
+                boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                transition: 'all .1s',
+              }}>{l}</button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* KPI row */}
-      <div className="rpt-kpi">
-        {[
-          { label: 'Total Staff', value: staff.length.toString(), sub: `${staff.filter(s => s.source === 'profile').length} with system access` },
-          { label: 'Active Today', value: activeToday.toString(), sub: `of ${staff.length} staff` },
-          { label: 'Revenue · Today', value: 'LKR ' + fmtK(totalRevToday), sub: 'all cashiers combined' },
-          { label: 'Revenue · MTD', value: 'LKR ' + fmtK(totalRevMTD), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
-        ].map((k, i) => (
-          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
-            <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.05, color: 'var(--ink)' }}>{k.value}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Split layout */}
-      <div className={`sh-split ${selected ? 'sh-detail-active' : ''}`}>
-        {/* Left: list */}
-        <div className="sh-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 12px',
-              borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)',
-            }}>
-              <Search size={15} style={{ color: 'var(--muted)', flexShrink: 0 }} strokeWidth={1.6} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
-                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--ink)', minWidth: 0 }} />
-              {search && (
-                <button onClick={() => setSearch('')} style={{ border: 0, background: 'transparent', color: 'var(--faint)', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {([['revenue', 'Top Revenue'], ['sales', 'Most Sales'], ['name', 'A–Z']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setSort(k)} style={{
-                  flex: 1, height: 28, borderRadius: 6,
-                  border: sort === k ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                  background: sort === k ? 'var(--accent-soft)' : 'var(--panel-2)',
-                  color: sort === k ? 'var(--accent-ink)' : 'var(--ink-2)',
-                  fontSize: 11.5, fontWeight: sort === k ? 600 : 500, cursor: 'pointer',
-                }}>{l}</button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {roles.map(r => {
-                const isA = r === roleFilter;
-                const count = r === 'All' ? staff.length : staff.filter(s => s.role === r).length;
-                return (
-                  <button key={r} onClick={() => setRoleFilter(r)} style={{
-                    padding: '4px 10px', borderRadius: 999,
-                    border: isA ? '1px solid var(--accent)' : '1px solid var(--line)',
-                    background: isA ? 'var(--accent-soft)' : 'var(--panel)',
-                    color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
-                    fontSize: 11.5, fontWeight: isA ? 600 : 500, cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                  }}>
-                    {r === 'All' ? 'All' : ROLE_LABEL[r as StaffRole]}
-                    <span className="num" style={{ fontSize: 10.5, color: isA ? 'inherit' : 'var(--faint)' }}>{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {filtered.length === 0 ? (
-              <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
-                <Users size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
-                <div>No staff found</div>
+      {tab === 'commission' ? (
+        <CommissionReport staff={staff} />
+      ) : (
+        <>
+          {/* KPI row */}
+          <div className="rpt-kpi rpt-kpi-4">
+            {[
+              { label: 'Total Staff', value: staff.length.toString(), sub: `${staff.filter(s => s.source === 'profile').length} with system access` },
+              { label: 'Active Today', value: activeToday.toString(), sub: `of ${staff.length} staff` },
+              { label: 'Revenue · Today', value: 'LKR ' + fmtK(totalRevToday), sub: 'all cashiers combined' },
+              { label: 'Revenue · MTD', value: 'LKR ' + fmtK(totalRevMTD), sub: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) },
+            ].map((k, i) => (
+              <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
+                <div className="num" style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.05, color: 'var(--ink)' }}>{k.value}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
               </div>
-            ) : filtered.map((s, i) => {
-              const isSelected = selected?.id === s.id;
-              return (
-                <div key={s.id} onClick={() => setSelected(isSelected ? null : s)} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: 'pointer',
-                  borderBottom: i < filtered.length - 1 ? '1px solid var(--line-2)' : 'none',
-                  background: isSelected ? 'color-mix(in oklab, var(--accent) 6%, var(--panel))' : 'transparent',
-                  borderLeft: isSelected ? '2.5px solid var(--accent)' : '2.5px solid transparent',
-                  transition: 'background .1s',
-                }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--panel-2)'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <Avatar initials={s.initials} tone={s.tone} size={38} active={s.isActiveToday} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: s.active ? 'var(--ink)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {s.full_name}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span>{ROLE_LABEL[s.role]}</span>
-                      {s.isActiveToday && (
-                        <>
-                          <span style={{ color: 'var(--faint)' }}>·</span>
-                          <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>Active today</span>
-                        </>
-                      )}
-                      {!s.active && (
-                        <>
-                          <span style={{ color: 'var(--faint)' }}>·</span>
-                          <span style={{ color: 'var(--faint)' }}>Inactive</span>
-                        </>
-                      )}
-                    </div>
+            ))}
+          </div>
+
+          {/* Split layout */}
+          <div className={`sh-split ${selected ? 'sh-detail-active' : ''}`}>
+            {/* Left: list */}
+            <div className="sh-list" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, height: 36, padding: '0 12px',
+                  borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)',
+                }}>
+                  <Search size={15} style={{ color: 'var(--muted)', flexShrink: 0 }} strokeWidth={1.6} />
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or email…"
+                    style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--ink)', minWidth: 0 }} />
+                  {search && (
+                    <button onClick={() => setSearch('')} style={{ border: 0, background: 'transparent', color: 'var(--faint)', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {([['revenue', 'Top Revenue'], ['sales', 'Most Sales'], ['name', 'A–Z']] as const).map(([k, l]) => (
+                    <button key={k} onClick={() => setSort(k)} style={{
+                      flex: 1, height: 28, borderRadius: 6,
+                      border: sort === k ? '1.5px solid var(--accent)' : '1px solid var(--line)',
+                      background: sort === k ? 'var(--accent-soft)' : 'var(--panel-2)',
+                      color: sort === k ? 'var(--accent-ink)' : 'var(--ink-2)',
+                      fontSize: 11.5, fontWeight: sort === k ? 600 : 500, cursor: 'pointer',
+                    }}>{l}</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {roles.map(r => {
+                    const isA = r === roleFilter;
+                    const count = r === 'All' ? staff.length : staff.filter(s => s.role === r).length;
+                    return (
+                      <button key={r} onClick={() => setRoleFilter(r)} style={{
+                        padding: '4px 10px', borderRadius: 999,
+                        border: isA ? '1px solid var(--accent)' : '1px solid var(--line)',
+                        background: isA ? 'var(--accent-soft)' : 'var(--panel)',
+                        color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
+                        fontSize: 11.5, fontWeight: isA ? 600 : 500, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                      }}>
+                        {r === 'All' ? 'All' : ROLE_LABEL[r as StaffRole]}
+                        <span className="num" style={{ fontSize: 10.5, color: isA ? 'inherit' : 'var(--faint)' }}>{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {filtered.length === 0 ? (
+                  <div style={{ padding: '36px 20px', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                    <Users size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
+                    <div>No staff found</div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    {s.month.revenue > 0 ? (
-                      <div className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>LKR {fmtK(s.month.revenue)}</div>
-                    ) : (
-                      <div style={{ fontSize: 11, color: 'var(--faint)' }}>No sales</div>
-                    )}
-                    <ChevronRight size={14} style={{ color: 'var(--faint)', marginTop: 2 }} />
+                ) : filtered.map((s, i) => {
+                  const isSelected = selected?.id === s.id;
+                  return (
+                    <div key={s.id} onClick={() => setSelected(isSelected ? null : s)} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: 'pointer',
+                      borderBottom: i < filtered.length - 1 ? '1px solid var(--line-2)' : 'none',
+                      background: isSelected ? 'color-mix(in oklab, var(--accent) 6%, var(--panel))' : 'transparent',
+                      borderLeft: isSelected ? '2.5px solid var(--accent)' : '2.5px solid transparent',
+                      transition: 'background .1s',
+                    }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <Avatar initials={s.initials} tone={s.tone} size={38} active={s.isActiveToday} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: s.active ? 'var(--ink)' : 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {s.full_name}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span>{ROLE_LABEL[s.role]}</span>
+                          {s.isActiveToday && (
+                            <>
+                              <span style={{ color: 'var(--faint)' }}>·</span>
+                              <span style={{ color: 'var(--accent-ink)', fontWeight: 500 }}>Active today</span>
+                            </>
+                          )}
+                          {!s.active && (
+                            <>
+                              <span style={{ color: 'var(--faint)' }}>·</span>
+                              <span style={{ color: 'var(--faint)' }}>Inactive</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        {s.month.revenue > 0 ? (
+                          <div className="num" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-2)' }}>LKR {fmtK(s.month.revenue)}</div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: 'var(--faint)' }}>No sales</div>
+                        )}
+                        <ChevronRight size={14} style={{ color: 'var(--faint)', marginTop: 2 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right: detail */}
+            <div className="sh-detail">
+              {selected ? (
+                <DetailPanel
+                  member={selected}
+                  isAdmin={isAdmin}
+                  onEdit={() => setModal({ kind: 'edit', member: selected })}
+                  onBack={() => setSelected(null)}
+                  onTargetSaved={(id, target) => {
+                    setStaff(prev => prev.map(s => s.id === id ? { ...s, daily_target: target } : s));
+                    setSelected(prev => prev?.id === id ? { ...prev, daily_target: target } : prev);
+                  }}
+                  onCommissionRateSaved={(id, rate) => {
+                    setStaff(prev => prev.map(s => s.id === id ? { ...s, commission_rate: rate } : s));
+                    setSelected(prev => prev?.id === id ? { ...prev, commission_rate: rate } : prev);
+                  }}
+                />
+              ) : (
+                <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <Users size={32} style={{ color: 'var(--faint)', marginBottom: 12 }} />
+                    <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-2)' }}>Select a staff member</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Tap any row to view performance details</div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Right: detail */}
-        <div className="sh-detail">
-          {selected ? (
-            <DetailPanel
-              member={selected}
-              isAdmin={isAdmin}
-              onEdit={() => setModal({ kind: 'edit', member: selected })}
-              onBack={() => setSelected(null)}
-              onTargetSaved={(id, target) => {
-                setStaff(prev => prev.map(s => s.id === id ? { ...s, daily_target: target } : s));
-                setSelected(prev => prev?.id === id ? { ...prev, daily_target: target } : prev);
-              }}
-            />
-          ) : (
-            <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 300, color: 'var(--muted)' }}>
-              <div style={{ textAlign: 'center' }}>
-                <Users size={32} style={{ color: 'var(--faint)', marginBottom: 12 }} />
-                <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-2)' }}>Select a staff member</div>
-                <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 6 }}>Tap any row to view performance details</div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {modal && (
         <StaffModal
