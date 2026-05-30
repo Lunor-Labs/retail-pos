@@ -96,7 +96,8 @@ interface ProductsProps {
 }
 
 export function Products({ initialStockFilter = 'all' }: ProductsProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isStockManager } = useAuth();
+  const canManageStock = isAdmin || isStockManager;
   const logAudit = useProductAudit();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -542,7 +543,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               </button>
             ))}
           </div>
-          {isAdmin && tab === 'products' && (
+          {canManageStock && tab === 'products' && (
             <>
               <button onClick={() => setShowImportModal(true)} className="btn" style={{ height: 36 }}>
                 <Upload size={14} /> Import CSV
@@ -655,7 +656,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               onEdit={openEditPage}
               onAddStock={openAddStockModal}
               onPrintBarcode={handlePrintBarcode}
-              isAdmin={isAdmin}
+              isAdmin={canManageStock}
             />
           </div>
 

@@ -171,6 +171,7 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
   const { showToast } = useToast();
   const logAudit = useProductAudit();
   const isAdmin = profile?.role === 'admin';
+  const canEditStock = isAdmin || profile?.role === 'stock_manager';
   const [variants, setVariants] = useState<VariantWithStock[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(true);
 
@@ -268,7 +269,7 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
           <VariantSection
             key={v.id}
             variant={v}
-            isAdmin={isAdmin}
+            isAdmin={canEditStock}
             onBatchSave={handleBatchSave}
           />
         ))}
