@@ -272,6 +272,11 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved, onCommiss
         .update({ daily_target: val })
         .eq('id', member.id);
       if (error) throw error;
+      await (supabase.from('staff_rate_history') as any).upsert({
+        staff_id: member.id, staff_source: member.source,
+        commission_rate: member.commission_rate, daily_target: val,
+        effective_from: new Date().toISOString().split('T')[0],
+      }, { onConflict: 'staff_id,effective_from' });
       onTargetSaved(member.id, val);
       setEditingTarget(false);
       showToast('Daily target updated', 'success');
@@ -291,6 +296,11 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved, onCommiss
         .update({ commission_rate: val })
         .eq('id', member.id);
       if (error) throw error;
+      await (supabase.from('staff_rate_history') as any).upsert({
+        staff_id: member.id, staff_source: member.source,
+        commission_rate: val, daily_target: member.daily_target,
+        effective_from: new Date().toISOString().split('T')[0],
+      }, { onConflict: 'staff_id,effective_from' });
       onCommissionRateSaved(member.id, val);
       setEditingRate(false);
       showToast('Commission rate updated', 'success');
@@ -532,6 +542,8 @@ interface DayData {
 
 interface CommissionRow {
   member: StaffMember;
+  effectiveRate: number;
+  effectiveTarget: number;
   days: DayData[];
   totalRevenue: number;
   qualifyingDays: number;
@@ -557,6 +569,7 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
   const [loading, setLoading] = useState(false);
   const [salesByStaffDay, setSalesByStaffDay] = useState<Record<string, Record<string, number>>>({});
   const [payments, setPayments] = useState<Record<string, boolean>>({});
+  const [effectiveRates, setEffectiveRates] = useState<Record<string, { commission_rate: number; daily_target: number }>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
@@ -570,8 +583,9 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
       const [y, m] = month.split('-').map(Number);
       const monthStart = new Date(y, m - 1, 1).toISOString();
       const monthEnd = new Date(y, m, 1).toISOString();
+      const monthLastDay = new Date(y, m, 0).toISOString().split('T')[0];
 
-      const [{ data: sales }, { data: paidRecs }] = await Promise.all([
+      const [{ data: sales }, { data: paidRecs }, { data: rateHistory }] = await Promise.all([
         client.from('sales')
           .select('cashier_id, total_amount, sale_date')
           .gte('sale_date', monthStart)
@@ -580,6 +594,10 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
         client.from('staff_commission_payments')
           .select('staff_id')
           .eq('month', month),
+        client.from('staff_rate_history')
+          .select('staff_id, commission_rate, daily_target, effective_from')
+          .lte('effective_from', monthLastDay)
+          .order('effective_from', { ascending: false }),
       ]);
 
       const map: Record<string, Record<string, number>> = {};
@@ -593,6 +611,15 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
       const pmap: Record<string, boolean> = {};
       for (const p of (paidRecs ?? [])) pmap[p.staff_id] = true;
       setPayments(pmap);
+
+      // Most recent snapshot per staff member with effective_from <= month end
+      const emap: Record<string, { commission_rate: number; daily_target: number }> = {};
+      for (const r of (rateHistory ?? [])) {
+        if (!emap[r.staff_id]) {
+          emap[r.staff_id] = { commission_rate: Number(r.commission_rate), daily_target: Number(r.daily_target) };
+        }
+      }
+      setEffectiveRates(emap);
     } catch {
       showToast('Failed to load commission data', 'error');
     } finally {
@@ -609,6 +636,11 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
     const isCurrentMonth = month === currentMonth;
 
     return staff.map(member => {
+      const snap = effectiveRates[member.id];
+      // Fall back to current values if no history snapshot exists for this month
+      const effectiveRate = snap?.commission_rate ?? member.commission_rate;
+      const effectiveTarget = snap?.daily_target ?? member.daily_target;
+
       const salesMap = salesByStaffDay[member.id] ?? {};
       const days: DayData[] = [];
 
@@ -617,18 +649,20 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
         if (isCurrentMonth && dateStr > today) break;
 
         const revenue = salesMap[dateStr] ?? 0;
-        const hit = member.daily_target > 0 && revenue >= member.daily_target;
-        const commission = hit ? revenue * (member.commission_rate / 100) : 0;
+        const hit = effectiveTarget > 0 && revenue >= effectiveTarget;
+        const commission = hit ? revenue * (effectiveRate / 100) : 0;
         days.push({ date: dateStr, revenue, hit, commission });
       }
 
       const qualifyingDays = days.filter(d => d.hit).length;
       const commissionBase = days.reduce((s, d) => s + (d.hit ? d.revenue : 0), 0);
-      const commissionAmount = commissionBase * (member.commission_rate / 100);
+      const commissionAmount = commissionBase * (effectiveRate / 100);
       const totalRevenue = days.reduce((s, d) => s + d.revenue, 0);
 
       return {
         member,
+        effectiveRate,
+        effectiveTarget,
         days,
         totalRevenue,
         qualifyingDays,
@@ -637,7 +671,7 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
         isPaid: !!payments[member.id],
       };
     }).sort((a, b) => b.commissionAmount - a.commissionAmount);
-  }, [staff, month, salesByStaffDay, payments, currentMonth]);
+  }, [staff, month, salesByStaffDay, payments, effectiveRates, currentMonth]);
 
   const totalDue = rows.reduce((s, r) => s + r.commissionAmount, 0);
   const totalPaid = rows.filter(r => r.isPaid).reduce((s, r) => s + r.commissionAmount, 0);
@@ -750,8 +784,8 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
           const isExpanded = expanded.has(row.member.id);
           const isConfirming = confirming === row.member.id;
           const isPaying = paying === row.member.id;
-          const hasTarget = row.member.daily_target > 0;
-          const hasRate = row.member.commission_rate > 0;
+          const hasTarget = row.effectiveTarget > 0;
+          const hasRate = row.effectiveRate > 0;
 
           return (
             <div key={row.member.id} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--line-2)' : 'none' }}>
@@ -772,7 +806,7 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
                 </div>
                 {/* Rate */}
                 <div className="num" style={{ fontSize: 12.5, color: hasRate ? 'var(--ink-2)' : 'var(--faint)' }}>
-                  {hasRate ? `${row.member.commission_rate}%` : '—'}
+                  {hasRate ? `${row.effectiveRate}%` : '—'}
                 </div>
                 {/* Revenue */}
                 <div className="num" style={{ fontSize: 12.5, color: row.totalRevenue > 0 ? 'var(--ink-2)' : 'var(--faint)' }}>
@@ -880,7 +914,7 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
                         {day.revenue > 0 ? fmtLKR(day.revenue) : '—'}
                       </div>
                       <div className="num" style={{ fontSize: 12, color: 'var(--muted)' }}>
-                        {hasTarget ? fmtLKR(row.member.daily_target) : '—'}
+                        {hasTarget ? fmtLKR(row.effectiveTarget) : '—'}
                       </div>
                       <div style={{ fontSize: 13 }}>
                         {!hasTarget
