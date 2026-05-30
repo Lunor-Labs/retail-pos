@@ -5,6 +5,7 @@ import { DropdownSelect } from '../ui';
 import { productService, supplierService, referenceDataService } from '../../services';
 import { VariantInput } from '../../services/ProductService';
 import { VariantTableRow, VariantRowData } from './VariantTableRow';
+import { useProductAudit } from '../../lib/auditLog';
 
 const UNITS = [
   { value: 'piece', label: 'Piece' },
@@ -57,6 +58,7 @@ export function AddProductPage({
   mode, productId, onSave, onCancel, initialBrand = '', initialPricing, onSaveAndNext,
 }: AddProductPageProps) {
   const { showToast } = useToast();
+  const logAudit = useProductAudit();
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [refBrands, setRefBrands] = useState<string[]>([]);
@@ -193,10 +195,17 @@ export function AddProductPage({
           supplier_id: pricing.supplier_id,
         }));
         await productService.createProductWithVariants(info, allRows);
+        const totalUnits = rows.reduce((s, r) => s + (r.qty ?? 0), 0);
+        logAudit({
+          action_type: 'product_added',
+          product_name: info.name,
+          detail: `${rows.length} variant${rows.length > 1 ? 's' : ''}${totalUnits > 0 ? ` · ${totalUnits} units` : ''}`,
+        });
         showToast(`${info.name} saved — ${rows.length} variant${rows.length > 1 ? 's' : ''} added`, 'success');
       } else if (productId) {
         const newVariants = buildVariantInputs();
         await productService.updateProductWithVariants(productId, info, newVariants);
+        logAudit({ action_type: 'product_updated', product_id: productId, product_name: info.name });
         showToast('Product updated', 'success');
       }
 

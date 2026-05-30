@@ -4,6 +4,7 @@ import { Upload, Download, AlertCircle, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Modal } from '../ui';
 import { useToast } from '../../contexts/ToastContext';
+import { useProductAudit } from '../../lib/auditLog';
 
 interface ProductImporterProps {
     onClose: () => void;
@@ -35,6 +36,7 @@ interface ImportStats {
 
 export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
     const { showToast } = useToast();
+    const logAudit = useProductAudit();
     const [previewData, setPreviewData] = useState<CSVRow[]>([]);
     const [processedCount, setProcessedCount] = useState(0);
     const [stats, setStats] = useState<ImportStats>({ total: 0, success: 0, failed: 0, errors: [] });
@@ -284,6 +286,11 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
         });
         setStep('complete');
         if (successCount > 0) {
+            logAudit({
+                action_type: 'csv_imported',
+                product_name: 'CSV Import',
+                detail: `${successCount} product${successCount > 1 ? 's' : ''} imported${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
+            });
             onSuccess();
         }
     };

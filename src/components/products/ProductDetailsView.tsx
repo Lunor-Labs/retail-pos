@@ -5,6 +5,7 @@ import { Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { productService } from '../../services';
+import { useProductAudit } from '../../lib/auditLog';
 
 interface ProductDetailsViewProps {
   product: ProductWithStock;
@@ -152,6 +153,7 @@ function VariantSection({ variant, isAdmin, onBatchSave }: VariantSectionProps) 
 export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetailsViewProps) {
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const logAudit = useProductAudit();
   const isAdmin = profile?.role === 'admin';
   const [variants, setVariants] = useState<VariantWithStock[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(true);
@@ -174,7 +176,29 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
 
   async function handleBatchSave(batchId: string, data: Partial<ProductBatch>) {
     try {
+      // Capture old values for the audit detail before saving
+      let oldSelling: number | undefined;
+      let oldQty: number | undefined;
+      for (const v of variants) {
+        const b = v.batches.find(b => b.id === batchId);
+        if (b) { oldSelling = b.selling_price; oldQty = b.current_quantity; break; }
+      }
+
       await productService.updateBatch(batchId, data as any);
+
+      const parts: string[] = [];
+      if (data.selling_price !== undefined && oldSelling !== undefined && data.selling_price !== oldSelling)
+        parts.push(`price: LKR ${oldSelling.toLocaleString()} → LKR ${data.selling_price.toLocaleString()}`);
+      if (data.current_quantity !== undefined && oldQty !== undefined && data.current_quantity !== oldQty)
+        parts.push(`qty: ${oldQty} → ${data.current_quantity}`);
+
+      logAudit({
+        action_type: 'batch_updated',
+        product_id: product.id,
+        product_name: product.name,
+        detail: parts.length > 0 ? parts.join(' · ') : undefined,
+      });
+
       showToast('Batch updated', 'success');
       loadVariants();
       onUpdate?.();

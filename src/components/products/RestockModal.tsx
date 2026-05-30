@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { productService, supplierService } from '../../services';
 import { ProductWithStock } from '../../types';
 import { DropdownSelect } from '../ui';
+import { useProductAudit } from '../../lib/auditLog';
 
 interface VariantRow {
   variantId: string;
@@ -24,6 +25,7 @@ interface RestockModalProps {
 
 export function RestockModal({ product, onClose, onSuccess }: RestockModalProps) {
   const { showToast } = useToast();
+  const logAudit = useProductAudit();
   const [rows, setRows] = useState<VariantRow[]>([]);
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState('');
@@ -131,6 +133,12 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
       if (error) throw new Error(error.message);
 
       const totalUnits = toAdd.reduce((sum, r) => sum + (r.qty as number), 0);
+      logAudit({
+        action_type: 'stock_restocked',
+        product_id: product.id,
+        product_name: product.name,
+        detail: `+${totalUnits} units across ${toAdd.length} variant${toAdd.length > 1 ? 's' : ''}`,
+      });
       showToast(`Added ${totalUnits} units across ${toAdd.length} variant${toAdd.length > 1 ? 's' : ''}`, 'success');
       onSuccess();
       onClose();

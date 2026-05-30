@@ -16,7 +16,9 @@ import { RestockModal } from './products/RestockModal';
 import { productService, supplierService } from '../services';
 import { logger } from '../lib/logger';
 import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
+import { ProductActivityLog } from './products/ProductActivityLog';
 import { playScannerBeep } from '../utils/audio';
+import { useProductAudit } from '../lib/auditLog';
 
 // Inline custom dropdown — avoids native select styling issues
 function FilterDropdown({ value, onChange, options, placeholder }: {
@@ -95,6 +97,7 @@ interface ProductsProps {
 
 export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const { isAdmin } = useAuth();
+  const logAudit = useProductAudit();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -151,6 +154,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const [rememberedBrand, setRememberedBrand] = useState('');
   const [rememberedPricing, setRememberedPricing] = useState<DefaultPricing | undefined>(undefined);
+  const [tab, setTab] = useState<'products' | 'activity'>('products');
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
   const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastKeyTimeRef = useRef<number>(0);
@@ -340,9 +344,11 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           selling_price: formData.selling_price || 0,
           supplier_id: formData.supplier_id || null,
         } as any);
+        logAudit({ action_type: 'product_added', product_name: formData.name });
         showToast('Product added successfully!', 'success');
       } else if (selectedProduct) {
         await productService.updateProduct(selectedProduct.id, formData as any);
+        logAudit({ action_type: 'product_updated', product_id: selectedProduct.id, product_name: formData.name });
         showToast('Product updated successfully!', 'success');
       }
 
@@ -521,7 +527,22 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>Manage inventory, pricing, and stock levels.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isAdmin && (
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 2, padding: '2px', borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+            {(['products', 'activity'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                height: 30, padding: '0 14px', borderRadius: 7, border: 0,
+                background: tab === t ? 'var(--panel)' : 'transparent',
+                color: tab === t ? 'var(--ink)' : 'var(--muted)',
+                fontSize: 12.5, fontWeight: tab === t ? 600 : 500, cursor: 'pointer',
+                boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                transition: 'all .1s',
+              }}>
+                {t === 'products' ? 'Products' : 'Activity Log'}
+              </button>
+            ))}
+          </div>
+          {isAdmin && tab === 'products' && (
             <>
               <button onClick={() => setShowImportModal(true)} className="btn" style={{ height: 36 }}>
                 <Upload size={14} /> Import CSV
@@ -537,6 +558,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         </div>
       </div>
 
+      {tab === 'activity' && <ProductActivityLog />}
+
+      {tab === 'products' && <>
       {/* Filters card */}
       <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Row 1: search bar */}
@@ -644,6 +668,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           />
         </div>
       )}
+      </>}
 
       {/* Main Product Action Modal (Add/Edit/View) */}
       <Modal

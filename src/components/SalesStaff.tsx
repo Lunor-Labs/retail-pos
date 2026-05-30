@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check, ChevronDown, Printer, TrendingUp } from 'lucide-react';
+import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check, ChevronDown, TrendingUp } from 'lucide-react';
 import { salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -738,9 +738,9 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
             <ChevronRight size={15} />
           </button>
         </div>
-        <button onClick={() => window.print()} className="btn" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
+        {/* <button onClick={() => window.print()} className="btn" style={{ height: 34, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5 }}>
           <Printer size={13} /> Print Report
-        </button>
+        </button> */}
       </div>
 
       {/* Print header (only visible in print) */}
