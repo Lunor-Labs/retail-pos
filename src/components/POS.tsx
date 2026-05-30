@@ -451,6 +451,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     showToast(`'${description.trim()}' added to cart`, 'success');
   }
 
+  function setCartItemQuantity(index: number, qty: number) {
+    const item = cart[index];
+    if (qty <= 0) { removeFromCart(index); return; }
+    if (!item.isManual && qty > item.batch.current_quantity) {
+      showToast(`Only ${item.batch.current_quantity} units available`, 'warning');
+      return;
+    }
+    const newCart = [...cart];
+    newCart[index] = { ...newCart[index], quantity: qty };
+    setCart(newCart);
+  }
+
   function updateCartItemPrice(index: number, newPrice: number) {
     const item = cart[index];
     const maxDisc = item.original_price <= 1000 ? 50
@@ -954,6 +966,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 <CartItemsList
                   items={cart}
                   onUpdateQuantity={updateCartItemQuantity}
+                  onSetQuantity={setCartItemQuantity}
                   onUpdatePrice={updateCartItemPrice}
                   onRemoveItem={removeFromCart}
                 />
@@ -1334,6 +1347,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   <CartItemsList
                     items={cart}
                     onUpdateQuantity={updateCartItemQuantity}
+                    onSetQuantity={setCartItemQuantity}
                     onUpdatePrice={updateCartItemPrice}
                     onRemoveItem={removeFromCart}
                   />

@@ -1,9 +1,11 @@
+import { useRef } from 'react';
 import { Plus, Minus, X, Tag } from 'lucide-react';
 import { CartItem } from '../../types';
 
 interface CartItemsListProps {
   items: CartItem[];
   onUpdateQuantity: (index: number, change: number) => void;
+  onSetQuantity?: (index: number, qty: number) => void;
   onUpdatePrice?: (index: number, newPrice: number) => void;
   onRemoveItem: (index: number) => void;
 }
@@ -17,7 +19,11 @@ function maxDiscount(originalPrice: number): number {
   return 300;
 }
 
-export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemoveItem }: CartItemsListProps) {
+export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdatePrice, onRemoveItem }: CartItemsListProps) {
+  // Refs for focus management across items
+  const qtyRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const discRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   if (items.length === 0) return null;
 
   return (
@@ -41,19 +47,61 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
           >
             {/* ── Row 1: qty · name · subtotal · remove ── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              {/* Qty stepper */}
+
+              {/* Qty stepper with keyboard-editable centre */}
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 <button
                   onClick={() => onUpdateQuantity(index, -1)}
+                  tabIndex={-1}
                   style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
                 >
                   <Minus size={10} strokeWidth={2.5} />
                 </button>
-                <span style={{ width: 28, textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--ink)', ...mono }}>
-                  {item.quantity}
-                </span>
+
+                {/* Qty — ghost input, always editable */}
+                <input
+                  ref={el => { qtyRefs.current[index] = el; }}
+                  type="number"
+                  min={1}
+                  value={item.quantity}
+                  onChange={e => {
+                    const v = parseInt(e.target.value);
+                    if (!isNaN(v)) onSetQuantity?.(index, v);
+                  }}
+                  onFocus={e => {
+                    e.currentTarget.select();
+                    e.currentTarget.style.background = 'var(--panel-2)';
+                    e.currentTarget.style.borderRadius = '4px';
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderRadius = '0';
+                    // Ensure at least 1
+                    const v = parseInt(e.target.value);
+                    if (isNaN(v) || v < 1) onSetQuantity?.(index, 1);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      // Jump to this item's discount input
+                      discRefs.current[index]?.focus();
+                      discRefs.current[index]?.select();
+                    }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); onUpdateQuantity(index, 1); }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); onUpdateQuantity(index, -1); }
+                  }}
+                  style={{
+                    width: 28, textAlign: 'center', fontSize: 13, fontWeight: 700,
+                    color: 'var(--ink)', ...mono,
+                    border: 0, outline: 'none', background: 'transparent',
+                    // Hide browser number spin arrows
+                    MozAppearance: 'textfield' as any,
+                  }}
+                />
+
                 <button
                   onClick={() => onUpdateQuantity(index, 1)}
+                  tabIndex={-1}
                   style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
                 >
                   <Plus size={10} strokeWidth={2.5} />
@@ -62,9 +110,7 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
 
               {/* Product name */}
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, overflow: 'hidden' }}>
-                {item.isManual && (
-                  <Tag size={11} strokeWidth={1.8} style={{ color: 'var(--warn)', flexShrink: 0 }} />
-                )}
+                {item.isManual && <Tag size={11} strokeWidth={1.8} style={{ color: 'var(--warn)', flexShrink: 0 }} />}
                 <span style={{
                   fontSize: 13, fontWeight: 500, color: 'var(--ink)',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -80,6 +126,7 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
                 </span>
                 <button
                   onClick={() => onRemoveItem(index)}
+                  tabIndex={-1}
                   style={{ width: 20, height: 20, display: 'grid', placeItems: 'center', border: 0, background: 'transparent', color: 'var(--faint)', borderRadius: 4, cursor: 'default', flexShrink: 0 }}
                   onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'color-mix(in srgb, var(--danger) 10%, transparent)'; }}
                   onMouseLeave={e => { e.currentTarget.style.color = 'var(--faint)'; e.currentTarget.style.background = 'transparent'; }}
@@ -93,25 +140,22 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               marginTop: 5,
-              paddingLeft: 72, /* aligns with name above (stepper 72px) */
+              paddingLeft: 72,
             }}>
-              {/* Unit price — editable, cap enforced on blur */}
+              {/* Original price (strikethrough when discounted) */}
               <span style={{
-                fontSize: 11.5, ...mono,
+                fontSize: 11.5, ...mono, flexShrink: 0,
                 color: isDiscounted ? 'var(--faint)' : 'var(--muted)',
                 textDecoration: isDiscounted ? 'line-through' : 'none',
-                flexShrink: 0,
               }}>
                 LKR {item.original_price.toLocaleString()}
               </span>
 
-              {/* Separator */}
               <span style={{ color: 'var(--line-2)', fontSize: 11, flexShrink: 0 }}>·</span>
 
-              {/* Discount label */}
               <Tag size={10} strokeWidth={2} style={{ color: isDiscounted ? 'var(--accent-ink)' : 'var(--faint)', flexShrink: 0 }} />
 
-              {/* Discount amount input */}
+              {/* Discount input */}
               <div style={{
                 display: 'flex', alignItems: 'center', height: 24,
                 borderRadius: 5, border: `1px solid ${isDiscounted ? 'var(--accent)' : 'var(--line)'}`,
@@ -119,13 +163,15 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
                 overflow: 'hidden', flexShrink: 0,
               }}>
                 <span style={{
-                  padding: '0 6px', fontSize: 10, color: isDiscounted ? 'var(--accent-ink)' : 'var(--muted)',
+                  padding: '0 6px', fontSize: 10,
+                  color: isDiscounted ? 'var(--accent-ink)' : 'var(--muted)',
                   borderRight: `1px solid ${isDiscounted ? 'color-mix(in oklab, var(--accent) 30%, transparent)' : 'var(--line-2)'}`,
                   lineHeight: '24px', flexShrink: 0,
                 }}>
                   −
                 </span>
                 <input
+                  ref={el => { discRefs.current[index] = el; }}
                   type="number"
                   min={0}
                   max={maxDisc}
@@ -134,8 +180,34 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
                   placeholder="0"
                   onChange={e => {
                     const raw = parseFloat(e.target.value) || 0;
-                    const capped = Math.min(raw, maxDisc);
-                    onUpdatePrice && onUpdatePrice(index, item.original_price - capped);
+                    onUpdatePrice?.(index, item.original_price - Math.min(raw, maxDisc));
+                  }}
+                  onFocus={e => e.currentTarget.select()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      // Move to next item's discount, or next item's qty if last disc
+                      const nextDisc = discRefs.current[index + 1];
+                      const nextQty = qtyRefs.current[index + 1];
+                      if (nextDisc) { nextDisc.focus(); nextDisc.select(); }
+                      else if (nextQty) { nextQty.focus(); nextQty.select(); }
+                      else { (e.currentTarget as HTMLInputElement).blur(); }
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      onUpdatePrice?.(index, item.original_price); // clear discount
+                      e.currentTarget.blur();
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const next = Math.min(currentDiscount + 10, maxDisc);
+                      onUpdatePrice?.(index, item.original_price - next);
+                    }
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const next = Math.max(currentDiscount - 10, 0);
+                      onUpdatePrice?.(index, item.original_price - next);
+                    }
                   }}
                   style={{
                     width: 44, border: 0, outline: 'none', background: 'transparent',
@@ -151,7 +223,7 @@ export function CartItemsList({ items, onUpdateQuantity, onUpdatePrice, onRemove
                 max {maxDisc}
               </span>
 
-              {/* Discounted price badge */}
+              {/* Final price badge */}
               {isDiscounted && (
                 <span style={{ marginLeft: 2, fontSize: 11.5, fontWeight: 600, color: 'var(--accent-ink)', ...mono, flexShrink: 0 }}>
                   = LKR {item.price.toLocaleString()}
