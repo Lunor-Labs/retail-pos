@@ -14,6 +14,7 @@ import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { StockFilter } from './hooks/useProducts';
 import { ToastProvider } from './contexts/ToastContext';
+import { CostCodeProvider } from './contexts/CostCodeContext';
 import { ToastContainer } from './components/ui';
 
 function AppContent() {
@@ -100,8 +101,10 @@ function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <AppContent />
-        <ToastContainer />
+        <CostCodeProvider>
+          <AppContent />
+          <ToastContainer />
+        </CostCodeProvider>
       </ToastProvider>
     </AuthProvider>
   );

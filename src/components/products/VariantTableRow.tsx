@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { CostInput } from '../ui';
 
 export interface VariantRowData {
   id?: string;
@@ -122,14 +123,13 @@ export function VariantTableRow({
           </td>
         )}
 
-        {/* Cost (LKR) */}
+        {/* Cost */}
         {showPricing && (
           <td style={{ ...cellStyle, width: 96 }}>
-            <input
-              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
-              value={row.cost_price || ''}
-              onChange={e => updateCost(parseFloat(e.target.value) || 0)}
-              placeholder="0"
+            <CostInput
+              value={row.cost_price}
+              onChange={updateCost}
+              style={{ ...inputStyle, textAlign: 'right' }}
             />
           </td>
         )}

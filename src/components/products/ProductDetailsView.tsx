@@ -6,6 +6,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { productService } from '../../services';
 import { useProductAudit } from '../../lib/auditLog';
+import { CostInput, CostDisplay } from '../ui';
+import { useCostCode } from '../../contexts/CostCodeContext';
 
 interface ProductDetailsViewProps {
   product: ProductWithStock;
@@ -25,6 +27,9 @@ interface BatchRowProps {
 
 function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
   const [editing, setEditing] = useState(false);
+  const { isAdmin } = useAuth();
+  const { isConfigured } = useCostCode();
+  const useEncoding = !isAdmin && isConfigured;
   const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price });
   const [saving, setSaving] = useState(false);
 
@@ -61,18 +66,30 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-            {[
-              { label: 'Qty', val: d.current_quantity, set: (v: number) => setD(p => ({ ...p, current_quantity: v })) },
-              { label: 'Cost (LKR)', val: d.cost_price, set: updateCost },
-              { label: 'Markup %', val: d.markup_percentage, set: updateMarkup },
-              { label: 'Selling (LKR)', val: d.selling_price, set: updateSelling },
-            ].map(({ label, val, set }) => (
-              <div key={label}>
-                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-                <input type="number" min={0} step="any" value={val || ''} onChange={e => set(parseFloat(e.target.value) || 0)}
-                  style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
-              </div>
-            ))}
+            {/* Qty */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Qty</div>
+              <input type="number" min={0} step="any" value={d.current_quantity || ''} onChange={e => setD(p => ({ ...p, current_quantity: parseFloat(e.target.value) || 0 }))}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
+            {/* Cost */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Cost</div>
+              <CostInput value={d.cost_price} onChange={updateCost}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
+            {/* Markup % */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Markup %</div>
+              <input type="number" min={0} step="any" value={d.markup_percentage || ''} onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
+            {/* Selling */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Selling (LKR)</div>
+              <input type="number" min={0} step="any" value={d.selling_price || ''} onChange={e => updateSelling(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
           </div>
         </div>
       ) : (
@@ -82,9 +99,9 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               {fmtDate(batch.received_date)}
               {batch.supplier && <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· {batch.supplier.name}</span>}
             </div>
-            {isAdmin && (
+            {(isAdmin || isConfigured) && (
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                Cost LKR {batch.cost_price.toLocaleString()} · {batch.markup_percentage ?? 0}% markup
+                Cost <CostDisplay value={batch.cost_price} /> · {batch.markup_percentage ?? 0}% markup
               </div>
             )}
           </div>

@@ -171,7 +171,7 @@ html, body {
 @media (min-width: 1024px) {
   .pos-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 440px;
     height: calc(100vh - 56px);
     overflow: hidden;
   }

@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { productService, supplierService } from '../../services';
 import { ProductWithStock } from '../../types';
-import { DropdownSelect } from '../ui';
+import { DropdownSelect, CostInput } from '../ui';
 import { useProductAudit } from '../../lib/auditLog';
 
 interface VariantRow {
@@ -198,7 +198,7 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--panel-2)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    {['Variant', 'In Stock', 'Qty', 'Cost (LKR)', 'Markup %', 'Selling (LKR)'].map(h => (
+                    {['Variant', 'In Stock', 'Qty', 'Cost', 'Markup %', 'Selling (LKR)'].map(h => (
                       <th key={h} style={{
                         padding: '8px 12px', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em',
                         textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap',
@@ -234,9 +234,10 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
                           />
                         </td>
                         <td style={{ padding: '6px 12px', width: 110 }}>
-                          <input style={inputNum} type="number" min={0} step="any"
-                            value={row.cost}
-                            onChange={e => updateCost(i, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                          <CostInput
+                            value={row.cost === '' ? 0 : row.cost as number}
+                            onChange={v => updateCost(i, v)}
+                            style={inputNum}
                             placeholder="—"
                           />
                         </td>
