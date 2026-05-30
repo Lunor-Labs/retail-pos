@@ -27,7 +27,6 @@ interface BatchRowProps {
 
 function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
   const [editing, setEditing] = useState(false);
-  const { isAdmin } = useAuth();
   const { isConfigured } = useCostCode();
   const useEncoding = !isAdmin && isConfigured;
   const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price });
