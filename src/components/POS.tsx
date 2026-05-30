@@ -452,8 +452,13 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   }
 
   function updateCartItemPrice(index: number, newPrice: number) {
+    const item = cart[index];
+    const maxDisc = item.original_price <= 1000 ? 50
+      : item.original_price <= 2000 ? 100
+      : item.original_price <= 5000 ? 200
+      : 300;
     const newCart = [...cart];
-    newCart[index].price = newPrice;
+    newCart[index].price = Math.max(item.original_price - maxDisc, newPrice);
     setCart(newCart);
   }
 
