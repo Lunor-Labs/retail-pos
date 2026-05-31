@@ -6,6 +6,8 @@ import { productService, supplierService, referenceDataService } from '../../ser
 import { VariantInput } from '../../services/ProductService';
 import { VariantTableRow, VariantRowData } from './VariantTableRow';
 import { useProductAudit } from '../../lib/auditLog';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCostCode } from '../../contexts/CostCodeContext';
 
 const UNITS = [
   { value: 'piece', label: 'Piece' },
@@ -59,6 +61,9 @@ export function AddProductPage({
 }: AddProductPageProps) {
   const { showToast } = useToast();
   const logAudit = useProductAudit();
+  const { isAdmin } = useAuth();
+  const { isConfigured } = useCostCode();
+  const hideMarkup = !isAdmin && isConfigured;
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [refBrands, setRefBrands] = useState<string[]>([]);
@@ -369,10 +374,10 @@ export function AddProductPage({
               <tr style={{ background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)' }}>
                 {[
                   'Size', 'Colour', 'SKU', 'Min Stock',
-                  ...(mode === 'add' ? ['Qty', 'Cost (LKR)', 'Markup %', 'Selling (LKR)'] : []),
+                  ...(mode === 'add' ? ['Qty', 'Cost', ...(hideMarkup ? [] : ['Markup %']), 'Selling (LKR)'] : []),
                   '',
                 ].map(h => (
-                  <th key={h} style={{ padding: '8px 4px', textAlign: h === '' ? 'left' : ['Cost (LKR)', 'Markup %', 'Selling (LKR)', 'Min Stock', 'Qty'].includes(h) ? 'right' : 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                  <th key={h} style={{ padding: '8px 4px', textAlign: h === '' ? 'left' : ['Cost', 'Cost (LKR)', 'Markup %', 'Selling (LKR)', 'Min Stock', 'Qty'].includes(h) ? 'right' : 'left', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                     {h}
                   </th>
                 ))}

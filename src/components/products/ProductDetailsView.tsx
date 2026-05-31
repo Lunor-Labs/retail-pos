@@ -64,7 +64,7 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               <button onClick={save} disabled={saving} style={{ border: 0, background: 'transparent', color: 'var(--pos)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><Check size={14} /></button>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: useEncoding ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
             {/* Qty */}
             <div>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Qty</div>
@@ -77,12 +77,14 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               <CostInput value={d.cost_price} onChange={updateCost}
                 style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
             </div>
-            {/* Markup % */}
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Markup %</div>
-              <input type="number" min={0} step="any" value={d.markup_percentage || ''} onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
-                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
-            </div>
+            {/* Markup % — hidden when encoding active */}
+            {!useEncoding && (
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Markup %</div>
+                <input type="number" min={0} step="any" value={d.markup_percentage || ''} onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
+                  style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+              </div>
+            )}
             {/* Selling */}
             <div>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Selling (LKR)</div>
@@ -100,7 +102,8 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
             </div>
             {(isAdmin || isConfigured) && (
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                Cost <CostDisplay value={batch.cost_price} /> · {batch.markup_percentage ?? 0}% markup
+                Cost <CostDisplay value={batch.cost_price} />
+                {!useEncoding && <> · {batch.markup_percentage ?? 0}% markup</>}
               </div>
             )}
           </div>
