@@ -84,6 +84,12 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState<{ id: string; code: string; amount: number } | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
+
+  // POS voucher issuance
+  const [showIssueVoucher, setShowIssueVoucher] = useState(false);
+  const [voucherRules, setVoucherRules] = useState<{ minPurchase: number; rewardAmount: number } | null>(null);
+  const [issueVoucherForm, setIssueVoucherForm] = useState({ amount: '', phone: '', name: '' });
+  const [issuingVoucher, setIssuingVoucher] = useState(false);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cartScrollRef = useRef<HTMLDivElement>(null);
@@ -280,6 +286,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     } catch (error) {
       console.error('Error loading data:', error);
     }
+
+    // Load voucher rules
+    try {
+      const { data } = await (supabase.from('app_settings') as any)
+        .select('key, value').in('key', ['voucher_min_purchase', 'voucher_reward_amount']);
+      if (data && data.length === 2) {
+        const get = (k: string) => parseFloat(data.find((r: any) => r.key === k)?.value ?? '0');
+        const min = get('voucher_min_purchase');
+        const reward = get('voucher_reward_amount');
+        if (min > 0 && reward > 0) setVoucherRules({ minPurchase: min, rewardAmount: reward });
+      }
+    } catch { /* non-critical */ }
   }
 
   // Hook handles refetching automatically
@@ -551,6 +569,48 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       setSelectedReferralAgent(data);
     } catch (error: any) {
       showToast(`Error creating agent: ${error.message}`, 'error');
+    }
+  }
+
+  async function handleIssueVoucherFromPOS() {
+    const amt = parseFloat(issueVoucherForm.amount);
+    if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+    setIssuingVoucher(true);
+    try {
+      const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+      const rand = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      const code = `RVL-${rand(4)}-${rand(3)}`;
+      const expiresAt = new Date(); expiresAt.setMonth(expiresAt.getMonth() + 3);
+
+      const { error } = await (supabase.from('gift_vouchers') as any).insert({
+        code, amount: amt, status: 'active',
+        issued_source: 'reward',
+        issued_to: issueVoucherForm.name.trim() || (selectedCustomer?.name ?? null),
+        recipient_phone: issueVoucherForm.phone.trim() || null,
+        issued_by_staff_id: profile?.id ?? null,
+        expires_at: expiresAt.toISOString().split('T')[0],
+      });
+      if (error) throw error;
+
+      const cardData = {
+        code, amount: amt,
+        issuedTo: issueVoucherForm.name.trim() || selectedCustomer?.name || undefined,
+        expiresAt: expiresAt.toISOString().split('T')[0],
+        issuedAt: new Date().toISOString(),
+      };
+
+      if (issueVoucherForm.phone.trim()) {
+        const { openWhatsApp } = await import('./vouchers/voucherCardHTML');
+        openWhatsApp(issueVoucherForm.phone.trim(), cardData);
+      }
+
+      showToast(`Voucher ${code} issued`, 'success');
+      setShowIssueVoucher(false);
+      setIssueVoucherForm({ amount: '', phone: '', name: '' });
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to issue voucher', 'error');
+    } finally {
+      setIssuingVoucher(false);
     }
   }
 
@@ -1183,6 +1243,27 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             >
               {processing ? 'Processing…' : `Charge · LKR ${total.toFixed(2)}`}
             </button>
+            <button
+              onClick={() => {
+                setIssueVoucherForm({
+                  amount: voucherRules ? String(voucherRules.rewardAmount) : '',
+                  name: selectedCustomer?.name ?? '',
+                  phone: selectedCustomer?.phone ?? '',
+                });
+                setShowIssueVoucher(true);
+              }}
+              style={{
+                marginTop: 8, width: '100%', height: 34, borderRadius: 8,
+                border: '1px solid var(--line)', background: 'transparent',
+                color: 'var(--ink-2)', fontSize: 12.5, fontWeight: 500,
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 6, transition: 'all .12s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--ink)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-2)'; }}
+            >
+              🎁 Issue Voucher
+            </button>
           </div>
         </aside>
       </div>
@@ -1539,6 +1620,58 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           </div>
         </div>
       )}
+
+      <Modal isOpen={showIssueVoucher} onClose={() => setShowIssueVoucher(false)} title="Issue Gift Voucher" size="sm">
+        {(() => {
+          const inputStyle: React.CSSProperties = { width: '100%', height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--ink)', background: 'var(--panel)', outline: 'none', boxSizing: 'border-box' };
+          const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
+          return (
+            <form onSubmit={(e) => { e.preventDefault(); handleIssueVoucherFromPOS(); }} style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {voucherRules && (
+                <div style={{ padding: '8px 10px', borderRadius: 7, background: 'color-mix(in oklab, #C9A84C 10%, var(--panel-2))', border: '1px solid rgba(201,168,76,0.35)', fontSize: 12, color: '#8a6f2c' }}>
+                  Standard reward: <strong>LKR {voucherRules.rewardAmount.toLocaleString()}</strong> on purchases ≥ LKR {voucherRules.minPurchase.toLocaleString()}
+                </div>
+              )}
+              <div>
+                <label style={labelStyle}>Amount (LKR) *</label>
+                <input
+                  required autoFocus type="number" min={1} step={1}
+                  style={{ ...inputStyle, textAlign: 'right', fontFamily: "'JetBrains Mono',monospace" }}
+                  value={issueVoucherForm.amount}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, amount: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Recipient Name</label>
+                <input
+                  style={inputStyle}
+                  value={issueVoucherForm.name}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder={selectedCustomer?.name ?? 'Optional'}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>WhatsApp Phone</label>
+                <input
+                  style={inputStyle} type="tel"
+                  value={issueVoucherForm.phone}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="+94 7x xxx xxxx"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button type="button" onClick={() => setShowIssueVoucher(false)} className="btn" style={{ flex: 1, height: 38, fontSize: 13, background: 'var(--panel-2)', color: 'var(--ink-2)' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={issuingVoucher || !issueVoucherForm.amount} className="btn btn-primary" style={{ flex: 2, height: 38, fontSize: 13 }}>
+                  {issuingVoucher ? 'Issuing…' : '🎁 Issue Voucher'}
+                </button>
+              </div>
+            </form>
+          );
+        })()}
+      </Modal>
 
       <Modal isOpen={showCustomerModal} onClose={() => setShowCustomerModal(false)} title="Add Customer" size="md">
         {(() => {

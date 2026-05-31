@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil, Hash } from 'lucide-react';
+import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil, Hash, Gift } from 'lucide-react';
 import { useCostCode } from '../contexts/CostCodeContext';
 import { encodeCost, isValidKey } from '../lib/costCode';
 import { loyaltyService, referenceDataService } from '../services';
@@ -33,7 +33,7 @@ const ROLE_CONFIG: Record<UnifiedStaff['role'], { label: string; desc: string; b
   admin:         { label: 'Admin',         desc: 'Full access',          bg: 'var(--accent-soft)',                                   color: 'var(--accent-ink)' },
 };
 
-type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code';
+type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
@@ -1005,6 +1005,104 @@ function CostCodeSection() {
   );
 }
 
+// ─── Section: Vouchers ────────────────────────────────────────────────────
+function VoucherRulesSection() {
+  const { showToast } = useToast();
+  const [minPurchase, setMinPurchase] = useState('');
+  const [rewardAmount, setRewardAmount] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (supabase.from('app_settings') as any)
+      .select('key, value')
+      .in('key', ['voucher_min_purchase', 'voucher_reward_amount'])
+      .then(({ data }: any) => {
+        for (const row of (data ?? [])) {
+          if (row.key === 'voucher_min_purchase') setMinPurchase(row.value);
+          if (row.key === 'voucher_reward_amount') setRewardAmount(row.value);
+        }
+        setLoaded(true);
+      });
+  }, []);
+
+  async function handleSave() {
+    const min = parseFloat(minPurchase);
+    const reward = parseFloat(rewardAmount);
+    if (!min || min <= 0 || !reward || reward <= 0) {
+      showToast('Enter valid amounts for both fields', 'error'); return;
+    }
+    setSaving(true);
+    try {
+      await (supabase.from('app_settings') as any).upsert([
+        { key: 'voucher_min_purchase', value: String(min) },
+        { key: 'voucher_reward_amount', value: String(reward) },
+      ], { onConflict: 'key' });
+      showToast('Voucher rules saved', 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inp: React.CSSProperties = {
+    height: 38, padding: '0 11px', borderRadius: 8,
+    border: '1px solid var(--line)', background: 'var(--panel-2)',
+    color: 'var(--ink)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box',
+    fontFamily: "'JetBrains Mono', monospace", textAlign: 'right' as const,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <Gift size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>POS Voucher Rule</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Automatically pre-fills voucher amount when issued from POS
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Min. Purchase (LKR)</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={500} value={minPurchase} onChange={e => setMinPurchase(e.target.value)}
+                placeholder="5,000" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Purchases above this qualify for a voucher</div>
+          </div>
+          <div>
+            <label style={labelStyle}>Voucher Reward (LKR)</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={100} value={rewardAmount} onChange={e => setRewardAmount(e.target.value)}
+                placeholder="500" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Voucher amount issued to qualifying customers</div>
+          </div>
+        </div>
+
+        {minPurchase && rewardAmount && parseFloat(minPurchase) > 0 && parseFloat(rewardAmount) > 0 && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--accent-soft)', border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', fontSize: 12.5, color: 'var(--accent-ink)' }}>
+            🎁 Purchases over <strong>LKR {parseFloat(minPurchase).toLocaleString()}</strong> will prompt cashier to issue a <strong>LKR {parseFloat(rewardAmount).toLocaleString()}</strong> gift voucher
+          </div>
+        )}
+
+        <button onClick={handleSave} disabled={saving || !loaded} className="btn btn-primary" style={{ height: 36, fontSize: 13, alignSelf: 'flex-start', minWidth: 120 }}>
+          {saving ? 'Saving…' : 'Save Rule'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────
 export function Settings() {
   const { profile } = useAuth();
@@ -1020,6 +1118,7 @@ export function Settings() {
     { id: 'catalog', label: 'Catalog', icon: <Tag size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'cost-code', label: 'Cost Code', icon: <Hash size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'vouchers',  label: 'Vouchers',  icon: <Gift size={15} strokeWidth={1.7} />, adminOnly: true },
   ].filter(n => !n.adminOnly || isAdmin);
 
   return (
@@ -1063,6 +1162,7 @@ export function Settings() {
           {section === 'catalog' && isAdmin && <CatalogSection />}
           {section === 'loyalty' && isAdmin && <LoyaltySection />}
           {section === 'cost-code' && isAdmin && <CostCodeSection />}
+          {section === 'vouchers'  && isAdmin && <VoucherRulesSection />}
         </div>
       </div>
     </div>
