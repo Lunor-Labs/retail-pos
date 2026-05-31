@@ -321,6 +321,38 @@ export function buildVoucherCardHTML(data: VoucherCardData): string {
 </html>`;
 }
 
+// Normalise phone to wa.me format (digits only, LK 0XX → 94XX)
+export function normalisePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('0')) return '94' + digits.slice(1);
+  if (digits.startsWith('94')) return digits;
+  return digits;
+}
+
+// Build pre-filled WhatsApp message text
+export function buildWhatsAppMessage(data: VoucherCardData, storeName = 'RIVONLAK'): string {
+  const lines: string[] = [];
+  lines.push(`🎁 *Gift Voucher from ${storeName}*`);
+  lines.push('');
+  if (data.issuedTo) lines.push(`Dear ${data.issuedTo},`);
+  lines.push(`You've received a gift voucher worth *${fmtAmount(data.amount)}*!`);
+  lines.push('');
+  lines.push(`🔑 Code: *${data.code}*`);
+  if (data.expiresAt) lines.push(`📅 Valid until: ${fmtDate(data.expiresAt)}`);
+  if (data.message) { lines.push(''); lines.push(`_"${data.message}"_`); }
+  lines.push('');
+  lines.push('Present this code at checkout to redeem your voucher.');
+  lines.push(`_${storeName}_`);
+  return lines.join('\n');
+}
+
+// Opens WhatsApp web/app with pre-filled message
+export function openWhatsApp(phone: string, data: VoucherCardData, storeName?: string) {
+  const number = normalisePhone(phone);
+  const text = encodeURIComponent(buildWhatsAppMessage(data, storeName));
+  window.open(`https://wa.me/${number}?text=${text}`, '_blank');
+}
+
 // Opens the card in a new window for print-to-PDF
 export function openVoucherCard(data: VoucherCardData) {
   const html = buildVoucherCardHTML(data);

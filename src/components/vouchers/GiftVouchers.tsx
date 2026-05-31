@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Gift, Check, X, Eye, Ban } from 'lucide-react';
+import { Plus, Gift, Check, X, Eye, Ban, MessageCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { LoadingSpinner } from '../ui';
-import { openVoucherCard, VoucherCardData } from './voucherCardHTML';
+import { openVoucherCard, openWhatsApp, VoucherCardData } from './voucherCardHTML';
 
 interface GiftVoucher {
   id: string;
@@ -14,6 +14,7 @@ interface GiftVoucher {
   issued_by_name: string | null;
   message: string | null;
   expires_at: string | null;
+  recipient_phone: string | null;
   status: 'active' | 'used' | 'voided';
   redeemed_at: string | null;
   created_at: string;
@@ -63,6 +64,7 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
   const [amount, setAmount] = useState('');
   const [issuedTo, setIssuedTo] = useState('');
   const [issuedBy, setIssuedBy] = useState('');
+  const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [expiryDays, setExpiryDays] = useState(90);
   const [saving, setSaving] = useState(false);
@@ -80,13 +82,13 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
         issued_to: issuedTo.trim() || null,
         issued_by_name: issuedBy.trim() || null,
         message: message.trim() || null,
+        recipient_phone: phone.trim() || null,
         issued_by_staff_id: profile?.id ?? null,
         expires_at: expiresAt,
         status: 'active',
       });
       if (error) throw error;
 
-      // Open card for download
       const cardData: VoucherCardData = {
         code,
         amount: amt,
@@ -96,9 +98,16 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
         expiresAt: expiresAt ?? undefined,
         issuedAt: new Date().toISOString(),
       };
+
+      // Open PDF card
       openVoucherCard(cardData);
 
-      showToast(`Voucher ${code} issued`, 'success');
+      // Open WhatsApp if phone provided
+      if (phone.trim()) {
+        setTimeout(() => openWhatsApp(phone.trim(), cardData), 800);
+      }
+
+      showToast(`Voucher ${code} issued${phone.trim() ? ' · WhatsApp opening…' : ''}`, 'success');
       onIssued();
       onClose();
     } catch (e: any) {
@@ -161,6 +170,26 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
             <div>
               <label style={lbl}>From</label>
               <input style={inp} value={issuedBy} onChange={e => setIssuedBy(e.target.value)} placeholder="Sender name" />
+            </div>
+          </div>
+
+          {/* WhatsApp number */}
+          <div>
+            <label style={lbl}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <MessageCircle size={11} strokeWidth={2} style={{ color: '#25D366' }} />
+                WhatsApp Number <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10 }}>(optional — sends voucher automatically)</span>
+              </span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', height: 36, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
+              <span style={{ padding: '0 10px', fontSize: 12, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: '100%', display: 'flex', alignItems: 'center', flexShrink: 0 }}>+94</span>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value.replace(/[^0-9]/g, '').slice(0, 12))}
+                placeholder="771234567"
+                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', padding: '0 10px', fontSize: 13, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace" }}
+              />
             </div>
           </div>
 
@@ -386,6 +415,26 @@ export function GiftVouchers() {
                   className="btn" style={{ height: 28, width: 28, padding: 0, display: 'grid', placeItems: 'center' }}>
                   <Eye size={13} strokeWidth={1.8} />
                 </button>
+                {v.recipient_phone && (
+                  <button
+                    onClick={() => openWhatsApp(v.recipient_phone!, {
+                      code: v.code, amount: v.amount,
+                      issuedTo: v.issued_to ?? undefined,
+                      issuedByName: v.issued_by_name ?? undefined,
+                      message: v.message ?? undefined,
+                      expiresAt: v.expires_at ?? undefined,
+                      issuedAt: v.created_at,
+                    })}
+                    title="Send via WhatsApp"
+                    style={{
+                      height: 28, width: 28, padding: 0, display: 'grid', placeItems: 'center',
+                      border: '1px solid #25D366', borderRadius: 6, background: 'transparent',
+                      color: '#25D366', cursor: 'pointer',
+                    }}
+                  >
+                    <MessageCircle size={13} strokeWidth={1.8} />
+                  </button>
+                )}
                 {isAdmin && v.status === 'active' && (
                   <button
                     onClick={() => voidVoucher(v.id, v.code)}
