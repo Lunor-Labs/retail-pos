@@ -5,6 +5,9 @@ import { Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { productService } from '../../services';
+import { useProductAudit } from '../../lib/auditLog';
+import { CostInput, CostDisplay } from '../ui';
+import { useCostCode } from '../../contexts/CostCodeContext';
 
 interface ProductDetailsViewProps {
   product: ProductWithStock;
@@ -24,6 +27,8 @@ interface BatchRowProps {
 
 function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
   const [editing, setEditing] = useState(false);
+  const { isConfigured } = useCostCode();
+  const useEncoding = !isAdmin && isConfigured;
   const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price });
   const [saving, setSaving] = useState(false);
 
@@ -59,19 +64,33 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               <button onClick={save} disabled={saving} style={{ border: 0, background: 'transparent', color: 'var(--pos)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><Check size={14} /></button>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-            {[
-              { label: 'Qty', val: d.current_quantity, set: (v: number) => setD(p => ({ ...p, current_quantity: v })) },
-              { label: 'Cost (LKR)', val: d.cost_price, set: updateCost },
-              { label: 'Markup %', val: d.markup_percentage, set: updateMarkup },
-              { label: 'Selling (LKR)', val: d.selling_price, set: updateSelling },
-            ].map(({ label, val, set }) => (
-              <div key={label}>
-                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-                <input type="number" min={0} step="any" value={val || ''} onChange={e => set(parseFloat(e.target.value) || 0)}
+          <div style={{ display: 'grid', gridTemplateColumns: useEncoding ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
+            {/* Qty */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Qty</div>
+              <input type="number" min={0} step="any" value={d.current_quantity || ''} onChange={e => setD(p => ({ ...p, current_quantity: parseFloat(e.target.value) || 0 }))}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
+            {/* Cost */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Cost</div>
+              <CostInput value={d.cost_price} onChange={updateCost}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
+            {/* Markup % — hidden when encoding active */}
+            {!useEncoding && (
+              <div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Markup %</div>
+                <input type="number" min={0} step="any" value={d.markup_percentage || ''} onChange={e => updateMarkup(parseFloat(e.target.value) || 0)}
                   style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
               </div>
-            ))}
+            )}
+            {/* Selling */}
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Selling (LKR)</div>
+              <input type="number" min={0} step="any" value={d.selling_price || ''} onChange={e => updateSelling(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', height: 30, padding: '0 7px', border: '1px solid var(--line)', borderRadius: 6, background: 'var(--panel)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', textAlign: 'right' }} />
+            </div>
           </div>
         </div>
       ) : (
@@ -81,9 +100,10 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               {fmtDate(batch.received_date)}
               {batch.supplier && <span style={{ color: 'var(--muted)', marginLeft: 6 }}>· {batch.supplier.name}</span>}
             </div>
-            {isAdmin && (
+            {(isAdmin || isConfigured) && (
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-                Cost LKR {batch.cost_price.toLocaleString()} · {batch.markup_percentage ?? 0}% markup
+                Cost <CostDisplay value={batch.cost_price} />
+                {!useEncoding && <> · {batch.markup_percentage ?? 0}% markup</>}
               </div>
             )}
           </div>
@@ -152,7 +172,9 @@ function VariantSection({ variant, isAdmin, onBatchSave }: VariantSectionProps) 
 export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetailsViewProps) {
   const { profile } = useAuth();
   const { showToast } = useToast();
+  const logAudit = useProductAudit();
   const isAdmin = profile?.role === 'admin';
+  const canEditStock = isAdmin || profile?.role === 'stock_manager';
   const [variants, setVariants] = useState<VariantWithStock[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(true);
 
@@ -174,7 +196,29 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
 
   async function handleBatchSave(batchId: string, data: Partial<ProductBatch>) {
     try {
+      // Capture old values for the audit detail before saving
+      let oldSelling: number | undefined;
+      let oldQty: number | undefined;
+      for (const v of variants) {
+        const b = v.batches.find(b => b.id === batchId);
+        if (b) { oldSelling = b.selling_price; oldQty = b.current_quantity; break; }
+      }
+
       await productService.updateBatch(batchId, data as any);
+
+      const parts: string[] = [];
+      if (data.selling_price !== undefined && oldSelling !== undefined && data.selling_price !== oldSelling)
+        parts.push(`price: LKR ${oldSelling.toLocaleString()} → LKR ${data.selling_price.toLocaleString()}`);
+      if (data.current_quantity !== undefined && oldQty !== undefined && data.current_quantity !== oldQty)
+        parts.push(`qty: ${oldQty} → ${data.current_quantity}`);
+
+      logAudit({
+        action_type: 'batch_updated',
+        product_id: product.id,
+        product_name: product.name,
+        detail: parts.length > 0 ? parts.join(' · ') : undefined,
+      });
+
       showToast('Batch updated', 'success');
       loadVariants();
       onUpdate?.();
@@ -228,7 +272,7 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
           <VariantSection
             key={v.id}
             variant={v}
-            isAdmin={isAdmin}
+            isAdmin={canEditStock}
             onBatchSave={handleBatchSave}
           />
         ))}

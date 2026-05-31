@@ -171,7 +171,7 @@ html, body {
 @media (min-width: 1024px) {
   .pos-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 440px;
     height: calc(100vh - 56px);
     overflow: hidden;
   }
@@ -340,3 +340,37 @@ html, body {
 }
 @media (min-width: 640px)  { .rpt-kpi { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .rpt-kpi { grid-template-columns: repeat(5, 1fr); } }
+@media (min-width: 640px)  { .rpt-kpi.rpt-kpi-4 { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) { .rpt-kpi.rpt-kpi-4 { grid-template-columns: repeat(4, 1fr); } }
+
+/* ── Gift Vouchers responsive ────────────────────────────────── */
+.gift-fin-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+}
+@media (min-width: 480px) { .gift-fin-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.gift-filter-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Desktop table — hidden on mobile */
+.gift-table-header,
+.gift-row-desktop { display: none; }
+@media (min-width: 768px) {
+  .gift-table-header,
+  .gift-row-desktop  { display: grid; }
+  .gift-row-mobile   { display: none; }
+}
+
+/* ── Commission report print styles ─────────────────────────── */
+@media print {
+  .commission-print-hide { display: none !important; }
+  .commission-print-only { display: block !important; }
+  nav, aside, header, .sh-outer > *:first-child { display: none !important; }
+  body { background: #fff !important; }
+  .card { box-shadow: none !important; border: 1px solid #ddd !important; }
+}

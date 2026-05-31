@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { productService, supplierService } from '../../services';
 import { ProductWithStock } from '../../types';
-import { DropdownSelect } from '../ui';
+import { DropdownSelect, CostInput } from '../ui';
+import { useProductAudit } from '../../lib/auditLog';
+import { useCostCode } from '../../contexts/CostCodeContext';
 
 interface VariantRow {
   variantId: string;
@@ -24,6 +27,10 @@ interface RestockModalProps {
 
 export function RestockModal({ product, onClose, onSuccess }: RestockModalProps) {
   const { showToast } = useToast();
+  const logAudit = useProductAudit();
+  const { isAdmin } = useAuth();
+  const { isConfigured } = useCostCode();
+  const hideMarkup = !isAdmin && isConfigured;
   const [rows, setRows] = useState<VariantRow[]>([]);
   const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [supplierId, setSupplierId] = useState('');
@@ -131,6 +138,12 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
       if (error) throw new Error(error.message);
 
       const totalUnits = toAdd.reduce((sum, r) => sum + (r.qty as number), 0);
+      logAudit({
+        action_type: 'stock_restocked',
+        product_id: product.id,
+        product_name: product.name,
+        detail: `+${totalUnits} units across ${toAdd.length} variant${toAdd.length > 1 ? 's' : ''}`,
+      });
       showToast(`Added ${totalUnits} units across ${toAdd.length} variant${toAdd.length > 1 ? 's' : ''}`, 'success');
       onSuccess();
       onClose();
@@ -190,7 +203,7 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--panel-2)', position: 'sticky', top: 0, zIndex: 1 }}>
-                    {['Variant', 'In Stock', 'Qty', 'Cost (LKR)', 'Markup %', 'Selling (LKR)'].map(h => (
+                    {['Variant', 'In Stock', 'Qty', 'Cost', ...(hideMarkup ? [] : ['Markup %']), 'Selling (LKR)'].map(h => (
                       <th key={h} style={{
                         padding: '8px 12px', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em',
                         textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap',
@@ -226,19 +239,22 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
                           />
                         </td>
                         <td style={{ padding: '6px 12px', width: 110 }}>
-                          <input style={inputNum} type="number" min={0} step="any"
-                            value={row.cost}
-                            onChange={e => updateCost(i, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                          <CostInput
+                            value={row.cost === '' ? 0 : row.cost as number}
+                            onChange={v => updateCost(i, v)}
+                            style={inputNum}
                             placeholder="—"
                           />
                         </td>
-                        <td style={{ padding: '6px 12px', width: 90 }}>
-                          <input style={inputNum} type="number" min={0} step="any"
-                            value={row.markup}
-                            onChange={e => updateMarkup(i, e.target.value === '' ? '' : parseFloat(e.target.value))}
-                            placeholder="—"
-                          />
-                        </td>
+                        {!hideMarkup && (
+                          <td style={{ padding: '6px 12px', width: 90 }}>
+                            <input style={inputNum} type="number" min={0} step="any"
+                              value={row.markup}
+                              onChange={e => updateMarkup(i, e.target.value === '' ? '' : parseFloat(e.target.value))}
+                              placeholder="—"
+                            />
+                          </td>
+                        )}
                         <td style={{ padding: '6px 12px', width: 120 }}>
                           <input
                             style={{ ...inputNum, fontWeight: isActive ? 600 : 400 }}
