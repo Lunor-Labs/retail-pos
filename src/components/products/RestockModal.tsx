@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { productService, supplierService } from '../../services';
 import { ProductWithStock } from '../../types';
 import { DropdownSelect, CostInput } from '../ui';
