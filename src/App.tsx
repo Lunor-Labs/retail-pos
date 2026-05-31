@@ -12,6 +12,7 @@ import { Returns } from './components/Returns';
 import { SalesHistory } from './components/SalesHistory';
 import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
+import { GiftVouchers } from './components/vouchers/GiftVouchers';
 import { StockFilter } from './hooks/useProducts';
 import { ToastProvider } from './contexts/ToastContext';
 import { CostCodeProvider } from './contexts/CostCodeContext';
@@ -90,6 +91,7 @@ function AppContent() {
       {currentView === 'suppliers' && <Suppliers />}
       {currentView === 'referral-agents' && <SalesStaff />}
       {currentView === 'returns' && <Returns />}
+      {currentView === 'gift-vouchers' && <GiftVouchers />}
       {currentView === 'sales-history' && <SalesHistory />}
       {currentView === 'reports' && <Reports />}
       {currentView === 'settings' && <Settings />}

@@ -23,6 +23,7 @@ import { VariantPicker } from './pos/VariantPicker';
 import { LoyaltyPanel } from './pos/LoyaltyPanel';
 
 import { db } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { SyncStatus } from './pos/SyncStatus';
 import { Pagination, Modal } from './ui';
 import { salesService, customerService, productService, variantService, loyaltyService } from '../services';
@@ -78,6 +79,11 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithBatches | null>(null);
+
+  // Gift voucher redemption
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<{ id: string; code: string; amount: number } | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cartScrollRef = useRef<HTMLDivElement>(null);
@@ -488,7 +494,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // discountAmount is no longer used for global discount, simplifying math
   const taxBase = effectiveSubtotal;
   const taxAmount = taxBase * (taxRate / 100);
-  const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount);
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.amount, taxBase + taxAmount + serviceCharge - loyaltyDiscount) : 0;
+  const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount - voucherDiscount);
   const changeAmount = paidAmount - total;
 
 
@@ -544,6 +551,28 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       setSelectedReferralAgent(data);
     } catch (error: any) {
       showToast(`Error creating agent: ${error.message}`, 'error');
+    }
+  }
+
+  async function applyVoucher() {
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) return;
+    setVoucherLoading(true);
+    try {
+      const { data, error } = await (supabase.from('gift_vouchers') as any)
+        .select('id, code, amount, expires_at, status')
+        .eq('code', code)
+        .single();
+      if (error || !data) { showToast('Voucher not found', 'error'); return; }
+      if (data.status !== 'active') { showToast(`Voucher is ${data.status}`, 'error'); return; }
+      if (data.expires_at && new Date(data.expires_at) < new Date()) { showToast('Voucher has expired', 'error'); return; }
+      setAppliedVoucher({ id: data.id, code: data.code, amount: data.amount });
+      setVoucherInput('');
+      showToast(`Voucher ${data.code} applied — LKR ${Math.round(data.amount).toLocaleString()} off`, 'success');
+    } catch {
+      showToast('Failed to validate voucher', 'error');
+    } finally {
+      setVoucherLoading(false);
     }
   }
 
@@ -631,6 +660,14 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         paymentMethod,
         cashierName: profile?.full_name || 'Cashier',
       });
+
+      // Mark voucher as used
+      if (appliedVoucher) {
+        await (supabase.from('gift_vouchers') as any)
+          .update({ status: 'used', redeemed_at: new Date().toISOString() })
+          .eq('id', appliedVoucher.id);
+        setAppliedVoucher(null);
+      }
 
       setShowInvoice(true);
       clearCart();
@@ -988,6 +1025,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
               { label: 'Subtotal', value: `LKR ${grossSubtotal.toFixed(2)}`, color: 'var(--ink-2)' },
               ...(itemLevelDiscount > 0 ? [{ label: 'Discount', value: `−LKR ${itemLevelDiscount.toFixed(2)}`, color: 'var(--danger)' }] : []),
               ...(loyaltyDiscount > 0 ? [{ label: 'Loyalty', value: `−LKR ${loyaltyDiscount.toFixed(2)}`, color: 'var(--warn)' }] : []),
+              ...(voucherDiscount > 0 ? [{ label: `Voucher (${appliedVoucher?.code})`, value: `−LKR ${voucherDiscount.toFixed(2)}`, color: '#C9A84C' }] : []),
               ...(taxRate > 0 ? [{ label: `Tax (${taxRate}%)`, value: `LKR ${taxAmount.toFixed(2)}`, color: 'var(--muted)' }] : []),
               ...(serviceCharge > 0 ? [{ label: 'Service', value: `LKR ${serviceCharge.toFixed(2)}`, color: 'var(--muted)' }] : []),
             ].map(({ label, value, color }) => (
@@ -1020,6 +1058,45 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 />
               </div>
             </div>
+            {/* Gift Voucher */}
+            <div style={{ marginBottom: 10 }}>
+              {appliedVoucher ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', borderRadius: 7,
+                  background: 'color-mix(in oklab, #C9A84C 10%, var(--panel-2))',
+                  border: '1px solid rgba(201,168,76,0.35)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ fontSize: 14 }}>🎁</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</div>
+                      <div style={{ fontSize: 11, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setAppliedVoucher(null)} style={{ border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 2, lineHeight: 0, borderRadius: 4 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', height: 34, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
+                    <span style={{ padding: '0 8px', fontSize: 13 }}>🎁</span>
+                    <input
+                      value={voucherInput}
+                      onChange={e => setVoucherInput(e.target.value.toUpperCase())}
+                      onKeyDown={e => e.key === 'Enter' && applyVoucher()}
+                      placeholder="Gift voucher code…"
+                      style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.05em' }}
+                    />
+                  </div>
+                  <button onClick={applyVoucher} disabled={!voucherInput.trim() || voucherLoading} className="btn" style={{ height: 34, fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {voucherLoading ? '…' : 'Apply'}
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Payment method pills */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
               {(['cash', 'card', 'credit', 'mixed'] as const).map((m) => {

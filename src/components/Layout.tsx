@@ -16,6 +16,7 @@ import {
   LogOut,
   Bell,
   Search,
+  Gift,
 } from 'lucide-react';
 import revonlakLogo from '../assets/revonlak.jpeg';
 
@@ -39,7 +40,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     items: [
       { id: 'pos',      label: 'Point of Sale', Icon: ShoppingCart, roles: ['admin', 'cashier'], desktopOnly: true },
       { id: 'products', label: 'Products',       Icon: Package,     roles: ['admin', 'stock_manager'] },
-      { id: 'returns',  label: 'Returns',        Icon: RotateCcw,   roles: ['admin'] },
+      { id: 'returns',       label: 'Returns',        Icon: RotateCcw,   roles: ['admin'] },
+      { id: 'gift-vouchers', label: 'Gift Vouchers',  Icon: Gift,        roles: ['admin', 'cashier'] },
     ],
   },
   {
