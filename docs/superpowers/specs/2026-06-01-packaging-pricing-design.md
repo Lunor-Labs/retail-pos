@@ -150,34 +150,108 @@ Add-ons allow shops to grow beyond their tier limits without forcing a full upgr
 
 ## 8. Feature Flags — Implementation Requirement
 
-To enforce tier gating in the app, a `subscription` table or config record per tenant must be added. The frontend reads the current tier and shows/hides features accordingly. Minimum fields needed:
+Each tenant's Supabase database gets a `subscription` table. The frontend reads this on app load and stores the active tier in React context. All feature-gated components read from this context.
 
+### 8.1 `subscription` table schema
+
+```sql
+subscription (
+  id              uuid primary key default gen_random_uuid(),
+  shop_name       text not null,
+  tier            text not null check (tier in ('starter', 'professional', 'business')),
+  billing_type    text not null check (billing_type in ('monthly', 'annual', 'lifetime')),
+  started_at      timestamptz not null default now(),
+  expires_at      timestamptz,          -- null for lifetime deals
+  active          boolean not null default true,
+  notes           text,                 -- vendor notes, e.g. "paid via bank transfer 2026-06-01"
+  updated_at      timestamptz not null default now()
+)
 ```
-subscription {
-  shop_id
-  tier: 'starter' | 'professional' | 'business'
-  billing_type: 'monthly' | 'annual' | 'lifetime'
-  started_at
-  expires_at (null for lifetime)
-  active: boolean
+
+Only one row exists per tenant. The app reads the single active row on load.
+
+### 8.2 Per-feature flag map
+
+The frontend maps tier → enabled features via a constant:
+
+```ts
+const TIER_FEATURES = {
+  starter: [
+    'pos', 'products_basic', 'customers', 'returns',
+    'barcode', 'invoice', 'reports_basic', 'sales_history_30d'
+  ],
+  professional: [
+    ...TIER_FEATURES.starter,
+    'products_unlimited', 'inventory', 'purchase_orders',
+    'suppliers', 'loyalty', 'vouchers', 'commissions',
+    'cost_encoding', 'bulk_import', 'reports_1yr'
+  ],
+  business: [
+    ...TIER_FEATURES.professional,
+    'referral_agents', 'custom_branding', 'reports_unlimited', 'priority_support'
+  ]
 }
 ```
 
-Feature flags are checked at component level — locked features show an upgrade prompt rather than being hidden entirely, to drive upsells.
+### 8.3 Gating behaviour
+
+- Features the current tier **includes**: shown and fully functional
+- Features the current tier **excludes**: shown with a lock icon + "Upgrade to Pro/Business" prompt — never hidden entirely, to encourage upsells
+- If `subscription.active = false` (expired or suspended): app shows a full-screen "Account suspended — contact support" gate; POS still works in read-only mode so the shop isn't completely blocked mid-trading day
 
 ---
 
-## 9. Out of Scope (Future)
+## 9. Super Admin — Subscription Management
+
+### 9.1 Approach: Hybrid (manual now, portal later)
+
+**Phase 1 (now):** The vendor (Dinesh) manages subscriptions by directly updating the `subscription` table in each tenant's Supabase project via the Supabase dashboard. No extra app needed. Practical for up to ~30 shops.
+
+**Phase 2 (future, when needed):** A protected `/super-admin` route in the app gives the vendor a single-screen dashboard to view and manage all tenant subscriptions. This route is only accessible to a user with `role = 'super_admin'` — a new role value added to the existing `user_profiles` table.
+
+### 9.2 Super admin role
+
+A `super_admin` role is added alongside the existing `admin | cashier | stock_manager` roles. It is:
+- Only ever assigned to the vendor (Dinesh) — one account per tenant Supabase
+- Not visible to the shop owner in the UI
+- Able to access the `/super-admin` route and modify the `subscription` table
+- Excluded from all normal shop workflows (does not appear in staff lists, commission reports, etc.)
+
+### 9.3 Phase 1 workflow (manual)
+
+When a customer pays:
+1. Open their Supabase project dashboard
+2. Update the `subscription` row: set `tier`, `billing_type`, `expires_at`, `active = true`, add a `notes` entry
+3. The app picks up the change on the customer's next page load (or immediately via Supabase realtime)
+
+When a subscription expires or is suspended:
+1. Set `active = false` in their `subscription` row
+2. App shows the suspension gate; shop can still view past sales but cannot process new ones
+
+### 9.4 Phase 2 super admin portal (future scope)
+
+A single protected page at `/super-admin` showing:
+- Table of all tenants: shop name, tier, billing type, expiry date, active status
+- Inline edit controls: change tier, extend expiry, toggle active
+- Filter by tier, expiry status
+
+This page is built only once the manual approach becomes unmanageable (estimated threshold: 30+ active tenants).
+
+---
+
+## 10. Out of Scope (Future)
 
 - **Multi-branch support** — not built yet; current workaround is a separate account per branch with the extra-branch add-on fee
 - **Online payment integration** (PayHere, iPay) for subscription billing — manual collection initially
 - **Customer self-signup portal** — onboarding is manual for now
 - **Mobile app** — web app is mobile-responsive but no native app
+- **Super admin portal (Phase 2)** — deferred until 30+ active tenants
 
 ---
 
-## 10. Success Criteria
+## 11. Success Criteria
 
 - A new customer can be fully onboarded within 1 business day
 - Feature gating enforces tier limits without breaking the app for any tier
+- Vendor can activate, suspend, or change tier for any tenant in under 2 minutes via Supabase dashboard
 - Pricing is competitive with local alternatives while reflecting the system's full feature value
