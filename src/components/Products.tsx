@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType, StockFilter } from '../hooks/useProducts';
 import { ProductWithStock } from '../types';
 import { BarcodeGenerator, BarcodeVariant } from './BarcodeGenerator';
+import { useCostCode } from '../contexts/CostCodeContext';
 import { ProductTable } from './products/ProductTable';
 import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
@@ -124,6 +125,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
 
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const { showToast } = useToast();
+  const { encode: encodeCost, isConfigured: costCodeConfigured } = useCostCode();
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
@@ -485,17 +487,28 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     }
   }
 
+  function fmtBatchDate(iso: string | undefined): string | undefined {
+    if (!iso) return undefined;
+    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   async function handlePrintBarcode(product: ProductWithStock) {
     setBarcodeProduct(product);
     setBarcodeVariants([]);
     try {
       const full = await productService.getProductWithVariants(product.id);
       if (full && full.variants.length > 0) {
-        const mapped: BarcodeVariant[] = full.variants.map(v => ({
-          sku: v.sku,
-          label: [v.size, v.color].filter(Boolean).join(' · ') || 'Default',
-          price: (v as any).batches?.[0]?.selling_price,
-        }));
+        const mapped: BarcodeVariant[] = full.variants.map(v => {
+          const batch = (v as any).batches?.[0];
+          return {
+            sku: v.sku,
+            label: [v.size, v.color].filter(Boolean).join(' · ') || 'Default',
+            price: batch?.selling_price,
+            encodedCost: costCodeConfigured && batch?.cost_price != null ? encodeCost(batch.cost_price) : undefined,
+            supplierName: batch?.supplier?.name ?? undefined,
+            date: fmtBatchDate(batch?.received_date),
+          };
+        });
         setBarcodeVariants(mapped);
       }
     } catch { /* silently ignore — product-level print still works */ }
@@ -725,6 +738,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           productName={barcodeProduct.name}
           sku={barcodeProduct.sku}
           price={barcodeProduct.batches[0]?.selling_price}
+          encodedCost={costCodeConfigured && barcodeProduct.batches[0]?.cost_price != null ? encodeCost(barcodeProduct.batches[0].cost_price) : undefined}
+          supplierName={(barcodeProduct.batches[0] as any)?.supplier?.name ?? undefined}
+          date={fmtBatchDate(barcodeProduct.batches[0]?.received_date)}
           variants={barcodeVariants.length > 0 ? barcodeVariants : undefined}
           onClose={() => { setBarcodeProduct(null); setBarcodeVariants([]); }}
         />
