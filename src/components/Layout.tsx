@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import {
   Package,
   ShoppingCart,
@@ -16,6 +17,8 @@ import {
   LogOut,
   Bell,
   Search,
+  Gift,
+  Lock,
 } from 'lucide-react';
 import revonlakLogo from '../assets/revonlak.jpeg';
 
@@ -39,7 +42,8 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
     items: [
       { id: 'pos',      label: 'Point of Sale', Icon: ShoppingCart, roles: ['admin', 'cashier'], desktopOnly: true },
       { id: 'products', label: 'Products',       Icon: Package,     roles: ['admin', 'stock_manager'] },
-      { id: 'returns',  label: 'Returns',        Icon: RotateCcw,   roles: ['admin'] },
+      { id: 'returns',       label: 'Returns',        Icon: RotateCcw,   roles: ['admin'] },
+      { id: 'gift-vouchers', label: 'Gift Vouchers',  Icon: Gift,        roles: ['admin', 'cashier'] },
     ],
   },
   {
@@ -67,6 +71,7 @@ const NAV_GROUPS: { label: string | null; items: NavItem[] }[] = [
 
 export function Layout({ children, currentView, onNavigate }: LayoutProps) {
   const { profile, signOut } = useAuth();
+  const { showToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
@@ -130,56 +135,61 @@ export function Layout({ children, currentView, onNavigate }: LayoutProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto custom-scrollbar" style={{ padding: '8px 10px 12px' }}>
-          {NAV_GROUPS.map((group, gi) => {
-            const visible = group.items.filter((it) => it.roles.includes(role));
-            if (visible.length === 0) return null;
-            return (
-              <div key={gi} style={{ marginTop: group.label ? 14 : 4 }}>
-                {group.label && (
-                  <div style={{ padding: '6px 8px', fontSize: 10.5, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(126,132,141,.85)' }}>
-                    {group.label}
-                  </div>
-                )}
-                {visible.map((item) => {
-                  const isActive = currentView === item.id;
-                  const { Icon } = item;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => { onNavigate(item.id); setSidebarOpen(false); }}
-                      className={item.desktopOnly ? 'nav-desktop-only' : ''}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '7px 10px',
-                        borderRadius: 7,
-                        border: 0,
-                        cursor: 'default',
-                        background: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
-                        color: isActive ? '#fff' : 'rgba(230,231,233,.78)',
-                        fontSize: 13,
-                        fontWeight: isActive ? 500 : 400,
-                        position: 'relative',
-                        textAlign: 'left',
-                        transition: 'background .12s ease, color .12s ease',
-                        marginBottom: 1,
-                      }}
-                      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      {isActive && (
-                        <span style={{ position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)', width: 3, height: 18, borderRadius: '0 2px 2px 0', background: 'var(--accent)' }} />
-                      )}
-                      <Icon size={16} strokeWidth={1.7} />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} style={{ marginTop: group.label ? 14 : 4 }}>
+              {group.label && (
+                <div style={{ padding: '6px 8px', fontSize: 10.5, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(126,132,141,.85)' }}>
+                  {group.label}
+                </div>
+              )}
+              {group.items.map((item) => {
+                const isActive = currentView === item.id;
+                const isLocked = !item.roles.includes(role);
+                const { Icon } = item;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (isLocked) {
+                        showToast('Contact your admin to access this section', 'error');
+                        return;
+                      }
+                      onNavigate(item.id);
+                      setSidebarOpen(false);
+                    }}
+                    className={item.desktopOnly ? 'nav-desktop-only' : ''}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '7px 10px',
+                      borderRadius: 7,
+                      border: 0,
+                      cursor: 'default',
+                      background: isActive ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      color: isActive ? '#fff' : isLocked ? 'rgba(230,231,233,.35)' : 'rgba(230,231,233,.78)',
+                      fontSize: 13,
+                      fontWeight: isActive ? 500 : 400,
+                      position: 'relative',
+                      textAlign: 'left',
+                      transition: 'background .12s ease, color .12s ease',
+                      marginBottom: 1,
+                    }}
+                    onMouseEnter={(e) => { if (!isActive && !isLocked) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {isActive && (
+                      <span style={{ position: 'absolute', left: -10, top: '50%', transform: 'translateY(-50%)', width: 3, height: 18, borderRadius: '0 2px 2px 0', background: 'var(--accent)' }} />
+                    )}
+                    <Icon size={16} strokeWidth={1.7} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                    {isLocked && <Lock size={12} strokeWidth={2} style={{ opacity: 0.5, flexShrink: 0 }} />}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}

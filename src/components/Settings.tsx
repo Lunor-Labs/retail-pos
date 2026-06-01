@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil } from 'lucide-react';
+import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil, Hash, Gift } from 'lucide-react';
+import { useCostCode } from '../contexts/CostCodeContext';
+import { encodeCost, isValidKey } from '../lib/costCode';
 import { loyaltyService, referenceDataService } from '../services';
 import type { RefType, ReferenceItem } from '../services';
 
@@ -31,7 +33,7 @@ const ROLE_CONFIG: Record<UnifiedStaff['role'], { label: string; desc: string; b
   admin:         { label: 'Admin',         desc: 'Full access',          bg: 'var(--accent-soft)',                                   color: 'var(--accent-ink)' },
 };
 
-type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog';
+type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
@@ -850,6 +852,257 @@ function LoyaltySection() {
   );
 }
 
+// ─── Section: Cost Code ───────────────────────────────────────────────────
+function CostCodeSection() {
+  const { showToast } = useToast();
+  const { key: currentKey, reload } = useCostCode();
+  const [input, setInput] = useState(currentKey);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setInput(currentKey); }, [currentKey]);
+
+  const valid = isValidKey(input);
+  const digits = ['0','1','2','3','4','5','6','7','8','9'];
+
+  async function handleSave() {
+    if (!valid) { showToast('Enter 10 unique letters (A–Z)', 'error'); return; }
+    setSaving(true);
+    try {
+      const { error } = await (supabase.from('app_settings') as any).upsert(
+        { key: 'cost_code_key', value: input.toUpperCase() },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+      await reload();
+      showToast('Cost code key saved', 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleClear() {
+    setSaving(true);
+    try {
+      await (supabase.from('app_settings') as any)
+        .delete().eq('key', 'cost_code_key');
+      setInput('');
+      await reload();
+      showToast('Cost code removed — showing real prices', 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to clear', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <Hash size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Cost Price Encoding</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Hide actual cost prices from staff using a letter code
+            </div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, padding: '12px 14px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line-2)' }}>
+          Choose any 10 unique letters. Their position maps to digits 0–9.
+          <br />
+          Example: <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, color: 'var(--ink)' }}>BLACKSTONE</span>
+          {' '}means B=0, L=1, A=2, C=3, K=4, S=5, T=6, O=7, N=8, E=9.
+          <br />
+          Cost LKR 1,500 displays as <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, color: 'var(--accent-ink)' }}>LSBB</span> to staff.
+        </div>
+
+        {/* Key input */}
+        <div>
+          <label style={labelStyle}>Code Key (10 unique letters)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              style={{
+                ...inputStyle,
+                fontFamily: "'JetBrains Mono',monospace",
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                maxWidth: 240,
+                border: `1px solid ${input && !valid ? 'var(--danger)' : 'var(--line)'}`,
+              }}
+              value={input}
+              maxLength={10}
+              onChange={e => setInput(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 10))}
+              placeholder="e.g. BLACKSTONE"
+            />
+            {valid && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent-ink)', fontWeight: 600 }}>
+                <Check size={13} strokeWidth={2.5} /> Valid
+              </span>
+            )}
+            {input && !valid && (
+              <span style={{ fontSize: 12, color: 'var(--danger)' }}>
+                {input.length < 10 ? `${input.length}/10 letters` : 'Letters must be unique'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Preview table */}
+        {valid && (
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Preview</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {digits.map((d, i) => (
+                <div key={d} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  padding: '6px 10px', borderRadius: 7, border: '1px solid var(--line)',
+                  background: 'var(--panel-2)', minWidth: 42,
+                }}>
+                  <span style={{ fontSize: 10, color: 'var(--muted)' }}>{d}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace" }}>
+                    {input.toUpperCase()[i]}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--muted)' }}>
+              Example: LKR 1,500 →{' '}
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--accent-ink)' }}>
+                {encodeCost(1500, input)}
+              </span>
+              {' '} · LKR 350 →{' '}
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--accent-ink)' }}>
+                {encodeCost(350, input)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, paddingTop: 4 }}>
+          <button onClick={handleSave} disabled={saving || !valid} className="btn btn-primary" style={{ height: 36, fontSize: 13 }}>
+            {saving ? 'Saving…' : 'Save Key'}
+          </button>
+          {currentKey && (
+            <button onClick={handleClear} disabled={saving} className="btn" style={{ height: 36, fontSize: 13, color: 'var(--danger)' }}>
+              Remove Encoding
+            </button>
+          )}
+        </div>
+
+        {currentKey && (
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', paddingTop: 4 }}>
+            Current key: <span style={{ fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: 'var(--ink)', letterSpacing: '0.1em' }}>{currentKey}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section: Vouchers ────────────────────────────────────────────────────
+function VoucherRulesSection() {
+  const { showToast } = useToast();
+  const [minPurchase, setMinPurchase] = useState('');
+  const [rewardAmount, setRewardAmount] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (supabase.from('app_settings') as any)
+      .select('key, value')
+      .in('key', ['voucher_min_purchase', 'voucher_reward_amount'])
+      .then(({ data }: any) => {
+        for (const row of (data ?? [])) {
+          if (row.key === 'voucher_min_purchase') setMinPurchase(row.value);
+          if (row.key === 'voucher_reward_amount') setRewardAmount(row.value);
+        }
+        setLoaded(true);
+      });
+  }, []);
+
+  async function handleSave() {
+    const min = parseFloat(minPurchase);
+    const reward = parseFloat(rewardAmount);
+    if (!min || min <= 0 || !reward || reward <= 0) {
+      showToast('Enter valid amounts for both fields', 'error'); return;
+    }
+    setSaving(true);
+    try {
+      await (supabase.from('app_settings') as any).upsert([
+        { key: 'voucher_min_purchase', value: String(min) },
+        { key: 'voucher_reward_amount', value: String(reward) },
+      ], { onConflict: 'key' });
+      showToast('Voucher rules saved', 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inp: React.CSSProperties = {
+    height: 38, padding: '0 11px', borderRadius: 8,
+    border: '1px solid var(--line)', background: 'var(--panel-2)',
+    color: 'var(--ink)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box',
+    fontFamily: "'JetBrains Mono', monospace", textAlign: 'right' as const,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <Gift size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>POS Voucher Rule</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Automatically pre-fills voucher amount when issued from POS
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Min. Purchase (LKR)</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={500} value={minPurchase} onChange={e => setMinPurchase(e.target.value)}
+                placeholder="5,000" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Purchases above this qualify for a voucher</div>
+          </div>
+          <div>
+            <label style={labelStyle}>Voucher Reward (LKR)</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={100} value={rewardAmount} onChange={e => setRewardAmount(e.target.value)}
+                placeholder="500" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Voucher amount issued to qualifying customers</div>
+          </div>
+        </div>
+
+        {minPurchase && rewardAmount && parseFloat(minPurchase) > 0 && parseFloat(rewardAmount) > 0 && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--accent-soft)', border: '1px solid color-mix(in oklab, var(--accent) 30%, transparent)', fontSize: 12.5, color: 'var(--accent-ink)' }}>
+            🎁 Purchases over <strong>LKR {parseFloat(minPurchase).toLocaleString()}</strong> will prompt cashier to issue a <strong>LKR {parseFloat(rewardAmount).toLocaleString()}</strong> gift voucher
+          </div>
+        )}
+
+        <button onClick={handleSave} disabled={saving || !loaded} className="btn btn-primary" style={{ height: 36, fontSize: 13, alignSelf: 'flex-start', minWidth: 120 }}>
+          {saving ? 'Saving…' : 'Save Rule'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────
 export function Settings() {
   const { profile } = useAuth();
@@ -864,6 +1117,8 @@ export function Settings() {
     { id: 'staff-access', label: 'Staff Access', icon: <Users size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'catalog', label: 'Catalog', icon: <Tag size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'cost-code', label: 'Cost Code', icon: <Hash size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'vouchers',  label: 'Vouchers',  icon: <Gift size={15} strokeWidth={1.7} />, adminOnly: true },
   ].filter(n => !n.adminOnly || isAdmin);
 
   return (
@@ -906,6 +1161,8 @@ export function Settings() {
           {section === 'staff-access' && isAdmin && <StaffAccessSection currentUserId={profile.id} />}
           {section === 'catalog' && isAdmin && <CatalogSection />}
           {section === 'loyalty' && isAdmin && <LoyaltySection />}
+          {section === 'cost-code' && isAdmin && <CostCodeSection />}
+          {section === 'vouchers'  && isAdmin && <VoucherRulesSection />}
         </div>
       </div>
     </div>

@@ -7,17 +7,26 @@ export interface BarcodeVariant {
   sku: string;
   label: string;
   price?: number;
+  encodedCost?: string;
+  supplierName?: string;
+  date?: string;
 }
 
 interface BarcodeGeneratorProps {
   productName: string;
   sku: string;
   price?: number;
+  encodedCost?: string;
+  supplierName?: string;
+  date?: string;
   variants?: BarcodeVariant[];
   onClose: () => void;
 }
 
-function SingleBarcode({ value, label, price }: { value: string; label: string; price?: number }) {
+function SingleBarcode({ value, label, price, encodedCost, supplierName, date }: {
+  value: string; label: string; price?: number;
+  encodedCost?: string; supplierName?: string; date?: string;
+}) {
   const ref = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -46,11 +55,19 @@ function SingleBarcode({ value, label, price }: { value: string; label: string; 
       {price !== undefined && (
         <p className="text-xl font-bold text-slate-900">LKR {price.toFixed(2)}</p>
       )}
+      {(supplierName || date) && (
+        <p className="text-sm text-slate-500 mt-1">
+          {[supplierName, date].filter(Boolean).join(' · ')}
+        </p>
+      )}
+      {encodedCost && (
+        <p className="text-sm font-mono font-semibold text-slate-700 mt-0.5 tracking-widest">{encodedCost}</p>
+      )}
     </div>
   );
 }
 
-export function BarcodeGenerator({ productName, sku, price, variants, onClose }: BarcodeGeneratorProps) {
+export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, onClose }: BarcodeGeneratorProps) {
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
 
@@ -87,11 +104,11 @@ export function BarcodeGenerator({ productName, sku, price, variants, onClose }:
           </div>
 
           {tab === 'product' || !hasVariants ? (
-            <SingleBarcode value={sku} label={productName} price={price} />
+            <SingleBarcode value={sku} label={productName} price={price} encodedCost={encodedCost} supplierName={supplierName} date={date} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {variants!.map(v => (
-                <SingleBarcode key={v.sku} value={v.sku} label={`${productName} — ${v.label}`} price={v.price} />
+                <SingleBarcode key={v.sku} value={v.sku} label={`${productName} — ${v.label}`} price={v.price} encodedCost={v.encodedCost} supplierName={v.supplierName} date={v.date} />
               ))}
             </div>
           )}

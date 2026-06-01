@@ -23,6 +23,7 @@ import { VariantPicker } from './pos/VariantPicker';
 import { LoyaltyPanel } from './pos/LoyaltyPanel';
 
 import { db } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { SyncStatus } from './pos/SyncStatus';
 import { Pagination, Modal } from './ui';
 import { salesService, customerService, productService, variantService, loyaltyService } from '../services';
@@ -78,6 +79,17 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithBatches | null>(null);
+
+  // Gift voucher redemption
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<{ id: string; code: string; amount: number } | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+
+  // POS voucher issuance
+  const [showIssueVoucher, setShowIssueVoucher] = useState(false);
+  const [voucherRules, setVoucherRules] = useState<{ minPurchase: number; rewardAmount: number } | null>(null);
+  const [issueVoucherForm, setIssueVoucherForm] = useState({ amount: '', phone: '', name: '' });
+  const [issuingVoucher, setIssuingVoucher] = useState(false);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cartScrollRef = useRef<HTMLDivElement>(null);
@@ -274,6 +286,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     } catch (error) {
       console.error('Error loading data:', error);
     }
+
+    // Load voucher rules
+    try {
+      const { data } = await (supabase.from('app_settings') as any)
+        .select('key, value').in('key', ['voucher_min_purchase', 'voucher_reward_amount']);
+      if (data && data.length === 2) {
+        const get = (k: string) => parseFloat(data.find((r: any) => r.key === k)?.value ?? '0');
+        const min = get('voucher_min_purchase');
+        const reward = get('voucher_reward_amount');
+        if (min > 0 && reward > 0) setVoucherRules({ minPurchase: min, rewardAmount: reward });
+      }
+    } catch { /* non-critical */ }
   }
 
   // Hook handles refetching automatically
@@ -451,9 +475,26 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     showToast(`'${description.trim()}' added to cart`, 'success');
   }
 
-  function updateCartItemPrice(index: number, newPrice: number) {
+  function setCartItemQuantity(index: number, qty: number) {
+    const item = cart[index];
+    if (qty <= 0) { removeFromCart(index); return; }
+    if (!item.isManual && qty > item.batch.current_quantity) {
+      showToast(`Only ${item.batch.current_quantity} units available`, 'warning');
+      return;
+    }
     const newCart = [...cart];
-    newCart[index].price = newPrice;
+    newCart[index] = { ...newCart[index], quantity: qty };
+    setCart(newCart);
+  }
+
+  function updateCartItemPrice(index: number, newPrice: number) {
+    const item = cart[index];
+    const maxDisc = item.original_price <= 1000 ? 50
+      : item.original_price <= 2000 ? 100
+      : item.original_price <= 5000 ? 200
+      : 300;
+    const newCart = [...cart];
+    newCart[index].price = Math.max(item.original_price - maxDisc, newPrice);
     setCart(newCart);
   }
 
@@ -471,7 +512,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // discountAmount is no longer used for global discount, simplifying math
   const taxBase = effectiveSubtotal;
   const taxAmount = taxBase * (taxRate / 100);
-  const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount);
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.amount, taxBase + taxAmount + serviceCharge - loyaltyDiscount) : 0;
+  const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount - voucherDiscount);
   const changeAmount = paidAmount - total;
 
 
@@ -527,6 +569,70 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       setSelectedReferralAgent(data);
     } catch (error: any) {
       showToast(`Error creating agent: ${error.message}`, 'error');
+    }
+  }
+
+  async function handleIssueVoucherFromPOS() {
+    const amt = parseFloat(issueVoucherForm.amount);
+    if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+    setIssuingVoucher(true);
+    try {
+      const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+      const rand = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+      const code = `RVL-${rand(4)}-${rand(3)}`;
+      const expiresAt = new Date(); expiresAt.setMonth(expiresAt.getMonth() + 3);
+
+      const { error } = await (supabase.from('gift_vouchers') as any).insert({
+        code, amount: amt, status: 'active',
+        issued_source: 'reward',
+        issued_to: issueVoucherForm.name.trim() || (selectedCustomer?.name ?? null),
+        recipient_phone: issueVoucherForm.phone.trim() || null,
+        issued_by_staff_id: profile?.id ?? null,
+        expires_at: expiresAt.toISOString().split('T')[0],
+      });
+      if (error) throw error;
+
+      const cardData = {
+        code, amount: amt,
+        issuedTo: issueVoucherForm.name.trim() || selectedCustomer?.name || undefined,
+        expiresAt: expiresAt.toISOString().split('T')[0],
+        issuedAt: new Date().toISOString(),
+      };
+
+      if (issueVoucherForm.phone.trim()) {
+        const { openWhatsApp } = await import('./vouchers/voucherCardHTML');
+        openWhatsApp(issueVoucherForm.phone.trim(), cardData);
+      }
+
+      showToast(`Voucher ${code} issued`, 'success');
+      setShowIssueVoucher(false);
+      setIssueVoucherForm({ amount: '', phone: '', name: '' });
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to issue voucher', 'error');
+    } finally {
+      setIssuingVoucher(false);
+    }
+  }
+
+  async function applyVoucher() {
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) return;
+    setVoucherLoading(true);
+    try {
+      const { data, error } = await (supabase.from('gift_vouchers') as any)
+        .select('id, code, amount, expires_at, status')
+        .eq('code', code)
+        .single();
+      if (error || !data) { showToast('Voucher not found', 'error'); return; }
+      if (data.status !== 'active') { showToast(`Voucher is ${data.status}`, 'error'); return; }
+      if (data.expires_at && new Date(data.expires_at) < new Date()) { showToast('Voucher has expired', 'error'); return; }
+      setAppliedVoucher({ id: data.id, code: data.code, amount: data.amount });
+      setVoucherInput('');
+      showToast(`Voucher ${data.code} applied — LKR ${Math.round(data.amount).toLocaleString()} off`, 'success');
+    } catch {
+      showToast('Failed to validate voucher', 'error');
+    } finally {
+      setVoucherLoading(false);
     }
   }
 
@@ -614,6 +720,14 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         paymentMethod,
         cashierName: profile?.full_name || 'Cashier',
       });
+
+      // Mark voucher as used
+      if (appliedVoucher) {
+        await (supabase.from('gift_vouchers') as any)
+          .update({ status: 'used', redeemed_at: new Date().toISOString() })
+          .eq('id', appliedVoucher.id);
+        setAppliedVoucher(null);
+      }
 
       setShowInvoice(true);
       clearCart();
@@ -949,6 +1063,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 <CartItemsList
                   items={cart}
                   onUpdateQuantity={updateCartItemQuantity}
+                  onSetQuantity={setCartItemQuantity}
                   onUpdatePrice={updateCartItemPrice}
                   onRemoveItem={removeFromCart}
                 />
@@ -970,6 +1085,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
               { label: 'Subtotal', value: `LKR ${grossSubtotal.toFixed(2)}`, color: 'var(--ink-2)' },
               ...(itemLevelDiscount > 0 ? [{ label: 'Discount', value: `−LKR ${itemLevelDiscount.toFixed(2)}`, color: 'var(--danger)' }] : []),
               ...(loyaltyDiscount > 0 ? [{ label: 'Loyalty', value: `−LKR ${loyaltyDiscount.toFixed(2)}`, color: 'var(--warn)' }] : []),
+              ...(voucherDiscount > 0 ? [{ label: `Voucher (${appliedVoucher?.code})`, value: `−LKR ${voucherDiscount.toFixed(2)}`, color: '#C9A84C' }] : []),
               ...(taxRate > 0 ? [{ label: `Tax (${taxRate}%)`, value: `LKR ${taxAmount.toFixed(2)}`, color: 'var(--muted)' }] : []),
               ...(serviceCharge > 0 ? [{ label: 'Service', value: `LKR ${serviceCharge.toFixed(2)}`, color: 'var(--muted)' }] : []),
             ].map(({ label, value, color }) => (
@@ -1002,6 +1118,45 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 />
               </div>
             </div>
+            {/* Gift Voucher */}
+            <div style={{ marginBottom: 10 }}>
+              {appliedVoucher ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', borderRadius: 7,
+                  background: 'color-mix(in oklab, #C9A84C 10%, var(--panel-2))',
+                  border: '1px solid rgba(201,168,76,0.35)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ fontSize: 14 }}>🎁</span>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</div>
+                      <div style={{ fontSize: 11, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setAppliedVoucher(null)} style={{ border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 2, lineHeight: 0, borderRadius: 4 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', height: 34, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
+                    <span style={{ padding: '0 8px', fontSize: 13 }}>🎁</span>
+                    <input
+                      value={voucherInput}
+                      onChange={e => setVoucherInput(e.target.value.toUpperCase())}
+                      onKeyDown={e => e.key === 'Enter' && applyVoucher()}
+                      placeholder="Gift voucher code…"
+                      style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.05em' }}
+                    />
+                  </div>
+                  <button onClick={applyVoucher} disabled={!voucherInput.trim() || voucherLoading} className="btn" style={{ height: 34, fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {voucherLoading ? '…' : 'Apply'}
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Payment method pills */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
               {(['cash', 'card', 'credit', 'mixed'] as const).map((m) => {
@@ -1087,6 +1242,27 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
               onMouseLeave={(e) => { if (cart.length > 0 && !processing) e.currentTarget.style.background = 'var(--accent)'; }}
             >
               {processing ? 'Processing…' : `Charge · LKR ${total.toFixed(2)}`}
+            </button>
+            <button
+              onClick={() => {
+                setIssueVoucherForm({
+                  amount: voucherRules ? String(voucherRules.rewardAmount) : '',
+                  name: selectedCustomer?.name ?? '',
+                  phone: selectedCustomer?.phone ?? '',
+                });
+                setShowIssueVoucher(true);
+              }}
+              style={{
+                marginTop: 8, width: '100%', height: 34, borderRadius: 8,
+                border: '1px solid var(--line)', background: 'transparent',
+                color: 'var(--ink-2)', fontSize: 12.5, fontWeight: 500,
+                cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 6, transition: 'all .12s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.color = 'var(--ink)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-2)'; }}
+            >
+              🎁 Issue Voucher
             </button>
           </div>
         </aside>
@@ -1329,6 +1505,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   <CartItemsList
                     items={cart}
                     onUpdateQuantity={updateCartItemQuantity}
+                    onSetQuantity={setCartItemQuantity}
                     onUpdatePrice={updateCartItemPrice}
                     onRemoveItem={removeFromCart}
                   />
@@ -1443,6 +1620,58 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           </div>
         </div>
       )}
+
+      <Modal isOpen={showIssueVoucher} onClose={() => setShowIssueVoucher(false)} title="Issue Gift Voucher" size="sm">
+        {(() => {
+          const inputStyle: React.CSSProperties = { width: '100%', height: 36, padding: '0 10px', border: '1px solid var(--line)', borderRadius: 8, fontSize: 13, color: 'var(--ink)', background: 'var(--panel)', outline: 'none', boxSizing: 'border-box' };
+          const labelStyle: React.CSSProperties = { display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.05em' };
+          return (
+            <form onSubmit={(e) => { e.preventDefault(); handleIssueVoucherFromPOS(); }} style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {voucherRules && (
+                <div style={{ padding: '8px 10px', borderRadius: 7, background: 'color-mix(in oklab, #C9A84C 10%, var(--panel-2))', border: '1px solid rgba(201,168,76,0.35)', fontSize: 12, color: '#8a6f2c' }}>
+                  Standard reward: <strong>LKR {voucherRules.rewardAmount.toLocaleString()}</strong> on purchases ≥ LKR {voucherRules.minPurchase.toLocaleString()}
+                </div>
+              )}
+              <div>
+                <label style={labelStyle}>Amount (LKR) *</label>
+                <input
+                  required autoFocus type="number" min={1} step={1}
+                  style={{ ...inputStyle, textAlign: 'right', fontFamily: "'JetBrains Mono',monospace" }}
+                  value={issueVoucherForm.amount}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, amount: e.target.value }))}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Recipient Name</label>
+                <input
+                  style={inputStyle}
+                  value={issueVoucherForm.name}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder={selectedCustomer?.name ?? 'Optional'}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>WhatsApp Phone</label>
+                <input
+                  style={inputStyle} type="tel"
+                  value={issueVoucherForm.phone}
+                  onChange={e => setIssueVoucherForm(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="+94 7x xxx xxxx"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button type="button" onClick={() => setShowIssueVoucher(false)} className="btn" style={{ flex: 1, height: 38, fontSize: 13, background: 'var(--panel-2)', color: 'var(--ink-2)' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={issuingVoucher || !issueVoucherForm.amount} className="btn btn-primary" style={{ flex: 2, height: 38, fontSize: 13 }}>
+                  {issuingVoucher ? 'Issuing…' : '🎁 Issue Voucher'}
+                </button>
+              </div>
+            </form>
+          );
+        })()}
+      </Modal>
 
       <Modal isOpen={showCustomerModal} onClose={() => setShowCustomerModal(false)} title="Add Customer" size="md">
         {(() => {

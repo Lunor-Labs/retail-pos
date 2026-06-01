@@ -7,6 +7,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType, StockFilter } from '../hooks/useProducts';
 import { ProductWithStock } from '../types';
 import { BarcodeGenerator, BarcodeVariant } from './BarcodeGenerator';
+import { useCostCode } from '../contexts/CostCodeContext';
 import { ProductTable } from './products/ProductTable';
 import { ProductForm } from './products/ProductForm';
 import { ProductDetailsView } from './products/ProductDetailsView';
@@ -16,7 +17,9 @@ import { RestockModal } from './products/RestockModal';
 import { productService, supplierService } from '../services';
 import { logger } from '../lib/logger';
 import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
+import { ProductActivityLog } from './products/ProductActivityLog';
 import { playScannerBeep } from '../utils/audio';
+import { useProductAudit } from '../lib/auditLog';
 
 // Inline custom dropdown — avoids native select styling issues
 function FilterDropdown({ value, onChange, options, placeholder }: {
@@ -94,7 +97,9 @@ interface ProductsProps {
 }
 
 export function Products({ initialStockFilter = 'all' }: ProductsProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isStockManager } = useAuth();
+  const canManageStock = isAdmin || isStockManager;
+  const logAudit = useProductAudit();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [searchTerm, setSearchTerm] = useState('');
@@ -120,6 +125,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
 
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const { showToast } = useToast();
+  const { encode: encodeCost, isConfigured: costCodeConfigured } = useCostCode();
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view'>('add');
@@ -151,6 +157,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [editProductId, setEditProductId] = useState<string | null>(null);
   const [rememberedBrand, setRememberedBrand] = useState('');
   const [rememberedPricing, setRememberedPricing] = useState<DefaultPricing | undefined>(undefined);
+  const [tab, setTab] = useState<'products' | 'activity'>('products');
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
   const barcodeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastKeyTimeRef = useRef<number>(0);
@@ -340,9 +347,11 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           selling_price: formData.selling_price || 0,
           supplier_id: formData.supplier_id || null,
         } as any);
+        logAudit({ action_type: 'product_added', product_name: formData.name });
         showToast('Product added successfully!', 'success');
       } else if (selectedProduct) {
         await productService.updateProduct(selectedProduct.id, formData as any);
+        logAudit({ action_type: 'product_updated', product_id: selectedProduct.id, product_name: formData.name });
         showToast('Product updated successfully!', 'success');
       }
 
@@ -478,17 +487,28 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     }
   }
 
+  function fmtBatchDate(iso: string | undefined): string | undefined {
+    if (!iso) return undefined;
+    return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   async function handlePrintBarcode(product: ProductWithStock) {
     setBarcodeProduct(product);
     setBarcodeVariants([]);
     try {
       const full = await productService.getProductWithVariants(product.id);
       if (full && full.variants.length > 0) {
-        const mapped: BarcodeVariant[] = full.variants.map(v => ({
-          sku: v.sku,
-          label: [v.size, v.color].filter(Boolean).join(' · ') || 'Default',
-          price: (v as any).batches?.[0]?.selling_price,
-        }));
+        const mapped: BarcodeVariant[] = full.variants.map(v => {
+          const batch = (v as any).batches?.[0];
+          return {
+            sku: v.sku,
+            label: [v.size, v.color].filter(Boolean).join(' · ') || 'Default',
+            price: batch?.selling_price,
+            encodedCost: costCodeConfigured && batch?.cost_price != null ? encodeCost(batch.cost_price) : undefined,
+            supplierName: batch?.supplier?.name ?? undefined,
+            date: fmtBatchDate(batch?.received_date),
+          };
+        });
         setBarcodeVariants(mapped);
       }
     } catch { /* silently ignore — product-level print still works */ }
@@ -521,7 +541,22 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>Manage inventory, pricing, and stock levels.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          {isAdmin && (
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', gap: 2, padding: '2px', borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
+            {(['products', 'activity'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{
+                height: 30, padding: '0 14px', borderRadius: 7, border: 0,
+                background: tab === t ? 'var(--panel)' : 'transparent',
+                color: tab === t ? 'var(--ink)' : 'var(--muted)',
+                fontSize: 12.5, fontWeight: tab === t ? 600 : 500, cursor: 'pointer',
+                boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                transition: 'all .1s',
+              }}>
+                {t === 'products' ? 'Products' : 'Activity Log'}
+              </button>
+            ))}
+          </div>
+          {canManageStock && tab === 'products' && (
             <>
               <button onClick={() => setShowImportModal(true)} className="btn" style={{ height: 36 }}>
                 <Upload size={14} /> Import CSV
@@ -537,6 +572,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         </div>
       </div>
 
+      {tab === 'activity' && <ProductActivityLog />}
+
+      {tab === 'products' && <>
       {/* Filters card */}
       <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Row 1: search bar */}
@@ -631,7 +669,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               onEdit={openEditPage}
               onAddStock={openAddStockModal}
               onPrintBarcode={handlePrintBarcode}
-              isAdmin={isAdmin}
+              isAdmin={canManageStock}
             />
           </div>
 
@@ -644,6 +682,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           />
         </div>
       )}
+      </>}
 
       {/* Main Product Action Modal (Add/Edit/View) */}
       <Modal
@@ -699,6 +738,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           productName={barcodeProduct.name}
           sku={barcodeProduct.sku}
           price={barcodeProduct.batches[0]?.selling_price}
+          encodedCost={costCodeConfigured && barcodeProduct.batches[0]?.cost_price != null ? encodeCost(barcodeProduct.batches[0].cost_price) : undefined}
+          supplierName={(barcodeProduct.batches[0] as any)?.supplier?.name ?? undefined}
+          date={fmtBatchDate(barcodeProduct.batches[0]?.received_date)}
           variants={barcodeVariants.length > 0 ? barcodeVariants : undefined}
           onClose={() => { setBarcodeProduct(null); setBarcodeVariants([]); }}
         />

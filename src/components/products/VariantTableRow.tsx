@@ -1,4 +1,7 @@
 import { X } from 'lucide-react';
+import { CostInput } from '../ui';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCostCode } from '../../contexts/CostCodeContext';
 
 export interface VariantRowData {
   id?: string;
@@ -37,6 +40,10 @@ export function VariantTableRow({
   row, index, defaultSupplierId,
   suppliers, mode, parentSku, isOnly, showPricing = true, onChange, onDelete, onTabFromLastCell,
 }: VariantTableRowProps) {
+
+  const { isAdmin } = useAuth();
+  const { isConfigured } = useCostCode();
+  const hideMarkup = !isAdmin && isConfigured;
 
   function update(patch: Partial<VariantRowData>) {
     const updated = { ...row, ...patch };
@@ -122,20 +129,19 @@ export function VariantTableRow({
           </td>
         )}
 
-        {/* Cost (LKR) */}
+        {/* Cost */}
         {showPricing && (
           <td style={{ ...cellStyle, width: 96 }}>
-            <input
-              style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
-              value={row.cost_price || ''}
-              onChange={e => updateCost(parseFloat(e.target.value) || 0)}
-              placeholder="0"
+            <CostInput
+              value={row.cost_price}
+              onChange={updateCost}
+              style={{ ...inputStyle, textAlign: 'right' }}
             />
           </td>
         )}
 
-        {/* Markup % */}
-        {showPricing && (
+        {/* Markup % — hidden when encoding is active to prevent cost back-calculation */}
+        {showPricing && !hideMarkup && (
           <td style={{ ...cellStyle, width: 80 }}>
             <input
               style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step="any"
