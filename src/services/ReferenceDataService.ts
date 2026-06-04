@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 
-export type RefType = 'brand' | 'category' | 'material' | 'product_name';
+export type RefType = 'brand' | 'category' | 'material' | 'product_name' | 'size' | 'color';
 
 export interface ReferenceItem {
   id: string;

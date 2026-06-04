@@ -19,7 +19,8 @@ interface DropdownSelectProps {
 export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6 }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label ?? '';
   const showSearch = options.length >= searchThreshold;
@@ -28,9 +29,18 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
 
+  function handleOpen() {
+    if (disabled) return;
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPanelPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    setOpen(o => !o);
+  }
+
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
         setOpen(false);
         setSearch('');
       }
@@ -47,11 +57,12 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
   }, [open, showSearch]);
 
   return (
-    <div ref={ref} style={{ position: 'relative', ...style }}>
+    <div style={{ position: 'relative', ...style }}>
       <button
+        ref={btnRef}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && setOpen(o => !o)}
+        onClick={handleOpen}
         style={{
           width: '100%',
           height: 36,
@@ -82,13 +93,15 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
         />
       </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 4px)',
-          left: 0,
-          right: 0,
-          zIndex: 200,
+      {open && panelPos && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 299 }} onClick={() => { setOpen(false); setSearch(''); }} />
+          <div style={{
+          position: 'fixed',
+          top: panelPos.top,
+          left: panelPos.left,
+          width: panelPos.width,
+          zIndex: 300,
           background: 'var(--panel)',
           border: '1px solid var(--line)',
           borderRadius: 10,
@@ -168,6 +181,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
             ))}
           </div>
         </div>
+        </>
       )}
     </div>
   );

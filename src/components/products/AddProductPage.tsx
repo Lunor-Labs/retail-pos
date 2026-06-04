@@ -70,6 +70,8 @@ export function AddProductPage({
   const [refCategories, setRefCategories] = useState<string[]>([]);
   const [refMaterials, setRefMaterials] = useState<string[]>([]);
   const [refNames, setRefNames] = useState<string[]>([]);
+  const [refSizes, setRefSizes] = useState<string[]>([]);
+  const [refColors, setRefColors] = useState<string[]>([]);
 
   const [info, setInfo] = useState<ProductInfo>({
     sku: '', name: '', brand: initialBrand, description: '',
@@ -90,6 +92,8 @@ export function AddProductPage({
     referenceDataService.getActiveNames('category').then(setRefCategories).catch(() => {});
     referenceDataService.getActiveNames('material').then(setRefMaterials).catch(() => {});
     referenceDataService.getActiveNames('product_name').then(setRefNames).catch(() => {});
+    referenceDataService.getActiveNames('size').then(setRefSizes).catch(() => {});
+    referenceDataService.getActiveNames('color').then(setRefColors).catch(() => {});
   }, []);
 
   // Generate SKU on mount and whenever brand/category changes (add mode only, not manually edited)
@@ -395,6 +399,8 @@ export function AddProductPage({
                   parentSku={info.sku}
                   isOnly={rows.length === 1}
                   showPricing={mode === 'add'}
+                  sizeOptions={refSizes}
+                  colorOptions={refColors}
                   onChange={updateRow}
                   onDelete={deleteRow}
                   onTabFromLastCell={i === rows.length - 1 ? addRow : undefined}

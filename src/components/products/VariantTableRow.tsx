@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { CostInput } from '../ui';
+import { CostInput, DropdownSelect } from '../ui';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCostCode } from '../../contexts/CostCodeContext';
 
@@ -26,6 +26,8 @@ interface VariantTableRowProps {
   parentSku: string;
   isOnly: boolean;
   showPricing?: boolean;
+  sizeOptions?: string[];
+  colorOptions?: string[];
   onChange: (index: number, row: VariantRowData) => void;
   onDelete: (index: number) => void;
   onTabFromLastCell?: () => void;
@@ -38,7 +40,9 @@ function autoSku(parentSku: string, size: string, color: string): string {
 
 export function VariantTableRow({
   row, index, defaultSupplierId,
-  suppliers, mode, parentSku, isOnly, showPricing = true, onChange, onDelete, onTabFromLastCell,
+  suppliers, mode, parentSku, isOnly, showPricing = true,
+  sizeOptions = [], colorOptions = [],
+  onChange, onDelete, onTabFromLastCell,
 }: VariantTableRowProps) {
 
   const { isAdmin } = useAuth();
@@ -83,12 +87,30 @@ export function VariantTableRow({
       <tr style={{ borderBottom: '1px solid var(--line-2)' }}>
         {/* Size */}
         <td style={cellStyle}>
-          <input style={inputStyle} value={row.size} onChange={e => update({ size: e.target.value })} placeholder="S / 30 / XL" />
+          {sizeOptions.length > 0 ? (
+            <DropdownSelect
+              value={row.size}
+              onChange={v => update({ size: v })}
+              options={sizeOptions.map(s => ({ value: s, label: s }))}
+              placeholder="Select…"
+            />
+          ) : (
+            <input style={inputStyle} value={row.size} onChange={e => update({ size: e.target.value })} placeholder="S / 30 / XL" />
+          )}
         </td>
 
         {/* Colour */}
         <td style={cellStyle}>
-          <input style={inputStyle} value={row.color} onChange={e => update({ color: e.target.value })} placeholder="Black" />
+          {colorOptions.length > 0 ? (
+            <DropdownSelect
+              value={row.color}
+              onChange={v => update({ color: v })}
+              options={colorOptions.map(c => ({ value: c, label: c }))}
+              placeholder="Select…"
+            />
+          ) : (
+            <input style={inputStyle} value={row.color} onChange={e => update({ color: e.target.value })} placeholder="Black" />
+          )}
         </td>
 
         {/* SKU */}

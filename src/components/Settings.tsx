@@ -603,6 +603,8 @@ const CATALOG_TABS: { type: RefType; label: string }[] = [
   { type: 'category',     label: 'Categories' },
   { type: 'material',     label: 'Materials' },
   { type: 'product_name', label: 'Product Names' },
+  { type: 'size',         label: 'Sizes' },
+  { type: 'color',        label: 'Colors' },
 ];
 
 function CatalogSection() {
@@ -615,11 +617,22 @@ function CatalogSection() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [counts, setCounts] = useState<Partial<Record<RefType, number>>>({});
+
+  useEffect(() => {
+    CATALOG_TABS.forEach(tab => {
+      referenceDataService.getActiveNames(tab.type)
+        .then(names => setCounts(prev => ({ ...prev, [tab.type]: names.length })))
+        .catch(() => {});
+    });
+  }, []);
 
   async function load(type: RefType) {
     setLoading(true);
     try {
-      setItems(await referenceDataService.getByType(type));
+      const data = await referenceDataService.getByType(type);
+      setItems(data);
+      setCounts(prev => ({ ...prev, [type]: data.filter(i => i.active).length }));
     } catch {
       showToast('Failed to load catalog data', 'error');
     } finally {
@@ -636,6 +649,7 @@ function CatalogSection() {
     try {
       const item = await referenceDataService.add(activeType, name);
       setItems(prev => [...prev, item].sort((a, b) => a.name.localeCompare(b.name)));
+      setCounts(prev => ({ ...prev, [activeType]: (prev[activeType] ?? 0) + 1 }));
       setNewName('');
     } catch (e: any) {
       showToast(e?.message?.includes('unique') ? 'Already exists' : (e?.message ?? 'Failed to add'), 'error');
@@ -664,6 +678,7 @@ function CatalogSection() {
     try {
       await referenceDataService.setActive(item.id, !item.active);
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, active: !i.active } : i));
+      setCounts(prev => ({ ...prev, [activeType]: (prev[activeType] ?? 0) + (item.active ? -1 : 1) }));
     } catch (e: any) {
       showToast(e?.message ?? 'Failed to update', 'error');
     } finally {
@@ -691,7 +706,7 @@ function CatalogSection() {
               }}>
                 {tab.label}
                 <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 500, color: isActive ? 'var(--accent)' : 'var(--faint)', background: isActive ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)', padding: '1px 6px', borderRadius: 999 }}>
-                  {items.filter(i => i.active).length || 0}
+                  {counts[tab.type] ?? 0}
                 </span>
               </button>
             );
