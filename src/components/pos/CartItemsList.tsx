@@ -45,8 +45,13 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
               background: item.isManual ? 'color-mix(in srgb, var(--warn) 4%, transparent)' : 'transparent',
             }}
           >
-            {/* ── Row 1: qty · name · subtotal · remove ── */}
+            {/* ── Row 1: # · qty · name · subtotal · remove ── */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+
+              {/* Line number */}
+              <span style={{ fontSize: 10.5, color: 'var(--faint)', fontFamily: "'JetBrains Mono',monospace", minWidth: 14, textAlign: 'right', flexShrink: 0 }}>
+                {index + 1}
+              </span>
 
               {/* Qty stepper with keyboard-editable centre */}
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
@@ -140,7 +145,7 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               marginTop: 5,
-              paddingLeft: 72,
+              paddingLeft: 94,
             }}>
               {/* Original price (strikethrough when discounted) */}
               <span style={{
