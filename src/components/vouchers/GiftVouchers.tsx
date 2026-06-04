@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Gift, Check, X, Eye, Ban, MessageCircle, CornerDownLeft } from 'lucide-react';
+import { Plus, Gift, Check, X, Ban, MessageCircle, CornerDownLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { LoadingSpinner } from '../ui';
-import { openVoucherCard, openWhatsApp, VoucherCardData } from './voucherCardHTML';
+import { openWhatsApp, VoucherCardData } from './voucherCardHTML';
 
 interface GiftVoucher {
   id: string;
@@ -451,18 +451,6 @@ export function GiftVouchers() {
     }
   }
 
-  function previewCard(v: GiftVoucher) {
-    openVoucherCard({
-      code: v.code,
-      amount: v.amount,
-      issuedTo: v.issued_to ?? undefined,
-      issuedByName: v.issued_by_name ?? undefined,
-      message: v.message ?? undefined,
-      expiresAt: v.expires_at ?? undefined,
-      issuedAt: v.created_at,
-    });
-  }
-
   const allSold = vouchers.filter(v => v.issued_source === 'sold');
   const active  = vouchers.filter(v => v.status === 'active');
   const used    = vouchers.filter(v => v.status === 'used');
@@ -595,10 +583,6 @@ export function GiftVouchers() {
 
           const actions = (
             <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button onClick={() => previewCard(v)} title="View Card"
-                className="btn" style={{ height: 28, width: 28, padding: 0, display: 'grid', placeItems: 'center' }}>
-                <Eye size={13} strokeWidth={1.8} />
-              </button>
               {v.recipient_phone && (
                 <button onClick={() => openWhatsApp(v.recipient_phone!, whatsAppData)} title="Send via WhatsApp"
                   style={{ height: 28, width: 28, padding: 0, display: 'grid', placeItems: 'center', border: '1px solid #25D366', borderRadius: 6, background: 'transparent', color: '#25D366', cursor: 'pointer' }}>
