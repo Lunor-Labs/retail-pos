@@ -663,7 +663,7 @@ export function GiftVouchers() {
               </div>
 
               {/* Mobile card */}
-              <div className="gift-row-mobile" style={{ padding: '12px 14px', borderBottom: divider, background: rowBg, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="gift-row-mobile" style={{ padding: '12px 14px', borderBottom: divider, background: rowBg, flexDirection: 'column', gap: 8 }}>
                 {/* Top: code + actions */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                   <div>

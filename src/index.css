@@ -363,6 +363,7 @@ html, body {
 /* Desktop table — hidden on mobile */
 .gift-table-header,
 .gift-row-desktop { display: none; }
+.gift-row-mobile  { display: flex; }
 @media (min-width: 768px) {
   .gift-table-header,
   .gift-row-desktop  { display: grid; }
