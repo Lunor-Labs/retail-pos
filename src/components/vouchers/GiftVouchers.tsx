@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Gift, Check, X, Eye, Ban, MessageCircle, CornerDownLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -94,6 +94,7 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
   const [paidAmount, setPaidAmount] = useState('');
   const [paidVia, setPaidVia] = useState<'cash' | 'card'>('cash');
   const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
 
   // Keep paid amount in sync with face value by default
   function handleAmountChange(val: string) {
@@ -102,8 +103,10 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
   }
 
   async function handleIssue() {
+    if (inFlight.current) return;
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { showToast('Enter a valid amount', 'error'); return; }
+    inFlight.current = true;
     setSaving(true);
     try {
       const code = genCode();
@@ -145,6 +148,7 @@ function IssueModal({ onClose, onIssued }: { onClose: () => void; onIssued: () =
     } catch (e: any) {
       showToast(e?.message ?? 'Failed to issue voucher', 'error');
     } finally {
+      inFlight.current = false;
       setSaving(false);
     }
   }
