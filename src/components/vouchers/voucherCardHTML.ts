@@ -332,17 +332,17 @@ export function normalisePhone(raw: string): string {
 // Build pre-filled WhatsApp message text
 export function buildWhatsAppMessage(data: VoucherCardData, storeName = 'RIVONLAK'): string {
   const lines: string[] = [];
-  lines.push(`🎁 *Gift Voucher from ${storeName}*`);
+  lines.push(`🎁 *Gift Voucher — ${storeName}*`);
   lines.push('');
-  if (data.issuedTo) lines.push(`Dear ${data.issuedTo},`);
+  if (data.issuedTo) lines.push(`Dear *${data.issuedTo}*,`);
   lines.push(`You've received a gift voucher worth *${fmtAmount(data.amount)}*!`);
+  if (data.issuedByName) lines.push(`From: *${data.issuedByName}*`);
   lines.push('');
-  lines.push(`🔑 Code: *${data.code}*`);
-  if (data.expiresAt) lines.push(`📅 Valid until: ${fmtDate(data.expiresAt)}`);
+  lines.push(`🔑 *${data.code}*`);
+  if (data.expiresAt) lines.push(`📅 Valid until ${fmtDate(data.expiresAt)}`);
   if (data.message) { lines.push(''); lines.push(`_"${data.message}"_`); }
   lines.push('');
-  lines.push('Present this code at checkout to redeem your voucher.');
-  lines.push(`_${storeName}_`);
+  lines.push(`Present this code at *${storeName}* to redeem your voucher.`);
   return lines.join('\n');
 }
 
