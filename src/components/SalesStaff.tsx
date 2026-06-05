@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check, ChevronDown, TrendingUp } from 'lucide-react';
+import { Plus, Search, X, Pencil, ChevronRight, ChevronLeft, Users, Target, Check, ChevronDown, TrendingUp, FileDown } from 'lucide-react';
 import { salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from './ui';
 import { supabase } from '../lib/supabase';
+import { buildCommissionReportHTML } from './staff/commissionReportHTML';
 
 type StaffRole = 'admin' | 'cashier' | 'stock_manager' | 'staff';
 type StaffSource = 'profile' | 'member';
@@ -757,6 +758,28 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
     }
   }
 
+  function printCommissionReportForRow(row: CommissionRow) {
+    const html = buildCommissionReportHTML({
+      memberName: row.member.full_name,
+      memberRole: ROLE_LABEL[row.member.role],
+      memberEmail: row.member.email,
+      month,
+      effectiveRate: row.effectiveRate,
+      effectiveTarget: row.effectiveTarget,
+      days: row.days,
+      totalRevenue: row.totalRevenue,
+      qualifyingDays: row.qualifyingDays,
+      commissionBase: row.commissionBase,
+      commissionAmount: row.commissionAmount,
+      isPaid: row.isPaid,
+      storeName: 'RIVONLAK',
+    });
+    const popup = window.open('', '_blank', 'width=820,height=700');
+    if (!popup) return;
+    popup.document.write(html);
+    popup.document.close();
+  }
+
   function navMonth(delta: number) {
     const [y, m] = month.split('-').map(Number);
     const d = new Date(y, m - 1 + delta, 1);
@@ -902,6 +925,19 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
                   {isAdmin && !row.isPaid && row.commissionAmount > 0 && !isConfirming && (
                     <button onClick={() => setConfirming(row.member.id)} className="btn" style={{ height: 28, padding: '0 10px', fontSize: 11.5 }}>
                       Pay
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => printCommissionReportForRow(row)}
+                      title="Download PDF report"
+                      style={{
+                        width: 28, height: 28, borderRadius: 6, border: '1px solid var(--line)',
+                        background: 'transparent', cursor: 'pointer', display: 'grid',
+                        placeItems: 'center', color: 'var(--muted)',
+                      }}
+                    >
+                      <FileDown size={14} />
                     </button>
                   )}
                   <button
