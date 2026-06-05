@@ -120,6 +120,8 @@ function StaffModal({ mode, onClose, onSaved }: {
 
   const [fullName, setFullName] = useState(isAdd ? '' : mode.member.full_name);
   const [emailInput, setEmailInput] = useState(isAdd ? '' : mode.member.email);
+  const [phoneNumber, setPhoneNumber] = useState(isAdd ? '' : mode.member.phone_number);
+  const [address, setAddress] = useState(isAdd ? '' : mode.member.address);
   const [active, setActive] = useState(isAdd ? true : mode.member.active);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -127,12 +129,19 @@ function StaffModal({ mode, onClose, onSaved }: {
   async function handleSave() {
     setErr('');
     if (!fullName.trim()) { setErr('Full name is required.'); return; }
+    if (!phoneNumber.trim()) { setErr('Phone number is required.'); return; }
     if (isAdd && !emailInput.trim()) { setErr('Email is required.'); return; }
     setSaving(true);
     try {
       if (isAdd) {
         const { error } = await (supabase.from('staff_members') as any)
-          .insert({ full_name: fullName.trim(), email: emailInput.trim().toLowerCase(), active: true });
+          .insert({
+            full_name: fullName.trim(),
+            email: emailInput.trim().toLowerCase(),
+            phone_number: phoneNumber.trim(),
+            address: address.trim() || null,
+            active: true,
+          });
         if (error) throw error;
         showToast(`${fullName.trim()} added to staff`, 'success');
         onSaved();
@@ -140,7 +149,12 @@ function StaffModal({ mode, onClose, onSaved }: {
       } else {
         const table = mode.member.source === 'member' ? 'staff_members' : 'user_profiles';
         const { error } = await (supabase.from(table) as any)
-          .update({ full_name: fullName.trim(), active })
+          .update({
+            full_name: fullName.trim(),
+            phone_number: phoneNumber.trim(),
+            address: address.trim() || null,
+            active,
+          })
           .eq('id', mode.member.id);
         if (error) throw error;
         showToast('Staff member updated', 'success');
@@ -194,10 +208,36 @@ function StaffModal({ mode, onClose, onSaved }: {
             <input style={inputStyle} value={fullName} onChange={e => setFullName(e.target.value)} placeholder="e.g. Kasun Perera" />
           </div>
           <div>
+            <label style={labelStyle}>Phone Number <span style={{ color: 'var(--danger)' }}>*</span></label>
+            <input
+              style={inputStyle}
+              value={phoneNumber}
+              onChange={e => setPhoneNumber(e.target.value)}
+              placeholder="e.g. +94 77 123 4567"
+              type="tel"
+            />
+          </div>
+          <div>
             <label style={labelStyle}>Email</label>
             <input value={emailInput} onChange={e => isAdd && setEmailInput(e.target.value)}
               placeholder="e.g. kasun@example.com" type="email" disabled={!isAdd}
               style={{ ...inputStyle, opacity: isAdd ? 1 : 0.6 }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Address</label>
+            <textarea
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder="e.g. 42 Main Street, Colombo"
+              rows={2}
+              style={{
+                ...inputStyle,
+                height: 'auto',
+                padding: '8px 11px',
+                resize: 'vertical',
+                lineHeight: 1.5,
+              }}
+            />
           </div>
           {!isAdd && (
             <>
