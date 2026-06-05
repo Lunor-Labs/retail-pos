@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, ArrowRight, ShoppingCart, RotateCcw, Truck, Users, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, ArrowRight, ShoppingCart, RotateCcw, Truck, Users, AlertTriangle, CalendarCheck } from 'lucide-react';
 import { StockFilter } from '../hooks/useProducts';
 import { productService, customerService, salesService, variantService } from '../services';
 import { useAuth } from '../contexts/AuthContext';
+import { DayManagement } from './DayManagement';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
@@ -501,6 +502,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   const [topSellers, setTopSellers] = useState<{ name: string; sku: string; units: number; rev: number; color: string }[]>([]);
   const [topSellerPeriod, setTopSellerPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [cashierStats, setCashierStats] = useState<{ cashier_id: string; full_name: string; sales: number; revenue: number }[]>([]);
+  const [showDayManagement, setShowDayManagement] = useState(false);
   const [activityItems, setActivityItems] = useState<{ type: ActivityType; text: string; time: string; by: string }[]>([]);
 
   useEffect(() => {
@@ -635,6 +637,15 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
             Here's how the store is performing today — <span style={{ color: 'var(--ink-2)' }}>{today}</span>.
           </p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => setShowDayManagement(true)}
+            className="btn"
+            style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            <CalendarCheck size={14} strokeWidth={1.8} />
+            Day Report
+          </button>
         <div className="dashboard-status" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent)' }} />
@@ -646,6 +657,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
             <span style={{ fontSize: 12, color: 'var(--muted)' }}>Pending returns</span>
             <span className="num" style={{ fontSize: 13, fontWeight: 500, color: pendingReturns > 0 ? 'var(--warn)' : 'var(--ink)' }}>{pendingReturns}</span>
           </div>
+        </div>
         </div>
       </div>
 
@@ -714,6 +726,8 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
         <StaffLeaderboard staff={staffList} />
         <ActivityFeed items={activityItems} />
       </div>
+
+      {showDayManagement && <DayManagement onClose={() => setShowDayManagement(false)} />}
 
     </div>
   );
