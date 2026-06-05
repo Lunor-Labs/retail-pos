@@ -417,6 +417,20 @@ function DetailPanel({ member, isAdmin, onEdit, onBack, onTargetSaved, onCommiss
               </span>
             </div>
           </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--ink-2)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Phone</span>
+            {member.phone_number
+              ? <a href={`tel:${member.phone_number}`} style={{ color: 'var(--accent-ink)', textDecoration: 'none' }}>{member.phone_number}</a>
+              : <span style={{ color: 'var(--faint)' }}>—</span>
+            }
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13, color: 'var(--ink-2)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.04em', textTransform: 'uppercase', width: 48, flexShrink: 0 }}>Address</span>
+            {member.address
+              ? <span style={{ lineHeight: 1.5 }}>{member.address}</span>
+              : <span style={{ color: 'var(--faint)' }}>—</span>
+            }
+          </div>
         </div>
       </div>
 
