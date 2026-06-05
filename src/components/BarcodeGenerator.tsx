@@ -34,11 +34,11 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date }:
       try {
         JsBarcode(ref.current, value, {
           format: 'CODE128',
-          width: 2,
-          height: 50,
+          width: 1.5,
+          height: 40,
           displayValue: true,
-          fontSize: 14,
-          margin: 10,
+          fontSize: 11,
+          margin: 5,
         });
       } catch (e) {
         console.error('Barcode error:', e);
@@ -121,21 +121,30 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
 
       <style>{`
         @media print {
-          body { visibility: hidden; background-color: white; }
+          @page { margin: 3mm; }
+          body { visibility: hidden; background-color: white; margin: 0; }
           #barcode-content {
             visibility: visible;
             position: absolute; left: 0; top: 0;
-            width: 100vw; padding: 20px;
+            width: 100%; padding: 2mm;
             background-color: white; z-index: 9999;
+            box-sizing: border-box;
           }
           #barcode-content * { visibility: visible; }
           .barcode-print {
-            border: 2px solid #000 !important;
-            padding: 40px !important;
-            max-width: 400px;
-            margin: 0 auto 24px;
+            border: 1px solid #000 !important;
+            padding: 4px 6px !important;
+            max-width: 100% !important;
+            width: 100%;
+            margin: 0 0 6px;
             text-align: center;
+            box-sizing: border-box;
+            border-radius: 0 !important;
+            page-break-inside: avoid;
           }
+          .barcode-print h3 { font-size: 9pt !important; margin: 0 0 2px !important; }
+          .barcode-print svg { width: 100% !important; height: auto !important; max-height: 40mm; }
+          .barcode-print p { font-size: 8pt !important; margin: 1px 0 !important; }
           .print\\:hidden { display: none !important; }
         }
       `}</style>
