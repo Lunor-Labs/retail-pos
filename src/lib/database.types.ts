@@ -17,6 +17,8 @@ export interface Database {
           role: 'admin' | 'cashier' | 'stock_manager' | 'staff'
           active: boolean
           daily_target: number
+          phone_number: string | null
+          address: string | null
           created_at: string
           updated_at: string
         }
@@ -27,6 +29,8 @@ export interface Database {
           role: 'admin' | 'cashier' | 'stock_manager' | 'staff'
           active?: boolean
           daily_target?: number
+          phone_number?: string | null
+          address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -37,6 +41,8 @@ export interface Database {
           role?: 'admin' | 'cashier' | 'stock_manager'
           active?: boolean
           daily_target?: number
+          phone_number?: string | null
+          address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -48,6 +54,8 @@ export interface Database {
           email: string
           active: boolean
           daily_target: number
+          phone_number: string | null
+          address: string | null
           created_at: string
           updated_at: string
         }
@@ -57,6 +65,8 @@ export interface Database {
           email?: string
           active?: boolean
           daily_target?: number
+          phone_number?: string | null
+          address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -66,6 +76,8 @@ export interface Database {
           email?: string
           active?: boolean
           daily_target?: number
+          phone_number?: string | null
+          address?: string | null
           created_at?: string
           updated_at?: string
         }
