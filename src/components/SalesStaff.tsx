@@ -17,6 +17,8 @@ interface StaffMember {
   active: boolean;
   daily_target: number;
   commission_rate: number;
+  phone_number: string;
+  address: string;
   created_at: string;
   source: StaffSource;
   // enriched
@@ -1024,6 +1026,8 @@ export function SalesStaff() {
         source,
         daily_target: u.daily_target ?? 0,
         commission_rate: u.commission_rate ?? 0,
+        phone_number: u.phone_number ?? '',
+        address: u.address ?? '',
         initials: getInitials(u.full_name),
         tone: getTone(u.full_name),
         today: todayMap[u.id] ?? { sales: 0, revenue: 0 },
