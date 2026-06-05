@@ -2,17 +2,12 @@
  * THERMAL RECEIPT PRINT CSS
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * PAPER WIDTH MISMATCH HANDLING
- * ─────────────────────────────────────────────────────────────────────────────
- * Printer driver (CUPS/PPD) is configured for : 4 inches = 101.6 mm
- * Physical paper roll loaded                  : 3.15 inches = 80 mm
- *
- * The print head is 101.6 mm wide. The 80 mm paper sits flush to the LEFT
- * edge of the print head. So:
- *   • @page width MUST be 101.6 mm  ← what the driver sends to the head
- *   • Receipt content MUST be        ← within the left 80 mm of the page
- *     ≤76 mm wide and left-aligned     so it lands on physical paper
- *   • The right 21.6 mm of the page ← unused (no paper there)
+ * Target printer: XPrinter 80mm thermal
+ *   • Paper width  : 80 mm
+ *   • Printable width: 72 mm (4 mm margin each side)
+ *   • @page width MUST match the driver paper size exactly — if the declared
+ *     page width is wider than the driver setting, the browser scales down
+ *     and everything prints small.
  *
  * @page height is patched by JS after measuring actual content height so
  * the thermal cutter fires exactly after the last printed line.
@@ -42,13 +37,13 @@ export const RECEIPT_PRINT_CSS = `
   }
 
   html {
-    /* Match printer driver: 4 inches = 101.6mm */
-    width: 101.6mm;
+    /* Match XPrinter 80mm paper width exactly */
+    width: 80mm;
     font-size: 9pt;
   }
 
   body {
-    width: 101.6mm;
+    width: 80mm;
     background: #fff;
     font-family: 'Courier New', Courier, monospace;
     font-size: 9pt;
@@ -58,8 +53,8 @@ export const RECEIPT_PRINT_CSS = `
   }
 
   #receipt {
-    /* 76mm fits within 80mm paper, centered for your printer */
-    width: 76mm;
+    /* 72mm printable area on 80mm paper (4mm each side) */
+    width: 72mm;
     margin: 0 auto;
     padding: 2mm 2mm 4mm;
   }
@@ -175,14 +170,13 @@ export const RECEIPT_PRINT_CSS = `
  *   • The thermal cutter fires immediately after the last printed line.
  */
 export const RECEIPT_PRINT_JS = `
-  // Inject @page to match your 4-inch printer driver width
-  // Remove fixed height - let content determine length
+  // Inject @page to match XPrinter 80mm paper width exactly
+  // Height is auto so the thermal cutter fires after the last line
   (function() {
     var style = document.createElement('style');
     style.id = 'page-style';
-    // 101.6mm = 4 inches (matches your driver)
-    // 'auto' height should work with Type: Continue
-    style.textContent = '@page { size: 101.6mm auto; margin: 0; }';
+    // 80mm = XPrinter paper width; 'auto' height lets content determine length
+    style.textContent = '@page { size: 80mm auto; margin: 0; }';
     document.head.appendChild(style);
   })();
 
