@@ -9,13 +9,15 @@ import {
   X,
   DollarSign,
   User,
+  UserCheck,
   Tag,
   ShoppingCart,
+  Star,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType } from '../hooks/useProducts';
-import { ProductWithBatches, Customer, ReferralAgent, VariantWithStock, ProductVariant, ProductBatch } from '../types';
+import { ProductWithBatches, Customer, ReferralAgent, UserProfile, VariantWithStock, ProductVariant, ProductBatch } from '../types';
 import { Invoice } from './Invoice';
 import { ProductGrid } from './pos/ProductGrid';
 import { CartItemsList } from './pos/CartItemsList';
@@ -92,8 +94,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   const [issuingVoucher, setIssuingVoucher] = useState(false);
   const [processing, setProcessing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const cartScrollRef = useRef<HTMLDivElement>(null);
-  const [cartHasMore, setCartHasMore] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
@@ -111,6 +111,16 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     address: '',
     commission_rate: 0,
   });
+  const [phoneInput, setPhoneInput] = useState('');
+  const [showCustSuggestions, setShowCustSuggestions] = useState(false);
+  const [staffMembers, setStaffMembers] = useState<UserProfile[]>([]);
+  const [selectedStaffMember, setSelectedStaffMember] = useState<UserProfile | null>(null);
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [staffSearch, setStaffSearch] = useState('');
+  const [loyaltyRedeeming, setLoyaltyRedeeming] = useState(false);
+  const [showVoucherInput, setShowVoucherInput] = useState(false);
+  const [cashAmount, setCashAmount] = useState(0);
+  const [cardAmount, setCardAmount] = useState(0);
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [barcodeBuffer, setBarcodeBuffer] = useState('');
@@ -121,12 +131,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // Manual Item Modal State
   const [showManualItemModal, setShowManualItemModal] = useState(false);
   const [manualItemForm, setManualItemForm] = useState({ description: '', price: 0, quantity: 1 });
-
-  function handleCartScroll() {
-    const el = cartScrollRef.current;
-    if (!el) return;
-    setCartHasMore(el.scrollHeight - el.scrollTop > el.clientHeight + 8);
-  }
 
   // Variant picker state
   const [variantPickerProduct, setVariantPickerProduct] = useState<ProductWithBatches | null>(null);
@@ -150,18 +154,6 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
-
-  // Scroll cart to bottom when a new item is added; recalc overflow indicator on any cart change
-  useEffect(() => {
-    const el = cartScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    setCartHasMore(false); // just scrolled to bottom
-  }, [cart.length]);
-
-  useEffect(() => {
-    handleCartScroll();
-  }, [cart]);
 
   // Background sync for offline sales
   useEffect(() => {
@@ -286,6 +278,17 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     } catch (error) {
       console.error('Error loading data:', error);
     }
+
+    // Load staff members from user_profiles
+    try {
+      const { data: staffData } = await (supabase
+        .from('user_profiles')
+        .select('id, full_name, email, role, active, daily_target, created_at, updated_at')
+        .in('role', ['cashier', 'staff', 'admin'])
+        .eq('active', true)
+        .order('full_name') as any);
+      setStaffMembers(staffData || []);
+    } catch { /* non-critical */ }
 
     // Load voucher rules
     try {
@@ -668,7 +671,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       // Use SalesService to create the sale
       const sale = await salesService.createSale({
         customer_id: selectedCustomer?.id || null,
-        cashier_id: profile?.id || '',
+        cashier_id: selectedStaffMember?.id || profile?.id || '',
         referral_agent_id: selectedReferralAgent?.id || null,
         items: cart.map((item) => ({
           product_id: item.isManual ? undefined : item.product.id,
@@ -687,6 +690,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         tax_amount: taxAmount,
         total_amount: total,
         paid_amount: paidAmount,
+        cash_amount: paymentMethod === 'mixed' ? cashAmount : null,
+        card_amount: paymentMethod === 'mixed' ? cardAmount : null,
         referral_commission_rate: selectedReferralAgent?.commission_rate,
         service_charge: serviceCharge,
         loyalty_points_redeemed: loyaltyPointsToRedeem || undefined,
@@ -731,6 +736,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
       setShowInvoice(true);
       clearCart();
+      setSelectedStaffMember(null);
+      setCashAmount(0);
+      setCardAmount(0);
       setLoyaltyPointsToRedeem(0);
       setLoyaltyDiscount(0);
       loadData();
@@ -950,10 +958,10 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         </section>
 
         {/* ── Cart panel (desktop) ── */}
-        <aside className="hidden lg:flex lg:flex-col" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--line)', overflow: 'hidden' }}>
+        <aside className="hidden lg:flex lg:flex-col" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--line)', overflowY: 'auto' }}>
 
           {/* Cart header */}
-          <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div className="pos-cart-header" style={{ borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' }}>Current Sale</h3>
@@ -980,191 +988,403 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             </div>
           </div>
 
-          {/* Customer */}
-          <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--line-2)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                background: selectedCustomer ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
-                color: selectedCustomer ? 'var(--accent-ink)' : 'var(--muted)',
-                display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 600,
-              }}>
-                {selectedCustomer
-                  ? selectedCustomer.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')
-                  : <User size={16} />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>Customer</div>
-                <select
-                  value={selectedCustomer?.id || ''}
-                  onChange={(e) => {
-                    const c = customers.find((c) => c.id === e.target.value);
-                    setSelectedCustomer(c || null);
-                    setLoyaltyPointsToRedeem(0);
-                    setLoyaltyDiscount(0);
-                  }}
-                  style={{ width: '100%', appearance: 'none', border: 0, background: 'transparent', color: 'var(--ink)', fontSize: 13, fontWeight: 500, padding: '2px 0', outline: 'none', cursor: 'default', marginTop: 1 }}
-                >
-                  <option value="">Walk-in Customer</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <button onClick={() => setShowCustomerModal(true)} className="btn btn-sm btn-ghost" style={{ color: 'var(--muted)', padding: 0, width: 30, height: 30, justifyContent: 'center' }}>
-                <Plus size={14} />
-              </button>
-            </div>
-          </div>
+          {/* Customer + Sales Staff — combined row */}
+          <div className="pos-cart-section" style={{ borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', gap: 10 }}>
 
-          {/* Referral agent */}
-          <div style={{ padding: '8px 18px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>Sales Staff</span>
-            <select
-              value={selectedReferralAgent?.id || ''}
-              onChange={(e) => { const a = referralAgents.find((a) => a.id === e.target.value); setSelectedReferralAgent(a || null); }}
-              style={{ flex: 1, appearance: 'none', border: 0, background: 'transparent', color: 'var(--ink-2)', fontSize: 12, outline: 'none', cursor: 'default', minWidth: 0 }}
-            >
-              <option value="">None</option>
-              {referralAgents.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.commission_rate}%)</option>)}
-            </select>
-            <button onClick={() => setShowAgentModal(true)} className="btn btn-sm btn-ghost" style={{ color: 'var(--muted)', padding: 0, width: 24, height: 24, justifyContent: 'center' }}>
-              <Plus size={12} />
-            </button>
-          </div>
-
-          {/* Loyalty panel */}
-          {selectedCustomer && (
-            <div style={{ borderBottom: '1px solid var(--line-2)', flexShrink: 0 }}>
-              <LoyaltyPanel
-                customer={selectedCustomer}
-                totalAmount={effectiveSubtotal}
-                earnRate={earnRate}
-                onRedeemChange={(pts, disc) => { setLoyaltyPointsToRedeem(pts); setLoyaltyDiscount(disc); }}
-              />
-            </div>
-          )}
-
-          {/* Cart lines */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <div
-              ref={cartScrollRef}
-              onScroll={handleCartScroll}
-              style={{ position: 'absolute', inset: 0, overflowY: 'auto' }}
-              className="custom-scrollbar"
-            >
-              {cart.length === 0 ? (
-                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', padding: '40px 18px', textAlign: 'center' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(20,22,26,0.04)', display: 'grid', placeItems: 'center' }}>
-                    <ShoppingCart size={20} strokeWidth={1.4} />
+            {/* ── Customer: phone search ── */}
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              {selectedCustomer ? (
+                /* Selected state */
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                    background: 'var(--accent-soft)', color: 'var(--accent-ink)',
+                    display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700,
+                  }}>
+                    {selectedCustomer.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
                   </div>
-                  <div style={{ fontSize: 13 }}>Cart is empty</div>
-                  <div style={{ fontSize: 11, color: 'var(--faint)' }}>Scan or click products to add</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>Customer</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {selectedCustomer.name}
+                    </div>
+                    {selectedCustomer.phone && (
+                      <div style={{ fontSize: 10.5, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>
+                        {selectedCustomer.phone}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setSelectedCustomer(null); setPhoneInput(''); setLoyaltyPointsToRedeem(0); setLoyaltyDiscount(0); }}
+                    title="Remove customer"
+                    style={{ color: 'var(--muted)', background: 'transparent', border: 0, padding: 0, width: 22, height: 22, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 4, lineHeight: 0 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+                  >
+                    <X size={12} />
+                  </button>
+                  <button
+                    onClick={() => setShowCustomerModal(true)}
+                    title="Add new customer"
+                    style={{ color: 'var(--muted)', background: 'transparent', border: 0, padding: 0, width: 22, height: 22, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 4, lineHeight: 0 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+                  >
+                    <Plus size={12} />
+                  </button>
                 </div>
               ) : (
-                <CartItemsList
-                  items={cart}
-                  onUpdateQuantity={updateCartItemQuantity}
-                  onSetQuantity={setCartItemQuantity}
-                  onUpdatePrice={updateCartItemPrice}
-                  onRemoveItem={removeFromCart}
-                />
+                /* Search state */
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                    background: 'rgba(20,22,26,0.06)', color: 'var(--muted)',
+                    display: 'grid', placeItems: 'center',
+                  }}>
+                    <User size={13} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>Customer</div>
+                    <input
+                      type="tel"
+                      placeholder="Phone number…"
+                      value={phoneInput}
+                      onChange={(e) => { setPhoneInput(e.target.value); setShowCustSuggestions(true); }}
+                      onFocus={() => setShowCustSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowCustSuggestions(false), 150)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return;
+                        const digits = phoneInput.replace(/\D/g, '');
+                        const matches = customers.filter(c => c.phone?.replace(/\D/g, '').includes(digits));
+                        if (matches.length === 1) {
+                          setSelectedCustomer(matches[0]); setPhoneInput(''); setShowCustSuggestions(false);
+                          setLoyaltyPointsToRedeem(0); setLoyaltyDiscount(0);
+                        } else if (!matches.length && phoneInput.trim()) {
+                          setCustomerFormData({ name: '', phone: phoneInput, email: '', address: '', credit_limit: 0, notes: '' });
+                          setShowCustSuggestions(false); setShowCustomerModal(true);
+                        }
+                      }}
+                      style={{ width: '100%', border: 0, background: 'transparent', fontSize: 12, fontWeight: 500, color: 'var(--ink)', outline: 'none', padding: 0, fontFamily: "'JetBrains Mono',monospace" }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      setCustomerFormData({ name: '', phone: phoneInput, email: '', address: '', credit_limit: 0, notes: '' });
+                      setShowCustSuggestions(false);
+                      setShowCustomerModal(true);
+                    }}
+                    title="Add new customer"
+                    style={{ color: 'var(--muted)', background: 'transparent', border: 0, padding: 0, width: 22, height: 22, display: 'grid', placeItems: 'center', flexShrink: 0, borderRadius: 4, lineHeight: 0 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+              )}
+
+              {/* Phone suggestions dropdown */}
+              {showCustSuggestions && phoneInput.length > 1 && (() => {
+                const digits = phoneInput.replace(/\D/g, '');
+                const matches = customers.filter(c => c.phone?.replace(/\D/g, '').includes(digits));
+                if (!matches.length) return (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 6px 20px rgba(20,22,26,0.1)', padding: '6px' }}>
+                    <button
+                      onMouseDown={() => {
+                        setCustomerFormData({ name: '', phone: phoneInput, email: '', address: '', credit_limit: 0, notes: '' });
+                        setShowCustSuggestions(false); setShowCustomerModal(true);
+                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'default' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(20,22,26,0.06)', color: 'var(--muted)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                        <Plus size={12} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink)' }}>New customer</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>{phoneInput}</div>
+                      </div>
+                    </button>
+                  </div>
+                );
+                return (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 6px 20px rgba(20,22,26,0.1)', overflow: 'hidden' }}>
+                    {matches.slice(0, 5).map((c) => (
+                      <button
+                        key={c.id}
+                        onMouseDown={() => { setSelectedCustomer(c); setPhoneInput(''); setShowCustSuggestions(false); setLoyaltyPointsToRedeem(0); setLoyaltyDiscount(0); }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 0, background: 'transparent', textAlign: 'left', cursor: 'default' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--panel-2)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent-ink)', display: 'grid', placeItems: 'center', fontSize: 9.5, fontWeight: 700, flexShrink: 0 }}>
+                          {c.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace" }}>{c.phone}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 32, background: 'var(--line)', flexShrink: 0 }} />
+
+            {/* ── Sales Staff: custom popover ── */}
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <button
+                onClick={() => { setStaffOpen((o) => !o); setStaffSearch(''); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 0, padding: 0, textAlign: 'left', cursor: 'default' }}
+              >
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                  background: selectedStaffMember ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+                  color: selectedStaffMember ? 'var(--accent-ink)' : 'var(--muted)',
+                  display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700,
+                }}>
+                  {selectedStaffMember
+                    ? selectedStaffMember.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')
+                    : <UserCheck size={13} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>Staff</div>
+                  <div style={{ fontSize: 12, fontWeight: selectedStaffMember ? 600 : 400, color: selectedStaffMember ? 'var(--ink)' : 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {selectedStaffMember?.full_name ?? '— none —'}
+                  </div>
+                </div>
+              </button>
+
+              {staffOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => { setStaffOpen(false); setStaffSearch(''); }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, minWidth: 210, zIndex: 50, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 8px 24px rgba(20,22,26,0.12)', overflow: 'hidden' }}>
+
+                    {/* Search input */}
+                    <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--line-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 28, padding: '0 8px', borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--line)' }}>
+                        <Search size={12} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="Search staff…"
+                          value={staffSearch}
+                          onChange={(e) => setStaffSearch(e.target.value)}
+                          style={{ flex: 1, border: 0, background: 'transparent', fontSize: 12, color: 'var(--ink)', outline: 'none', padding: 0 }}
+                        />
+                        {staffSearch && (
+                          <button onClick={() => setStaffSearch('')} style={{ border: 0, background: 'transparent', color: 'var(--muted)', padding: 0, lineHeight: 0, cursor: 'pointer' }}>
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Staff list */}
+                    <div style={{ maxHeight: 220, overflowY: 'auto' }} className="custom-scrollbar">
+                      {(() => {
+                        const q = staffSearch.trim().toLowerCase();
+                        const filtered = q ? staffMembers.filter(s => s.full_name.toLowerCase().includes(q)) : staffMembers;
+                        if (q && !filtered.length) return (
+                          <div style={{ padding: '14px', textAlign: 'center', fontSize: 12, color: 'var(--muted)' }}>No staff found</div>
+                        );
+                        return (
+                          <>
+                            {!q && (
+                              <button
+                                onClick={() => { setSelectedStaffMember(null); setStaffOpen(false); setStaffSearch(''); }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 0, background: !selectedStaffMember ? 'var(--accent-soft)' : 'transparent', textAlign: 'left', cursor: 'default' }}
+                                onMouseEnter={(e) => { if (selectedStaffMember) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                                onMouseLeave={(e) => { if (selectedStaffMember) e.currentTarget.style.background = 'transparent'; }}
+                              >
+                                <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, color: 'var(--muted)', display: 'grid', placeItems: 'center' }}>
+                                  <UserCheck size={13} />
+                                </div>
+                                <div style={{ flex: 1, fontSize: 12.5, color: !selectedStaffMember ? 'var(--accent-ink)' : 'var(--ink-2)', fontWeight: !selectedStaffMember ? 600 : 400 }}>— none —</div>
+                                {!selectedStaffMember && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
+                              </button>
+                            )}
+                            {filtered.map((s) => {
+                              const isSelected = selectedStaffMember?.id === s.id;
+                              return (
+                                <button
+                                  key={s.id}
+                                  onClick={() => { setSelectedStaffMember(s); setStaffOpen(false); setStaffSearch(''); }}
+                                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', border: 0, background: isSelected ? 'var(--accent-soft)' : 'transparent', textAlign: 'left', cursor: 'default' }}
+                                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--panel-2)'; }}
+                                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                                >
+                                  <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, background: isSelected ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)', color: isSelected ? 'var(--accent-ink)' : 'var(--muted)', display: 'grid', placeItems: 'center', fontSize: 9.5, fontWeight: 700 }}>
+                                    {s.full_name.split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 12.5, fontWeight: isSelected ? 600 : 400, color: isSelected ? 'var(--accent-ink)' : 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.full_name}</div>
+                                    <div style={{ fontSize: 10.5, color: 'var(--muted)', textTransform: 'capitalize' }}>{s.role}</div>
+                                  </div>
+                                  {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />}
+                                </button>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
-            {/* Scroll fade — indicates more items below */}
-            {cartHasMore && (
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: 48,
-                background: 'linear-gradient(to bottom, transparent, var(--panel))',
-                pointerEvents: 'none',
-              }} />
+
+          </div>
+
+          {/* Cart lines */}
+          <div>
+            {cart.length === 0 ? (
+              <div style={{ padding: '32px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--muted)', textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(20,22,26,0.04)', display: 'grid', placeItems: 'center' }}>
+                  <ShoppingCart size={20} strokeWidth={1.4} />
+                </div>
+                <div style={{ fontSize: 13 }}>Cart is empty</div>
+                <div style={{ fontSize: 11, color: 'var(--faint)' }}>Scan or click products to add</div>
+              </div>
+            ) : (
+              <CartItemsList
+                items={cart}
+                onUpdateQuantity={updateCartItemQuantity}
+                onSetQuantity={setCartItemQuantity}
+                onUpdatePrice={updateCartItemPrice}
+                onRemoveItem={removeFromCart}
+              />
             )}
           </div>
 
-          {/* Sale summary */}
-          <div style={{ padding: '12px 18px', borderTop: '1px solid var(--line)', background: 'var(--panel-2)', flexShrink: 0 }}>
-            {[
-              { label: 'Subtotal', value: `LKR ${grossSubtotal.toFixed(2)}`, color: 'var(--ink-2)' },
-              ...(itemLevelDiscount > 0 ? [{ label: 'Discount', value: `−LKR ${itemLevelDiscount.toFixed(2)}`, color: 'var(--danger)' }] : []),
-              ...(loyaltyDiscount > 0 ? [{ label: 'Loyalty', value: `−LKR ${loyaltyDiscount.toFixed(2)}`, color: 'var(--warn)' }] : []),
-              ...(voucherDiscount > 0 ? [{ label: `Voucher (${appliedVoucher?.code})`, value: `−LKR ${voucherDiscount.toFixed(2)}`, color: '#C9A84C' }] : []),
-              ...(taxRate > 0 ? [{ label: `Tax (${taxRate}%)`, value: `LKR ${taxAmount.toFixed(2)}`, color: 'var(--muted)' }] : []),
-              ...(serviceCharge > 0 ? [{ label: 'Service', value: `LKR ${serviceCharge.toFixed(2)}`, color: 'var(--muted)' }] : []),
-            ].map(({ label, value, color }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', gap: 10 }}>
-                <span style={{ fontSize: 12.5, color: 'var(--ink-2)' }}>{label}</span>
-                <span className="num" style={{ fontSize: 12.5, fontWeight: 500, color, whiteSpace: 'nowrap' }}>{value}</span>
-              </div>
-            ))}
-          </div>
+          {/* Sticky payment footer */}
+          <div style={{ position: 'sticky', bottom: 0, zIndex: 10 }}>
 
-          {/* Payment block */}
-          <div style={{ padding: '14px 18px', borderTop: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase' }}>Payment</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 10.5, color: 'var(--muted)' }}>Tax</span>
-                <input type="number" step="0.01" min="0" max="100"
-                  value={taxRate === 0 ? '' : taxRate}
-                  onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  style={{ width: 34, height: 20, borderRadius: 5, border: '1px solid var(--line)', padding: '0 4px', fontSize: 11, textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: 'var(--ink-2)', outline: 'none', background: 'var(--panel)' }}
-                />
-                <span style={{ fontSize: 10.5, color: 'var(--faint)' }}>%</span>
-                <span style={{ fontSize: 10.5, color: 'var(--muted)', marginLeft: 6 }}>Svc</span>
-                <input type="number" step="0.01" min="0"
-                  value={serviceCharge === 0 ? '' : serviceCharge}
-                  onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
-                  placeholder="0"
-                  style={{ width: 46, height: 20, borderRadius: 5, border: '1px solid var(--line)', padding: '0 4px', fontSize: 11, textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: 'var(--ink-2)', outline: 'none', background: 'var(--panel)' }}
-                />
+          {/* Summary — only shows lines with non-zero values */}
+          {(grossSubtotal > 0 || itemLevelDiscount > 0 || loyaltyDiscount > 0 || voucherDiscount > 0) && (
+            <div className="pos-cart-summary" style={{ borderTop: '1px solid var(--line)', background: 'var(--panel-2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Subtotal</span>
+                <span className="num" style={{ fontSize: 12, color: 'var(--ink-2)', fontWeight: 500 }}>LKR {grossSubtotal.toFixed(2)}</span>
               </div>
-            </div>
-            {/* Gift Voucher */}
-            <div style={{ marginBottom: 10 }}>
-              {appliedVoucher ? (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 10px', borderRadius: 7,
-                  background: 'color-mix(in oklab, #C9A84C 10%, var(--panel-2))',
-                  border: '1px solid rgba(201,168,76,0.35)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ fontSize: 14 }}>🎁</span>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</div>
-                      <div style={{ fontSize: 11, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setAppliedVoucher(null)} style={{ border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 2, lineHeight: 0, borderRadius: 4 }}>
-                    <X size={14} />
-                  </button>
+              {itemLevelDiscount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Discount</span>
+                  <span className="num" style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 500 }}>−LKR {itemLevelDiscount.toFixed(2)}</span>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', height: 34, borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', overflow: 'hidden' }}>
-                    <span style={{ padding: '0 8px', fontSize: 13 }}>🎁</span>
-                    <input
-                      value={voucherInput}
-                      onChange={e => setVoucherInput(e.target.value.toUpperCase())}
-                      onKeyDown={e => e.key === 'Enter' && applyVoucher()}
-                      placeholder="Gift voucher code…"
-                      style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 12.5, color: 'var(--ink)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.05em' }}
-                    />
-                  </div>
-                  <button onClick={applyVoucher} disabled={!voucherInput.trim() || voucherLoading} className="btn" style={{ height: 34, fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {voucherLoading ? '…' : 'Apply'}
-                  </button>
+              )}
+              {loyaltyDiscount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Loyalty</span>
+                  <span className="num" style={{ fontSize: 12, color: '#D97706', fontWeight: 500 }}>−LKR {loyaltyDiscount.toFixed(2)}</span>
+                </div>
+              )}
+              {voucherDiscount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Voucher · <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{appliedVoucher?.code}</span></span>
+                  <span className="num" style={{ fontSize: 12, color: '#C9A84C', fontWeight: 500 }}>−LKR {voucherDiscount.toFixed(2)}</span>
                 </div>
               )}
             </div>
+          )}
 
-            {/* Payment method pills */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
+          {/* Loyalty redemption — only when customer has points */}
+          {selectedCustomer && selectedCustomer.loyalty_points > 0 && (
+            <div style={{ borderTop: '1px solid var(--line-2)', background: '#FFFBEB', padding: '7px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Star size={12} strokeWidth={2} style={{ color: '#F59E0B', flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: '#92400E', fontWeight: 500 }}>{selectedCustomer.loyalty_points.toLocaleString()} pts</span>
+              {!loyaltyRedeeming ? (
+                <button
+                  onClick={() => setLoyaltyRedeeming(true)}
+                  style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--accent)', fontWeight: 600, background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+                >
+                  Redeem
+                </button>
+              ) : (
+                <>
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      autoFocus
+                      type="number" min={0} max={selectedCustomer.loyalty_points} step={1}
+                      value={loyaltyPointsToRedeem || ''}
+                      placeholder="0"
+                      onChange={(e) => {
+                        const pts = Math.min(Number(e.target.value) || 0, selectedCustomer.loyalty_points);
+                        setLoyaltyPointsToRedeem(pts);
+                        setLoyaltyDiscount(pts);
+                      }}
+                      style={{ width: 60, height: 24, borderRadius: 5, border: '1px solid #FCD34D', padding: '0 6px', fontSize: 12, textAlign: 'right', fontFamily: "'JetBrains Mono',monospace", color: '#92400E', outline: 'none', background: '#FEF3C7' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#92400E', whiteSpace: 'nowrap' }}>= LKR {loyaltyPointsToRedeem}</span>
+                  </div>
+                  <button
+                    onClick={() => { setLoyaltyRedeeming(false); setLoyaltyPointsToRedeem(0); setLoyaltyDiscount(0); }}
+                    style={{ color: 'var(--muted)', background: 'transparent', border: 0, padding: 0, lineHeight: 0, cursor: 'pointer' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Gift voucher — collapsed by default */}
+          <div style={{ borderTop: '1px solid var(--line-2)', background: 'var(--panel)' }}>
+            {appliedVoucher ? (
+              <div style={{ padding: '7px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13 }}>🎁</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</span>
+                <span style={{ fontSize: 11.5, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</span>
+                <button onClick={() => setAppliedVoucher(null)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
+                  <X size={13} />
+                </button>
+              </div>
+            ) : showVoucherInput ? (
+              <div style={{ padding: '7px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  autoFocus
+                  value={voucherInput}
+                  onChange={e => setVoucherInput(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === 'Enter' && applyVoucher()}
+                  placeholder="Voucher code…"
+                  style={{ flex: 1, height: 28, border: '1px solid var(--line)', borderRadius: 6, padding: '0 8px', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", outline: 'none', background: 'var(--panel-2)', letterSpacing: '0.04em', minWidth: 0 }}
+                />
+                <button onClick={applyVoucher} disabled={!voucherInput.trim() || voucherLoading} className="btn btn-sm" style={{ height: 28, fontSize: 11.5, flexShrink: 0 }}>
+                  {voucherLoading ? '…' : 'Apply'}
+                </button>
+                <button onClick={() => { setShowVoucherInput(false); setVoucherInput(''); }} style={{ border: 0, background: 'transparent', color: 'var(--muted)', padding: 0, lineHeight: 0, flexShrink: 0 }}>
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowVoucherInput(true)}
+                style={{ width: '100%', padding: '6px 16px', border: 0, background: 'transparent', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', cursor: 'pointer', textAlign: 'left' }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--ink-2)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+              >
+                <span style={{ fontSize: 13 }}>🎁</span>
+                <span>Apply gift voucher</span>
+              </button>
+            )}
+          </div>
+
+          {/* Payment method + paid amount + change */}
+          <div className="pos-cart-payment" style={{ borderTop: '1px solid var(--line)', background: 'var(--panel)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 5, marginBottom: 8 }}>
               {(['cash', 'card', 'credit', 'mixed'] as const).map((m) => {
                 const labels = { cash: 'Cash', card: 'Card', credit: 'Credit', mixed: 'Mixed' };
                 const isA = paymentMethod === m;
                 return (
-                  <button key={m} onClick={() => setPaymentMethod(m)} style={{
-                    padding: '8px 0', borderRadius: 7,
+                  <button key={m} onClick={() => {
+                    setPaymentMethod(m);
+                    if (m !== 'mixed') { setCashAmount(0); setCardAmount(0); }
+                  }} style={{
+                    padding: '7px 0', borderRadius: 7,
                     border: isA ? '1px solid var(--accent)' : '1px solid var(--line)',
                     background: isA ? 'var(--accent-soft)' : 'var(--panel)',
                     color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
@@ -1173,58 +1393,66 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 );
               })}
             </div>
-            {/* Paid amount */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line)', borderRadius: 8, padding: '0 12px', height: 38, background: 'var(--panel-2)' }}>
-              <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
-                {paymentMethod === 'credit' ? 'Down Pay' : 'Paid'} · LKR
-              </span>
-              <input
-                type="number" step="0.01" min="0"
-                value={paidAmount === 0 ? '' : paidAmount}
-                onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                className="num"
-                style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 14, fontWeight: 600, color: 'var(--ink)', textAlign: 'right' }}
-              />
-            </div>
-            {/* Quick amounts */}
-            {total > 0 && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                {[...new Set([Math.round(total), Math.ceil(total / 500) * 500, Math.ceil(total / 1000) * 1000])]
-                  .slice(0, 3)
-                  .map((v, i) => (
-                    <button key={i} onClick={() => setPaidAmount(v)} className="btn btn-sm"
-                      style={{ flex: 1, fontFamily: "'JetBrains Mono',monospace", padding: 0, height: 26, fontSize: 11 }}>
-                      {v.toLocaleString()}
-                    </button>
-                  ))}
+
+            {paymentMethod === 'mixed' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {([
+                  { label: 'Cash', value: cashAmount, setter: (v: number) => { setCashAmount(v); setPaidAmount(v + cardAmount); } },
+                  { label: 'Card', value: cardAmount, setter: (v: number) => { setCardAmount(v); setPaidAmount(cashAmount + v); } },
+                ] as const).map(({ label, value, setter }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line)', borderRadius: 8, padding: '0 12px', height: 34, background: 'var(--panel-2)' }}>
+                    <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0, minWidth: 30 }}>{label} · LKR</span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={value === 0 ? '' : value}
+                      onChange={(e) => setter(parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      className="num"
+                      style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--ink)', textAlign: 'right' }}
+                    />
+                  </div>
+                ))}
+                {(cashAmount > 0 || cardAmount > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 2px' }}>
+                    <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Total entered</span>
+                    <span className="num" style={{ fontSize: 12, fontWeight: 600, color: paidAmount >= total ? 'var(--accent)' : 'var(--warn)' }}>
+                      LKR {paidAmount.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--line)', borderRadius: 8, padding: '0 12px', height: 38, background: 'var(--panel-2)' }}>
+                <span style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>
+                  {paymentMethod === 'credit' ? 'Down Pay' : 'Paid'} · LKR
+                </span>
+                <input
+                  type="number" step="0.01" min="0"
+                  value={paidAmount === 0 ? '' : paidAmount}
+                  onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                  className="num"
+                  style={{ flex: 1, border: 0, outline: 'none', background: 'transparent', fontSize: 14, fontWeight: 600, color: 'var(--ink)', textAlign: 'right' }}
+                />
               </div>
             )}
-            {/* Change / balance */}
+
             {paidAmount > 0 && (changeAmount > 0 || paidAmount < total) && (
               <div style={{
-                marginTop: 10, padding: '8px 10px', borderRadius: 7,
+                marginTop: 8, padding: '7px 10px', borderRadius: 7,
                 background: changeAmount > 0 ? 'var(--accent-soft)' : 'var(--warn-soft)',
                 color: changeAmount > 0 ? 'var(--accent-ink)' : 'var(--warn)',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 fontSize: 12, fontWeight: 500, gap: 10,
               }}>
-                <span style={{ whiteSpace: 'nowrap' }}>{changeAmount > 0 ? 'Change due' : 'Balance due'}</span>
-                <span className="num" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                  LKR {(changeAmount > 0 ? changeAmount : total - paidAmount).toFixed(2)}
-                </span>
+                <span>{changeAmount > 0 ? 'Change due' : 'Balance due'}</span>
+                <span className="num" style={{ fontWeight: 700 }}>LKR {(changeAmount > 0 ? changeAmount : total - paidAmount).toFixed(2)}</span>
               </div>
             )}
           </div>
 
           {/* Charge button */}
-          <div style={{ padding: '14px 18px', borderTop: '1px solid var(--line)', background: 'var(--panel)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, gap: 10 }}>
-              <span style={{ fontSize: 13, color: 'var(--ink-2)', fontWeight: 500 }}>Total</span>
-              <span className="num" style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--ink)', whiteSpace: 'nowrap' }}>
-                LKR {total.toFixed(2)}
-              </span>
-            </div>
+          <div className="pos-cart-charge" style={{ borderTop: '1px solid var(--line)', background: 'var(--panel)' }}>
             <button
               onClick={handleCompleteSale}
               disabled={cart.length === 0 || processing}
@@ -1265,6 +1493,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
               🎁 Issue Voucher
             </button>
           </div>
+          </div>{/* end sticky payment footer */}
         </aside>
       </div>
 

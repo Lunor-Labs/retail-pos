@@ -111,19 +111,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase.auth.signUp({ email, password });
 
       if (error) throw error;
+      if (!data.user) throw new Error('User creation failed');
 
-      if (data.user) {
-        const { error: profileError } = await (supabase.from('user_profiles') as any)
-          .insert({
-            id: data.user.id,
-            email,
-            full_name: fullName,
-            role,
-            active: true,
-          });
+      // Restore admin session immediately so the profile INSERT runs with
+      // admin privileges — signUp() switches the client to the new user's
+      // session, which has no profile yet and fails the RLS policy.
+      await supabase.auth.setSession({
+        access_token: savedAccessToken,
+        refresh_token: savedRefreshToken,
+      });
 
-        if (profileError) throw profileError;
-      }
+      const { error: profileError } = await (supabase.from('user_profiles') as any)
+        .insert({
+          id: data.user.id,
+          email,
+          full_name: fullName,
+          role,
+          active: true,
+        });
+
+      if (profileError) throw profileError;
     } finally {
       suppressAuthChange.current = false;
       await supabase.auth.setSession({

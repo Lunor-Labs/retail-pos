@@ -202,7 +202,10 @@ html, body {
   .grid-kpi { grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
 }
 @media (min-width: 1024px) {
-  .grid-kpi { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--gap); }
+  .grid-kpi { grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
+}
+@media (min-width: 1600px) {
+  .grid-kpi { grid-template-columns: repeat(6, 1fr); gap: var(--gap); }
 }
 
 @media (max-width: 639px) {
@@ -360,10 +363,30 @@ html, body {
 /* Desktop table — hidden on mobile */
 .gift-table-header,
 .gift-row-desktop { display: none; }
+.gift-row-mobile  { display: flex; }
 @media (min-width: 768px) {
   .gift-table-header,
   .gift-row-desktop  { display: grid; }
   .gift-row-mobile   { display: none; }
+}
+
+/* ── POS cart sections – padding managed here for height-responsive compact mode ── */
+.pos-cart-header  { padding: 16px 18px; }
+.pos-cart-section { padding: 12px 18px; }
+.pos-cart-agent   { padding: 8px 18px; }
+.pos-loyalty-wrap { padding: 8px 18px; }
+.pos-cart-summary { padding: 12px 18px; }
+.pos-cart-payment { padding: 14px 18px; }
+.pos-cart-charge  { padding: 14px 18px; }
+
+@media (max-height: 800px) {
+  .pos-cart-header  { padding: 10px 16px; }
+  .pos-cart-section { padding: 8px 16px; }
+  .pos-cart-agent   { padding: 5px 16px; }
+  .pos-loyalty-wrap { padding: 5px 16px; }
+  .pos-cart-summary { padding: 8px 16px; }
+  .pos-cart-payment { padding: 10px 16px; }
+  .pos-cart-charge  { padding: 10px 16px; }
 }
 
 /* ── Commission report print styles ─────────────────────────── */
