@@ -26,6 +26,8 @@ export interface CreateSaleInput {
     tax_amount: number;
     total_amount: number;
     paid_amount: number;
+    cash_amount?: number | null;
+    card_amount?: number | null;
     notes?: string;
     referral_commission_rate?: number;
     service_charge?: number;
@@ -87,6 +89,8 @@ export class SalesService {
                 tax_amount: input.tax_amount,
                 total_amount: input.total_amount,
                 paid_amount: input.paid_amount,
+                cash_amount: input.cash_amount ?? null,
+                card_amount: input.card_amount ?? null,
                 status,
                 notes: input.notes || null,
                 service_charge: input.service_charge || 0,

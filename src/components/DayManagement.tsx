@@ -3,7 +3,7 @@ import { X, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
 
-interface PaymentSummary { count: number; total: number }
+interface PaymentSummary { count: number; total: number; cashPortion?: number; cardPortion?: number }
 interface DaySummary {
   cash: PaymentSummary;
   card: PaymentSummary;
@@ -33,7 +33,7 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
         (supabase.from('app_settings') as any)
           .select('value').eq('key', settingKey).maybeSingle(),
         (supabase.from('sales') as any)
-          .select('payment_method, total_amount, paid_amount')
+          .select('payment_method, total_amount, paid_amount, cash_amount, card_amount')
           .gte('sale_date', `${today}T00:00:00`)
           .lt('sale_date', new Date(new Date(today).getTime() + 86400000).toISOString().split('T')[0] + 'T00:00:00')
           .neq('status', 'refunded'),
@@ -62,6 +62,14 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
           }
           s.total.count++;
           s.total.total += amt;
+
+          // For mixed payments, track cash/card portions for display
+          if (m === 'mixed') {
+            const cash = row.cash_amount != null ? Number(row.cash_amount) : 0;
+            const card = row.card_amount != null ? Number(row.card_amount) : 0;
+            s.mixed.cashPortion = (s.mixed.cashPortion ?? 0) + cash;
+            s.mixed.cardPortion = (s.mixed.cardPortion ?? 0) + card;
+          }
         }
         setSummary(s);
       }
@@ -94,7 +102,10 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
 
   const fmtLKR = (n: number) => `LKR ${Math.round(n).toLocaleString()}`;
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const expectedCash = (openingBalance ?? 0) + (summary?.cash.total ?? 0);
+
+  const mixedCash = summary?.mixed.cashPortion ?? 0;
+  const mixedCard = summary?.mixed.cardPortion ?? 0;
+  const totalCashInDrawer = (summary?.cash.total ?? 0) + mixedCash;
 
   const METHODS: { key: keyof Omit<DaySummary, 'total'>; label: string; color: string; bg: string }[] = [
     { key: 'cash',   label: 'Cash',   color: 'var(--accent-ink)', bg: 'var(--accent-soft)' },
@@ -169,11 +180,29 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 {METHODS.filter(m => (summary[m.key]?.count ?? 0) > 0).map(({ key, label, color, bg }) => {
                   const d = summary[key];
+                  const isMixed = key === 'mixed';
+                  const hasMixedBreakdown = isMixed && (mixedCash > 0 || mixedCard > 0);
                   return (
-                    <div key={key} style={{ display: 'flex', alignItems: 'center', padding: '11px 14px', borderBottom: '1px solid var(--line-2)' }}>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: bg, color, letterSpacing: '.04em', textTransform: 'uppercase', flexShrink: 0, minWidth: 54, textAlign: 'center' }}>{label}</span>
-                      <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)', marginLeft: 12 }}>{d.count} sale{d.count !== 1 ? 's' : ''}</span>
-                      <span className="num" style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{fmtLKR(d.total)}</span>
+                    <div key={key} style={{ borderBottom: '1px solid var(--line-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '11px 14px' }}>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: bg, color, letterSpacing: '.04em', textTransform: 'uppercase', flexShrink: 0, minWidth: 54, textAlign: 'center' }}>{label}</span>
+                        <span style={{ flex: 1, fontSize: 12, color: 'var(--muted)', marginLeft: 12 }}>{d.count} sale{d.count !== 1 ? 's' : ''}</span>
+                        <span className="num" style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>{fmtLKR(d.total)}</span>
+                      </div>
+                      {hasMixedBreakdown && (
+                        <div style={{ padding: '0 14px 10px 14px', display: 'flex', gap: 16, paddingLeft: 82 }}>
+                          {mixedCash > 0 && (
+                            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                              Cash <span className="num" style={{ color: 'var(--accent-ink)', fontWeight: 600 }}>{fmtLKR(mixedCash)}</span>
+                            </span>
+                          )}
+                          {mixedCard > 0 && (
+                            <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>
+                              Card <span className="num" style={{ color: '#1d4ed8', fontWeight: 600 }}>{fmtLKR(mixedCard)}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -189,12 +218,14 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Expected cash in drawer */}
-          {openingBalance !== null && (summary?.cash.total ?? 0) > 0 && (
+          {openingBalance !== null && totalCashInDrawer > 0 && (
             <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--accent-soft)', border: '1px solid color-mix(in oklab, var(--accent) 20%, transparent)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-ink)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Expected Cash in Drawer</div>
-              <div className="num" style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-ink)', letterSpacing: '-0.02em' }}>{fmtLKR(expectedCash)}</div>
+              <div className="num" style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-ink)', letterSpacing: '-0.02em' }}>{fmtLKR((openingBalance ?? 0) + totalCashInDrawer)}</div>
               <div style={{ fontSize: 12, color: 'var(--accent-ink)', opacity: 0.7, marginTop: 5 }}>
-                Opening {fmtLKR(openingBalance)} + Cash sales {fmtLKR(summary?.cash.total ?? 0)}
+                Opening {fmtLKR(openingBalance ?? 0)}
+                {(summary?.cash.total ?? 0) > 0 && ` + Cash ${fmtLKR(summary?.cash.total ?? 0)}`}
+                {mixedCash > 0 && ` + Mixed cash ${fmtLKR(mixedCash)}`}
               </div>
             </div>
           )}

@@ -690,6 +690,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         tax_amount: taxAmount,
         total_amount: total,
         paid_amount: paidAmount,
+        cash_amount: paymentMethod === 'mixed' ? cashAmount : null,
+        card_amount: paymentMethod === 'mixed' ? cardAmount : null,
         referral_commission_rate: selectedReferralAgent?.commission_rate,
         service_charge: serviceCharge,
         loyalty_points_redeemed: loyaltyPointsToRedeem || undefined,

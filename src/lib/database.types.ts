@@ -411,6 +411,8 @@ export interface Database {
           service_charge: number
           total_amount: number
           paid_amount: number
+          cash_amount: number | null
+          card_amount: number | null
           payment_method: 'cash' | 'card' | 'credit' | 'mixed' | null
           status: 'completed' | 'partial' | 'credit'
           notes: string | null
@@ -430,6 +432,8 @@ export interface Database {
           service_charge?: number
           total_amount: number
           paid_amount?: number
+          cash_amount?: number | null
+          card_amount?: number | null
           payment_method?: 'cash' | 'card' | 'credit' | 'mixed' | null
           status?: 'completed' | 'partial' | 'credit'
           notes?: string | null
@@ -449,6 +453,8 @@ export interface Database {
           service_charge?: number
           total_amount?: number
           paid_amount?: number
+          cash_amount?: number | null
+          card_amount?: number | null
           payment_method?: 'cash' | 'card' | 'credit' | 'mixed' | null
           status?: 'completed' | 'partial' | 'credit'
           notes?: string | null
