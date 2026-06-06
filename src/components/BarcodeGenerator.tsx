@@ -116,13 +116,35 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           </div>
 
           {tab === 'product' || !hasVariants ? (
-            <SingleBarcode value={sku} label={productName} price={price} encodedCost={encodedCost} supplierName={supplierName} date={date} />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {variants!.map(v => (
-                <SingleBarcode key={v.sku} value={v.sku} label={`${productName} — ${v.label}`} price={v.price} encodedCost={v.encodedCost} supplierName={v.supplierName} date={v.date} />
+            <>
+              {Array.from({ length: qty }).map((_, i) => (
+                <SingleBarcode
+                  key={i}
+                  value={sku}
+                  label={productName}
+                  price={price}
+                  encodedCost={encodedCost}
+                  supplierName={supplierName}
+                  date={date}
+                />
               ))}
-            </div>
+            </>
+          ) : (
+            <>
+              {variants!.flatMap(v =>
+                Array.from({ length: qty }).map((_, i) => (
+                  <SingleBarcode
+                    key={`${v.sku}-${i}`}
+                    value={v.sku}
+                    label={`${productName} — ${v.label}`}
+                    price={v.price}
+                    encodedCost={v.encodedCost}
+                    supplierName={v.supplierName}
+                    date={v.date}
+                  />
+                ))
+              )}
+            </>
           )}
 
           <p className="text-xs text-slate-500 text-center mt-4 print:hidden">
