@@ -23,16 +23,89 @@ interface BarcodeGeneratorProps {
   onClose: () => void;
 }
 
-function SingleBarcode({ value, label, price, encodedCost, supplierName, date }: {
+function buildStickerHtml(
+  svgStr: string,
+  label: string,
+  price?: number,
+  supplierName?: string,
+  date?: string,
+  encodedCost?: string,
+): string {
+  const metaParts = [supplierName, date, encodedCost].filter(Boolean);
+  return `
+    <div class="sticker">
+      <div class="name">${label}</div>
+      <div class="svg-wrap">${svgStr}</div>
+      ${price !== undefined ? `<div class="price">LKR ${price.toFixed(2)}</div>` : ''}
+      ${metaParts.length ? `<div class="meta">${metaParts.join(' · ')}</div>` : ''}
+    </div>`;
+}
+
+function buildPopupHtml(stickersHtml: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: 38mm 25mm; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
+  .sticker {
+    width: 38mm;
+    height: 25mm;
+    padding: 1mm;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    text-align: center;
+    page-break-after: always;
+  }
+  .name {
+    font-size: 7pt;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+    line-height: 1.1;
+  }
+  .svg-wrap {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 0;
+    padding: 0.3mm 0;
+  }
+  .svg-wrap svg { width: 100% !important; height: auto !important; max-height: 100%; }
+  .price { font-size: 8pt; font-weight: bold; line-height: 1.1; }
+  .meta { font-size: 6pt; color: #333; line-height: 1.1; }
+</style>
+</head>
+<body>
+${stickersHtml}
+<script>window.onload = function() { setTimeout(function() { window.print(); }, 100); }<\/script>
+</body>
+</html>`;
+}
+
+function SingleBarcode({ value, label, price, encodedCost, supplierName, date, onSvgReady }: {
   value: string; label: string; price?: number;
   encodedCost?: string; supplierName?: string; date?: string;
+  onSvgReady?: (el: SVGSVGElement | null) => void;
 }) {
-  const ref = useRef<SVGSVGElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const callbackRef = useRef(onSvgReady);
+  useEffect(() => { callbackRef.current = onSvgReady; });
 
   useEffect(() => {
-    if (ref.current && value) {
+    if (svgRef.current && value) {
       try {
-        JsBarcode(ref.current, value, {
+        JsBarcode(svgRef.current, value, {
           format: 'CODE128',
           width: 1.5,
           height: 40,
@@ -40,28 +113,30 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date }:
           fontSize: 11,
           margin: 5,
         });
+        callbackRef.current?.(svgRef.current);
       } catch (e) {
         console.error('Barcode error:', e);
       }
     }
+    return () => { callbackRef.current?.(null); };
   }, [value]);
 
   return (
-    <div className="barcode-print bg-white border-2 border-dashed border-slate-300 rounded-lg p-6 text-center">
-      <h3 className="text-lg font-bold text-slate-900 mb-1">{label}</h3>
-      <div className="flex justify-center mb-4">
-        <svg ref={ref} className="max-w-full"></svg>
+    <div className="bg-white border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+      <h3 className="text-sm font-bold text-slate-900 mb-1 truncate">{label}</h3>
+      <div className="flex justify-center mb-2">
+        <svg ref={svgRef} className="max-w-full"></svg>
       </div>
       {price !== undefined && (
-        <p className="print-price text-xl font-bold text-slate-900">LKR {price.toFixed(2)}</p>
+        <p className="text-base font-bold text-slate-900">LKR {price.toFixed(2)}</p>
       )}
       {(supplierName || date) && (
-        <p className="print-meta text-sm text-slate-500 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           {[supplierName, date].filter(Boolean).join(' · ')}
         </p>
       )}
       {encodedCost && (
-        <p className="print-meta text-sm font-mono font-semibold text-slate-700 mt-0.5 tracking-widest">{encodedCost}</p>
+        <p className="text-xs font-mono font-semibold text-slate-700 mt-0.5 tracking-widest">{encodedCost}</p>
       )}
     </div>
   );
@@ -72,139 +147,112 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
   const [tab, setTab] = useState<'product' | 'variants'>('product');
   const [qty, setQty] = useState(1);
 
+  const productSvgRef = useRef<SVGSVGElement | null>(null);
+  const variantSvgsRef = useRef<Map<string, SVGSVGElement>>(new Map());
+
+  function handlePrint() {
+    const serializer = new XMLSerializer();
+    let stickersHtml = '';
+
+    if (tab === 'product' || !hasVariants) {
+      const svgEl = productSvgRef.current;
+      if (!svgEl) return;
+      const svgStr = serializer.serializeToString(svgEl);
+      stickersHtml = Array.from({ length: qty })
+        .map(() => buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost))
+        .join('');
+    } else {
+      stickersHtml = (variants ?? []).flatMap(v => {
+        const svgEl = variantSvgsRef.current.get(v.sku);
+        if (!svgEl) return [];
+        const svgStr = serializer.serializeToString(svgEl);
+        return Array.from({ length: qty })
+          .map(() => buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost));
+      }).join('');
+    }
+
+    const popup = window.open('', '_blank', 'width=200,height=300,scrollbars=no,menubar=no,toolbar=no,location=no,status=no');
+    if (!popup) { alert('Please allow popups for this site to enable printing.'); return; }
+    popup.document.write(buildPopupHtml(stickersHtml));
+    popup.document.close();
+  }
+
   return (
-    <>
-      <Modal isOpen onClose={onClose} title="Print Barcode">
-        <div className="p-6" id="barcode-content">
-          <div className="flex justify-end mb-4 print:hidden">
-            {hasVariants && (
-              <div style={{ display: 'flex', gap: 4, marginRight: 'auto', background: 'var(--panel-2)', borderRadius: 8, padding: 3 }}>
-                {(['product', 'variants'] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    style={{
-                      padding: '4px 14px', border: 0, borderRadius: 6, cursor: 'default', fontSize: 12.5, fontWeight: 500,
-                      background: tab === t ? 'var(--panel)' : 'transparent',
-                      color: tab === t ? 'var(--ink)' : 'var(--muted)',
-                      boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                    }}
-                  >
-                    {t === 'product' ? 'Product' : 'Per Variant'}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-600 font-medium">Qty</label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={qty}
-                onChange={e => setQty(Math.max(1, Math.min(100, Number(e.target.value))))}
-                className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center"
-              />
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
-              >
-                <Printer className="w-4 h-4" />
-                Print
-              </button>
-            </div>
-          </div>
-
-          {tab === 'product' || !hasVariants ? (
-            <>
-              {Array.from({ length: qty }).map((_, i) => (
-                <SingleBarcode
-                  key={i}
-                  value={sku}
-                  label={productName}
-                  price={price}
-                  encodedCost={encodedCost}
-                  supplierName={supplierName}
-                  date={date}
-                />
+    <Modal isOpen onClose={onClose} title="Print Barcode">
+      <div className="p-6">
+        <div className="flex justify-end mb-4">
+          {hasVariants && (
+            <div style={{ display: 'flex', gap: 4, marginRight: 'auto', background: 'var(--panel-2)', borderRadius: 8, padding: 3 }}>
+              {(['product', 'variants'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    padding: '4px 14px', border: 0, borderRadius: 6, cursor: 'default', fontSize: 12.5, fontWeight: 500,
+                    background: tab === t ? 'var(--panel)' : 'transparent',
+                    color: tab === t ? 'var(--ink)' : 'var(--muted)',
+                    boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                  }}
+                >
+                  {t === 'product' ? 'Product' : 'Per Variant'}
+                </button>
               ))}
-            </>
-          ) : (
-            <>
-              {variants!.flatMap(v =>
-                Array.from({ length: qty }).map((_, i) => (
-                  <SingleBarcode
-                    key={`${v.sku}-${i}`}
-                    value={v.sku}
-                    label={`${productName} — ${v.label}`}
-                    price={v.price}
-                    encodedCost={v.encodedCost}
-                    supplierName={v.supplierName}
-                    date={v.date}
-                  />
-                ))
-              )}
-            </>
+            </div>
           )}
-
-          <p className="text-xs text-slate-500 text-center mt-4 print:hidden">
-            Print this barcode and attach it to the product
-          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-slate-600 font-medium">Qty</label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={qty}
+              onChange={e => setQty(Math.max(1, Math.min(100, Number(e.target.value))))}
+              className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center"
+            />
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
+            >
+              <Printer className="w-4 h-4" />
+              Print
+            </button>
+          </div>
         </div>
-      </Modal>
 
-      <style>{`
-        @media print {
-          @page { size: 38mm 25mm; margin: 0; }
-          body { visibility: hidden; background-color: white; margin: 0; }
-          #barcode-content {
-            visibility: visible;
-            position: absolute; left: 0; top: 0;
-            background-color: white; z-index: 9999;
-            padding: 0; margin: 0;
-          }
-          #barcode-content * { visibility: visible; }
-          .barcode-print {
-            width: 38mm;
-            height: 25mm;
-            padding: 1mm;
-            box-sizing: border-box;
-            overflow: hidden;
-            page-break-after: always;
-            border: none !important;
-            border-radius: 0 !important;
-            background: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            text-align: center;
-          }
-          .barcode-print h3 {
-            font-size: 7pt !important;
-            font-weight: bold !important;
-            margin: 0 0 1px !important;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-          }
-          .barcode-print svg {
-            width: 100% !important;
-            height: auto !important;
-            max-height: 28pt;
-            display: block;
-          }
-          .barcode-print .print-price {
-            font-size: 8pt !important;
-            font-weight: bold !important;
-            margin: 1px 0 0 !important;
-          }
-          .barcode-print .print-meta {
-            font-size: 6pt !important;
-            margin: 0 !important;
-          }
-          .print\\:hidden { display: none !important; }
-        }
-      `}</style>
-    </>
+        {tab === 'product' || !hasVariants ? (
+          <SingleBarcode
+            value={sku}
+            label={productName}
+            price={price}
+            encodedCost={encodedCost}
+            supplierName={supplierName}
+            date={date}
+            onSvgReady={el => { productSvgRef.current = el; }}
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {variants!.map(v => (
+              <SingleBarcode
+                key={v.sku}
+                value={v.sku}
+                label={`${productName} — ${v.label}`}
+                price={v.price}
+                encodedCost={v.encodedCost}
+                supplierName={v.supplierName}
+                date={v.date}
+                onSvgReady={el => {
+                  if (el) variantSvgsRef.current.set(v.sku, el);
+                  else variantSvgsRef.current.delete(v.sku);
+                }}
+              />
+            ))}
+          </div>
+        )}
+
+        <p className="text-xs text-slate-500 text-center mt-4">
+          Print this barcode and attach it to the product
+        </p>
+      </div>
+    </Modal>
   );
 }
