@@ -70,6 +70,7 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date }:
 export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, onClose }: BarcodeGeneratorProps) {
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
+  const [qty, setQty] = useState(1);
 
   return (
     <>
@@ -94,13 +95,24 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
                 ))}
               </div>
             )}
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-slate-600 font-medium">Qty</label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={qty}
+                onChange={e => setQty(Math.max(1, Math.min(100, Number(e.target.value))))}
+                className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center"
+              />
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
+              >
+                <Printer className="w-4 h-4" />
+                Print
+              </button>
+            </div>
           </div>
 
           {tab === 'product' || !hasVariants ? (
