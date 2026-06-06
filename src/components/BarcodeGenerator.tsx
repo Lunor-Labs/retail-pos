@@ -53,15 +53,15 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date }:
         <svg ref={ref} className="max-w-full"></svg>
       </div>
       {price !== undefined && (
-        <p className="text-xl font-bold text-slate-900">LKR {price.toFixed(2)}</p>
+        <p className="print-price text-xl font-bold text-slate-900">LKR {price.toFixed(2)}</p>
       )}
       {(supplierName || date) && (
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="print-meta text-sm text-slate-500 mt-1">
           {[supplierName, date].filter(Boolean).join(' · ')}
         </p>
       )}
       {encodedCost && (
-        <p className="text-sm font-mono font-semibold text-slate-700 mt-0.5 tracking-widest">{encodedCost}</p>
+        <p className="print-meta text-sm font-mono font-semibold text-slate-700 mt-0.5 tracking-widest">{encodedCost}</p>
       )}
     </div>
   );
@@ -121,30 +121,53 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
 
       <style>{`
         @media print {
-          @page { margin: 3mm; }
+          @page { size: 38mm 25mm; margin: 0; }
           body { visibility: hidden; background-color: white; margin: 0; }
           #barcode-content {
             visibility: visible;
             position: absolute; left: 0; top: 0;
-            width: 100%; padding: 2mm;
             background-color: white; z-index: 9999;
-            box-sizing: border-box;
+            padding: 0; margin: 0;
           }
           #barcode-content * { visibility: visible; }
           .barcode-print {
-            border: 1px solid #000 !important;
-            padding: 4px 6px !important;
-            max-width: 100% !important;
-            width: 100%;
-            margin: 0 0 6px;
-            text-align: center;
+            width: 38mm;
+            height: 25mm;
+            padding: 1mm;
             box-sizing: border-box;
+            overflow: hidden;
+            page-break-after: always;
+            border: none !important;
             border-radius: 0 !important;
-            page-break-inside: avoid;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
           }
-          .barcode-print h3 { font-size: 9pt !important; margin: 0 0 2px !important; }
-          .barcode-print svg { width: 100% !important; height: auto !important; max-height: 40mm; }
-          .barcode-print p { font-size: 8pt !important; margin: 1px 0 !important; }
+          .barcode-print h3 {
+            font-size: 7pt !important;
+            font-weight: bold !important;
+            margin: 0 0 1px !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .barcode-print svg {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 28pt;
+            display: block;
+          }
+          .barcode-print .print-price {
+            font-size: 8pt !important;
+            font-weight: bold !important;
+            margin: 1px 0 0 !important;
+          }
+          .barcode-print .print-meta {
+            font-size: 6pt !important;
+            margin: 0 !important;
+          }
           .print\\:hidden { display: none !important; }
         }
       `}</style>
