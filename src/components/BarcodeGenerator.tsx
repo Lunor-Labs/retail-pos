@@ -284,21 +284,56 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {variants!.map(v => (
-              <SingleBarcode
-                key={v.sku}
-                value={v.sku}
-                label={`${productName} — ${v.label}`}
-                price={v.price}
-                encodedCost={v.encodedCost}
-                supplierName={v.supplierName}
-                date={v.date}
-                onSvgReady={el => {
-                  if (el) variantSvgsRef.current.set(v.sku, el);
-                  else variantSvgsRef.current.delete(v.sku);
-                }}
-              />
-            ))}
+            {variants!.map(v => {
+              const vBatches = v.batches ?? [];
+              const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
+              const vPreviewBatch = vBatches.find(b => vSelected.has(b.id));
+              return (
+                <div key={v.sku}>
+                  <SingleBarcode
+                    value={v.sku}
+                    label={`${productName} — ${v.label}`}
+                    price={vPreviewBatch ? vPreviewBatch.sellingPrice : v.price}
+                    encodedCost={vPreviewBatch ? vPreviewBatch.encodedCost : v.encodedCost}
+                    supplierName={vPreviewBatch ? vPreviewBatch.supplierName : v.supplierName}
+                    date={vPreviewBatch ? vPreviewBatch.date : v.date}
+                    onSvgReady={el => {
+                      if (el) variantSvgsRef.current.set(v.sku, el);
+                      else variantSvgsRef.current.delete(v.sku);
+                    }}
+                  />
+                  {vBatches.length > 1 && (
+                    <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                        Batches
+                      </div>
+                      {vBatches.map(b => (
+                        <label key={b.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0">
+                          <input
+                            type="checkbox"
+                            checked={vSelected.has(b.id)}
+                            onChange={e => {
+                              setSelectedVariantBatchIds(prev => {
+                                const next = new Map(prev);
+                                const ids = new Set(next.get(v.sku) ?? []);
+                                if (e.target.checked) ids.add(b.id);
+                                else ids.delete(b.id);
+                                next.set(v.sku, ids);
+                                return next;
+                              });
+                            }}
+                            className="w-4 h-4 rounded"
+                          />
+                          <span className="text-sm text-slate-600">
+                            {[b.date, `LKR ${b.sellingPrice.toFixed(2)}`].filter(Boolean).join(' · ')}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
