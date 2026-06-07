@@ -3,6 +3,15 @@ import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { Modal } from './ui';
 
+export interface BarcodeBatch {
+  id: string;
+  batchNumber?: string;
+  sellingPrice: number;
+  encodedCost?: string;
+  supplierName?: string;
+  date?: string;
+}
+
 export interface BarcodeVariant {
   sku: string;
   label: string;
@@ -10,6 +19,7 @@ export interface BarcodeVariant {
   encodedCost?: string;
   supplierName?: string;
   date?: string;
+  batches?: BarcodeBatch[];
 }
 
 interface BarcodeGeneratorProps {
@@ -20,6 +30,7 @@ interface BarcodeGeneratorProps {
   supplierName?: string;
   date?: string;
   variants?: BarcodeVariant[];
+  batches?: BarcodeBatch[];
   onClose: () => void;
 }
 
