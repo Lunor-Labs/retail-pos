@@ -173,6 +173,8 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
   const productSvgRef = useRef<SVGSVGElement | null>(null);
   const variantSvgsRef = useRef<Map<string, SVGSVGElement>>(new Map());
 
+  const previewBatch = batches?.find(b => selectedBatchIds.has(b.id));
+
   function handlePrint() {
     const serializer = new XMLSerializer();
     let stickersHtml = '';
@@ -242,14 +244,42 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           </div>
         </div>
 
+        {batches && batches.length > 1 && (
+          <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Batches
+            </div>
+            {batches.map(b => (
+              <label key={b.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0">
+                <input
+                  type="checkbox"
+                  checked={selectedBatchIds.has(b.id)}
+                  onChange={e => {
+                    setSelectedBatchIds(prev => {
+                      const next = new Set(prev);
+                      if (e.target.checked) next.add(b.id);
+                      else next.delete(b.id);
+                      return next;
+                    });
+                  }}
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-sm text-slate-700">
+                  {[b.date, b.supplierName, `LKR ${b.sellingPrice.toFixed(2)}`].filter(Boolean).join(' · ')}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+
         {tab === 'product' || !hasVariants ? (
           <SingleBarcode
             value={sku}
             label={productName}
-            price={price}
-            encodedCost={encodedCost}
-            supplierName={supplierName}
-            date={date}
+            price={previewBatch ? previewBatch.sellingPrice : price}
+            encodedCost={previewBatch ? previewBatch.encodedCost : encodedCost}
+            supplierName={previewBatch ? previewBatch.supplierName : supplierName}
+            date={previewBatch ? previewBatch.date : date}
             onSvgReady={el => { productSvgRef.current = el; }}
           />
         ) : (
