@@ -153,10 +153,22 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date, o
   );
 }
 
-export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, onClose }: BarcodeGeneratorProps) {
+export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, batches, onClose }: BarcodeGeneratorProps) {
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
   const [qty, setQty] = useState(1);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(
+    () => new Set(batches?.map(b => b.id) ?? [])
+  );
+  const [selectedVariantBatchIds, setSelectedVariantBatchIds] = useState<Map<string, Set<string>>>(
+    () => new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
+  );
+
+  useEffect(() => {
+    setSelectedVariantBatchIds(
+      new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
+    );
+  }, [variants]);
 
   const productSvgRef = useRef<SVGSVGElement | null>(null);
   const variantSvgsRef = useRef<Map<string, SVGSVGElement>>(new Map());
