@@ -154,6 +154,26 @@ export const RECEIPT_PRINT_CSS = `
   .thank  { font-size: 8pt; font-weight: 600; margin-top: 1.5mm; }
   .google { font-size: 8pt; font-weight: 800; margin-bottom: 0.8mm; }
   .power  { font-size: 5.5pt;   font-weight: 600; color: #333; margin-top: 1mm; }
+
+  /* ── Return Policy (Sinhala) ── */
+  .policy {
+    font-family: 'Iskoola Pota', 'Noto Sans Sinhala', sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.6;
+    margin-top: 1mm;
+  }
+  .policy-title {
+    font-size: 8.5pt;
+    font-weight: 800;
+    margin-bottom: 0.8mm;
+  }
+  .policy-item {
+    font-size: 7pt;
+    font-weight: 600;
+    margin-bottom: 0.3mm;
+  }
 `;
 
 /**
