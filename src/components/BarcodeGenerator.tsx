@@ -183,16 +183,37 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
       const svgEl = productSvgRef.current;
       if (!svgEl) return;
       const svgStr = serializer.serializeToString(svgEl);
-      stickersHtml = Array.from({ length: qty })
-        .map(() => buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost))
-        .join('');
+
+      if (batches && batches.length > 0) {
+        const selected = batches.filter(b => selectedBatchIds.has(b.id));
+        stickersHtml = selected.flatMap(b =>
+          Array.from({ length: qty }).map(() =>
+            buildStickerHtml(svgStr, productName, b.sellingPrice, b.supplierName, b.date, b.encodedCost)
+          )
+        ).join('');
+      } else {
+        stickersHtml = Array.from({ length: qty })
+          .map(() => buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost))
+          .join('');
+      }
     } else {
       stickersHtml = (variants ?? []).flatMap(v => {
         const svgEl = variantSvgsRef.current.get(v.sku);
         if (!svgEl) return [];
         const svgStr = serializer.serializeToString(svgEl);
-        return Array.from({ length: qty })
-          .map(() => buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost));
+
+        if (v.batches && v.batches.length > 0) {
+          const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
+          const selected = v.batches.filter(b => vSelected.has(b.id));
+          return selected.flatMap(b =>
+            Array.from({ length: qty }).map(() =>
+              buildStickerHtml(svgStr, `${productName} — ${v.label}`, b.sellingPrice, b.supplierName, b.date, b.encodedCost)
+            )
+          );
+        }
+        return Array.from({ length: qty }).map(() =>
+          buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost)
+        );
       }).join('');
     }
 
