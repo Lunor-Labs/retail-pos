@@ -63,11 +63,6 @@ function fmtDateTime(iso: string) {
     ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-function statusStyle(s: ReturnStatus) {
-  if (s === 'approved') return { bg: 'var(--accent-soft)', color: 'var(--accent-ink)' };
-  if (s === 'pending')  return { bg: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', color: 'var(--warn)' };
-  return { bg: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)' };
-}
 
 function methodStyle(m: RefundMethod | null) {
   if (m === 'credit_note') return { bg: 'color-mix(in oklab, #3A4E6B 14%, var(--panel-2))', color: '#3A4E6B' };
@@ -105,7 +100,6 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
   const [customerId, setCustomerId] = useState('');
   const [refundMethod, setRefundMethod] = useState<RefundMethod>('cash');
   const [reason, setReason] = useState('');
-  const [autoApprove, setAutoApprove] = useState(true);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [returnQty, setReturnQty] = useState<Record<string, number>>({});
   const [loadingItems, setLoadingItems] = useState(false);
@@ -163,7 +157,7 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
         refund_method: refundMethod,
         reason: reason || '',
         items: itemsToReturn,
-        status: autoApprove ? 'approved' : 'pending',
+        status: 'approved',
       } as any);
 
       showToast(`Return ${ret.return_number} created`, 'success');
@@ -293,24 +287,6 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
               style={{ ...inputStyle, height: 68, padding: '8px 11px', resize: 'vertical' } as React.CSSProperties} />
           </div>
 
-          {/* Auto approve toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line)' }}>
-            <div>
-              <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500 }}>Approve immediately</div>
-              <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>Restores stock and processes refund now</div>
-            </div>
-            <button type="button" onClick={() => setAutoApprove(v => !v)} style={{
-              width: 40, height: 22, borderRadius: 99, border: 0, cursor: 'pointer',
-              background: autoApprove ? 'var(--accent)' : 'var(--faint)',
-              position: 'relative', transition: 'background .15s', flexShrink: 0,
-            }}>
-              <span style={{
-                position: 'absolute', top: 3, left: autoApprove ? 21 : 3,
-                width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-              }} />
-            </button>
-          </div>
         </form>
 
         {/* Footer */}
@@ -327,7 +303,6 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
 
 // ─── Detail panel ─────────────────────────────────────────────────────────
 function DetailPanel({ ret }: { ret: ReturnRecord }) {
-  const ss = statusStyle(ret.status);
   const ms = methodStyle(ret.refund_method);
 
   return (
@@ -339,9 +314,6 @@ function DetailPanel({ ret }: { ret: ReturnRecord }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
                 {ret.return_number}
-              </span>
-              <span style={{ ...ss, padding: '3px 9px', borderRadius: 999, fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
-                {ret.status}
               </span>
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--muted)' }}>{fmtDateTime(ret.return_date)}</div>
@@ -431,7 +403,6 @@ export function Returns() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState('All');
   const [selected, setSelected] = useState<ReturnRecord | null>(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -459,14 +430,12 @@ export function Returns() {
     const q = search.toLowerCase().trim();
     return returns.filter(r => {
       if (methodFilter !== 'All' && (r.refund_method ?? 'cash') !== methodFilter) return false;
-      if (statusFilter !== 'All' && r.status !== statusFilter) return false;
       if (q && !(r.return_number.toLowerCase().includes(q) || (r.customer?.name ?? '').toLowerCase().includes(q) || (r.sale?.sale_number ?? '').toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [returns, search, methodFilter, statusFilter]);
+  }, [returns, search, methodFilter]);
 
-  const totalRefunded = returns.reduce((s, r) => s + (r.status === 'approved' ? Number(r.total_amount) : 0), 0);
-  const pendingCount  = returns.filter(r => r.status === 'pending').length;
+  const totalRefunded = returns.reduce((s, r) => s + Number(r.total_amount), 0);
   const cashCount     = returns.filter(r => (r.refund_method ?? 'cash') === 'cash').length;
   const creditCount   = returns.filter(r => r.refund_method === 'credit_note').length;
 
@@ -480,7 +449,6 @@ export function Returns() {
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--ink)' }}>Returns</h1>
           <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--muted)' }}>
             <span style={{ color: 'var(--ink-2)', fontWeight: 500 }}>{returns.length} returns</span>
-            {pendingCount > 0 && <> · <span style={{ color: 'var(--warn)', fontWeight: 500 }}>{pendingCount} pending</span></>}
           </p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn btn-primary" style={{ height: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -492,14 +460,13 @@ export function Returns() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 'var(--gap)' }}>
         {[
           { label: 'Total Returns', value: returns.length.toString(), sub: 'all time' },
-          { label: 'Total Refunded', value: 'LKR ' + fmtK(totalRefunded), sub: 'approved only' },
-          { label: 'Pending Review', value: pendingCount.toString(), sub: pendingCount > 0 ? 'awaiting action' : 'all clear' },
+          { label: 'Total Refunded', value: 'LKR ' + fmtK(totalRefunded), sub: 'all returns' },
           { label: 'Cash / Credit', value: `${cashCount} / ${creditCount}`, sub: 'refund method split' },
         ].map((k, i) => (
           <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{k.label}</span>
             <div className="num" style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.05, color: 'var(--ink)' }}>{k.value}</div>
-            <div style={{ fontSize: 11.5, color: k.label === 'Pending Review' && pendingCount > 0 ? 'var(--warn)' : 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', fontWeight: 500 }}>{k.sub}</div>
           </div>
         ))}
       </div>
@@ -523,24 +490,6 @@ export function Returns() {
                   <X size={14} />
                 </button>
               )}
-            </div>
-
-            {/* Status chips */}
-            <div style={{ display: 'flex', gap: 4 }}>
-              {['All', 'approved', 'pending', 'rejected'].map(s => {
-                const isA = s === statusFilter;
-                const count = s === 'All' ? returns.length : returns.filter(r => r.status === s).length;
-                return (
-                  <button key={s} onClick={() => setStatusFilter(s)} style={{
-                    flex: 1, height: 28, borderRadius: 6,
-                    border: isA ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                    background: isA ? 'var(--accent-soft)' : 'var(--panel-2)',
-                    color: isA ? 'var(--accent-ink)' : 'var(--ink-2)',
-                    fontSize: 11, fontWeight: isA ? 600 : 500, cursor: 'pointer',
-                    textTransform: 'capitalize', whiteSpace: 'nowrap',
-                  }}>{s === 'All' ? `All (${count})` : `${s} (${count})`}</button>
-                );
-              })}
             </div>
 
             {/* Method chips */}
@@ -575,7 +524,6 @@ export function Returns() {
               </div>
             ) : filtered.map((r, i) => {
               const isSelected = selected?.id === r.id;
-              const ss = statusStyle(r.status);
               const ms = methodStyle(r.refund_method);
               return (
                 <div key={r.id} onClick={() => setSelected(isSelected ? null : r)} style={{
@@ -601,9 +549,8 @@ export function Returns() {
                       <span style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.return_date)}</span>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <span className="num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>LKR {fmtK(r.total_amount)}</span>
-                    <span style={{ ...ss, padding: '2px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600, textTransform: 'capitalize' }}>{r.status}</span>
                   </div>
                   <ChevronRight size={14} style={{ color: 'var(--faint)', flexShrink: 0 }} />
                 </div>
