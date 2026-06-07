@@ -265,7 +265,7 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           </div>
         </div>
 
-        {batches && batches.length > 1 && (
+        {(tab === 'product' || !hasVariants) && batches && batches.length > 1 && (
           <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden">
             <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wide">
               Batches
