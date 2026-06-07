@@ -515,6 +515,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               encodedCost: costCodeConfigured && b.cost_price != null ? encodeCost(b.cost_price) : undefined,
               supplierName: b.supplier?.name ?? undefined,
               date: fmtBatchDate(b.received_date),
+              currentStock: b.current_quantity ?? undefined,
             })),
           };
         });
@@ -757,6 +758,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
             encodedCost: costCodeConfigured && b.cost_price != null ? encodeCost(b.cost_price) : undefined,
             supplierName: (b as any).supplier?.name ?? undefined,
             date: fmtBatchDate(b.received_date),
+            currentStock: b.current_quantity ?? undefined,
           }))}
           variants={barcodeVariants.length > 0 ? barcodeVariants : undefined}
           onClose={() => { setBarcodeProduct(null); setBarcodeVariants([]); }}
