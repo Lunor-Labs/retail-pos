@@ -1,5 +1,4 @@
 import logo from '../../assets/revonlak.jpeg';
-import qrCode from '../../assets/QR.jpeg';
 import { InvoiceData } from './types';
 
 interface Props {
@@ -128,11 +127,12 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
             {/* Footer */}
             <div className="text-center" style={{ paddingBottom: 6 }}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>Shop Again at RIVONLAK</div>
-                <img
-                    src={qrCode}
-                    alt="QR Code"
-                    style={{ height: 80, width: 80, objectFit: 'contain', margin: '0 auto' }}
-                />
+                <div style={{ fontFamily: "'Iskoola Pota', 'Noto Sans Sinhala', sans-serif", lineHeight: 1.6, margin: '6px 0' }}>
+                    <div style={{ fontSize: 10 }}>දින 4ක් ඇතුළත බිල්පත සමඟ මාරු කරගත හැක.</div>
+                    <div style={{ fontSize: 10 }}>සුදු රෙදි මාරු කරනු නොලැබේ.</div>
+                    <div style={{ fontSize: 10 }}>ටැග් ඉවත් කළ, භාවිතා කළ හෝ හානි වූ භාණ්ඩ</div>
+                    <div style={{ fontSize: 10 }}>මාරු කරනු නොලැබේ.</div>
+                </div>
                 <div style={{ marginTop: 6, color: '#555', fontSize: 11 }}>Thank you for your business!</div>
                 <div style={{ marginTop: 4, fontSize: 9, color: '#aaa' }}>
                     System Powered by <b>Lunor Labs</b>

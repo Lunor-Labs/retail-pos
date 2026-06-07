@@ -146,7 +146,12 @@ export function buildReceiptHTML(
   <!-- Footer -->
   <div class="center footer">
     <div class="google">Shop Again at RIVONLAK</div>
-    <img class="qr" src="${qrSrc}" alt="QR Code" />
+    <div class="center policy">
+      <div class="policy-item">දින 4ක් ඇතුළත බිල්පත සමඟ මාරු කරගත හැක.</div>
+      <div class="policy-item">සුදු රෙදි මාරු කරනු නොලැබේ.</div>
+      <div class="policy-item">ටැග් ඉවත් කළ, භාවිතා කළ හෝ හානි වූ භාණ්ඩ</div>
+      <div class="policy-item">මාරු කරනු නොලැබේ.</div>
+    </div>
     <div class="thank">Thank you for your business!</div>
     <div class="power">System Powered by <b>Lunor Labs</b></div>
   </div>

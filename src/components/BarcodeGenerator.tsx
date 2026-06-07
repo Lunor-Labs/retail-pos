@@ -3,6 +3,16 @@ import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { Modal } from './ui';
 
+export interface BarcodeBatch {
+  id: string;
+  batchNumber?: string;
+  sellingPrice: number;
+  encodedCost?: string;
+  supplierName?: string;
+  date?: string;
+  currentStock?: number;
+}
+
 export interface BarcodeVariant {
   sku: string;
   label: string;
@@ -10,6 +20,7 @@ export interface BarcodeVariant {
   encodedCost?: string;
   supplierName?: string;
   date?: string;
+  batches?: BarcodeBatch[];
 }
 
 interface BarcodeGeneratorProps {
@@ -20,6 +31,7 @@ interface BarcodeGeneratorProps {
   supplierName?: string;
   date?: string;
   variants?: BarcodeVariant[];
+  batches?: BarcodeBatch[];
   onClose: () => void;
 }
 
@@ -50,6 +62,18 @@ function buildPopupHtml(stickersHtml: string): string {
   @page { size: 38mm 25mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
+  .toolbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 8px 12px;
+    background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .toolbar span { font-size: 11pt; font-weight: 600; color: #1e293b; }
+  .toolbar button {
+    padding: 6px 18px; background: #0f172a; color: white;
+    border: none; border-radius: 6px; font-size: 11pt; cursor: pointer;
+  }
+  .content { margin-top: 44px; }
   .sticker {
     width: 38mm;
     height: 25mm;
@@ -84,11 +108,17 @@ function buildPopupHtml(stickersHtml: string): string {
   .svg-wrap svg { width: 100% !important; height: auto !important; max-height: 100%; }
   .price { font-size: 8pt; font-weight: bold; line-height: 1.1; }
   .meta { font-size: 6pt; color: #333; line-height: 1.1; }
+  @media print { .toolbar { display: none !important; } .content { margin-top: 0; } }
 </style>
 </head>
 <body>
+<div class="toolbar">
+  <span>Barcode Stickers</span>
+  <button onclick="window.print()">Print</button>
+</div>
+<div class="content">
 ${stickersHtml}
-<script>window.onload = function() { setTimeout(function() { window.print(); }, 100); }<\/script>
+</div>
 </body>
 </html>`;
 }
@@ -142,13 +172,26 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date, o
   );
 }
 
-export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, onClose }: BarcodeGeneratorProps) {
+export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, batches, onClose }: BarcodeGeneratorProps) {
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
-  const [qty, setQty] = useState(1);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(
+    () => new Set(batches?.map(b => b.id) ?? [])
+  );
+  const [selectedVariantBatchIds, setSelectedVariantBatchIds] = useState<Map<string, Set<string>>>(
+    () => new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
+  );
+
+  useEffect(() => {
+    setSelectedVariantBatchIds(
+      new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
+    );
+  }, [variants]);
 
   const productSvgRef = useRef<SVGSVGElement | null>(null);
   const variantSvgsRef = useRef<Map<string, SVGSVGElement>>(new Map());
+
+  const previewBatch = batches?.find(b => selectedBatchIds.has(b.id));
 
   function handlePrint() {
     const serializer = new XMLSerializer();
@@ -158,23 +201,55 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
       const svgEl = productSvgRef.current;
       if (!svgEl) return;
       const svgStr = serializer.serializeToString(svgEl);
-      stickersHtml = Array.from({ length: qty })
-        .map(() => buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost))
-        .join('');
+
+      if (batches && batches.length > 0) {
+        const selected = batches.filter(b => selectedBatchIds.has(b.id));
+        stickersHtml = selected.map(b =>
+          buildStickerHtml(svgStr, productName, b.sellingPrice, b.supplierName, b.date, b.encodedCost)
+        ).join('');
+      } else {
+        stickersHtml = buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost);
+      }
     } else {
       stickersHtml = (variants ?? []).flatMap(v => {
         const svgEl = variantSvgsRef.current.get(v.sku);
         if (!svgEl) return [];
         const svgStr = serializer.serializeToString(svgEl);
-        return Array.from({ length: qty })
-          .map(() => buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost));
+
+        if (v.batches && v.batches.length > 0) {
+          const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
+          return v.batches
+            .filter(b => vSelected.has(b.id))
+            .map(b => buildStickerHtml(svgStr, `${productName} — ${v.label}`, b.sellingPrice, b.supplierName, b.date, b.encodedCost));
+        }
+        return [buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost)];
       }).join('');
     }
 
-    const popup = window.open('', '_blank', 'width=200,height=300,scrollbars=no,menubar=no,toolbar=no,location=no,status=no');
+    const popup = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,menubar=no,toolbar=no,location=no,status=no');
     if (!popup) { alert('Please allow popups for this site to enable printing.'); return; }
     popup.document.write(buildPopupHtml(stickersHtml));
     popup.document.close();
+  }
+
+  function batchRow(b: BarcodeBatch, checked: boolean, onChange: (checked: boolean) => void, showSupplier: boolean) {
+    const parts = [
+      b.date,
+      showSupplier ? b.supplierName : undefined,
+      `LKR ${b.sellingPrice.toFixed(2)}`,
+      b.currentStock !== undefined ? `${b.currentStock} in stock` : undefined,
+    ].filter(Boolean);
+    return (
+      <label key={b.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={e => onChange(e.target.checked)}
+          className="w-4 h-4 rounded"
+        />
+        <span className="text-sm text-slate-700">{parts.join(' · ')}</span>
+      </label>
+    );
   }
 
   return (
@@ -199,53 +274,85 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
               ))}
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-slate-600 font-medium">Qty</label>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={qty}
-              onChange={e => setQty(Math.max(1, Math.min(100, Number(e.target.value))))}
-              className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-sm text-center"
-            />
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
-            >
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
-          </div>
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
+          >
+            <Printer className="w-4 h-4" />
+            Print
+          </button>
         </div>
+
+        {(tab === 'product' || !hasVariants) && batches && batches.length > 1 && (
+          <div className="mb-4 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wide">
+              Batches
+            </div>
+            {batches.map(b => batchRow(
+              b,
+              selectedBatchIds.has(b.id),
+              checked => setSelectedBatchIds(prev => {
+                const next = new Set(prev);
+                if (checked) next.add(b.id); else next.delete(b.id);
+                return next;
+              }),
+              true,
+            ))}
+          </div>
+        )}
 
         {tab === 'product' || !hasVariants ? (
           <SingleBarcode
             value={sku}
             label={productName}
-            price={price}
-            encodedCost={encodedCost}
-            supplierName={supplierName}
-            date={date}
+            price={previewBatch ? previewBatch.sellingPrice : price}
+            encodedCost={previewBatch ? previewBatch.encodedCost : encodedCost}
+            supplierName={previewBatch ? previewBatch.supplierName : supplierName}
+            date={previewBatch ? previewBatch.date : date}
             onSvgReady={el => { productSvgRef.current = el; }}
           />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {variants!.map(v => (
-              <SingleBarcode
-                key={v.sku}
-                value={v.sku}
-                label={`${productName} — ${v.label}`}
-                price={v.price}
-                encodedCost={v.encodedCost}
-                supplierName={v.supplierName}
-                date={v.date}
-                onSvgReady={el => {
-                  if (el) variantSvgsRef.current.set(v.sku, el);
-                  else variantSvgsRef.current.delete(v.sku);
-                }}
-              />
-            ))}
+            {variants!.map(v => {
+              const vBatches = v.batches ?? [];
+              const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
+              const vPreviewBatch = vBatches.find(b => vSelected.has(b.id));
+              return (
+                <div key={v.sku}>
+                  <SingleBarcode
+                    value={v.sku}
+                    label={`${productName} — ${v.label}`}
+                    price={vPreviewBatch ? vPreviewBatch.sellingPrice : v.price}
+                    encodedCost={vPreviewBatch ? vPreviewBatch.encodedCost : v.encodedCost}
+                    supplierName={vPreviewBatch ? vPreviewBatch.supplierName : v.supplierName}
+                    date={vPreviewBatch ? vPreviewBatch.date : v.date}
+                    onSvgReady={el => {
+                      if (el) variantSvgsRef.current.set(v.sku, el);
+                      else variantSvgsRef.current.delete(v.sku);
+                    }}
+                  />
+                  {vBatches.length > 1 && (
+                    <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                        Batches
+                      </div>
+                      {vBatches.map(b => batchRow(
+                        b,
+                        vSelected.has(b.id),
+                        checked => setSelectedVariantBatchIds(prev => {
+                          const next = new Map(prev);
+                          const ids = new Set(next.get(v.sku) ?? []);
+                          if (checked) ids.add(b.id); else ids.delete(b.id);
+                          next.set(v.sku, ids);
+                          return next;
+                        }),
+                        false,
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
