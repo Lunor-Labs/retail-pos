@@ -59,9 +59,11 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  /* Fixed 38x25 page, NO CSS rotation — orientation is handled entirely by the
-     printer driver's rotation setting so it stays predictable. */
-  @page { size: 38mm 25mm; margin: 0; }
+  /* AUTO height: an explicit 38x25 page is wider-than-tall, which Edge treats as
+     landscape and spins content 90° across two labels. Auto avoids that.
+     The printer prints 180° flipped and has a top-edge dead-zone, so .sticker
+     rotates content 180° and centers it with margin to spare. */
+  @page { size: 38mm auto; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
@@ -80,13 +82,18 @@ function buildPopupHtml(stickersHtml: string): string {
   .sticker {
     width: 38mm;
     height: 25mm;
-    padding: 1mm;
+    padding: 0 1.5mm;            /* horizontal breathing room only */
     overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;     /* center the stack vertically */
+    gap: 0.5mm;
     text-align: center;
+    /* Printer prints 180° flipped — rotate content back so it reads upright.
+       Content is ~20mm tall, centered in the 25mm label, leaving ~2.5mm clear
+       at the top and bottom so the name never lands in the top-edge dead-zone. */
+    transform: rotate(180deg);
     break-after: page;
     page-break-after: always;
   }
@@ -102,16 +109,17 @@ function buildPopupHtml(stickersHtml: string): string {
     line-height: 1.1;
     flex-shrink: 0;
   }
+  /* FIXED height so the barcode can't grow and push the page past one label */
   .svg-wrap {
-    flex: 1;
     width: 100%;
+    height: 11mm;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    min-height: 0;
   }
-  .svg-wrap svg { display: block; width: 100% !important; height: auto !important; max-height: 100%; }
+  .svg-wrap svg { display: block; width: 100% !important; height: 100% !important; }
   .price {
     font-size: 7.5pt; font-weight: bold; line-height: 1.1;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -127,7 +135,7 @@ function buildPopupHtml(stickersHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v7 (38x25 + driver-rotate)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v8 (auto+center+flip)</span></span>
   <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
