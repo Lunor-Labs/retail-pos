@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 *.env
+# Debug/screenshot artifacts
+*.jpeg
+new.jpeg
+print-preview*.png
+barcode-preview.png
