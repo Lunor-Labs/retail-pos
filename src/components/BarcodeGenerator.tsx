@@ -59,7 +59,7 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: 38mm 25mm landscape; margin: 0; }
+  @page { size: 38mm 25mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
