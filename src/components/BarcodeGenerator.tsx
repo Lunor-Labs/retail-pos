@@ -59,10 +59,9 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  /* Use AUTO height: an explicit 38x25 page is wider-than-tall, which Edge
-     treats as landscape and rotates 90° (content then spans two labels).
-     Auto height avoids that. */
-  @page { size: 38mm auto; margin: 0; }
+  /* Fixed 38x25 page, NO CSS rotation — orientation is handled entirely by the
+     printer driver's rotation setting so it stays predictable. */
+  @page { size: 38mm 25mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
@@ -128,7 +127,7 @@ function buildPopupHtml(stickersHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v6 (driver-flip)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v7 (38x25 + driver-rotate)</span></span>
   <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
