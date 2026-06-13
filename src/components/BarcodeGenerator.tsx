@@ -59,10 +59,10 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  /* Driver paper is set to exactly 38x25mm — lock the page to match so the
-     label area maps 1:1 to content (auto height let it grow and clipped the
-     top row). */
-  @page { size: 38mm 25mm; margin: 0; }
+  /* Use AUTO height: an explicit 38x25 page is wider-than-tall, which Edge
+     treats as landscape and rotates 90° (content then spans two labels).
+     Auto height avoids that. */
+  @page { size: 38mm auto; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
@@ -81,12 +81,13 @@ function buildPopupHtml(stickersHtml: string): string {
   .sticker {
     width: 38mm;
     height: 25mm;
-    padding: 1mm;
+    padding: 2mm 1.5mm;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 0.4mm;
     text-align: center;
     /* XP-365B feeds the label so content prints 180° rotated — flip it back */
     transform: rotate(180deg);
@@ -130,7 +131,7 @@ function buildPopupHtml(stickersHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v4 (fixed page)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v5 (centered)</span></span>
   <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
