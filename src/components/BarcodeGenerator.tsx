@@ -59,7 +59,10 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: 38mm 25mm; margin: 0; }
+  /* XP-365B is a continuous/gap-feed driver — a FIXED page height ejects blank
+     labels (same lesson as the 80mm receipt printer). Use auto height and let
+     each .sticker's page-break define one label. */
+  @page { size: 38mm auto; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
@@ -88,6 +91,8 @@ function buildPopupHtml(stickersHtml: string): string {
     break-after: page;
     page-break-after: always;
   }
+  /* No trailing page-break on the final sticker — avoids ejecting a blank label */
+  .sticker:last-child { break-after: auto; page-break-after: auto; }
   .name {
     font-size: 6.5pt;
     font-weight: bold;
