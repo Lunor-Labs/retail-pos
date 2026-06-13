@@ -81,16 +81,13 @@ function buildPopupHtml(stickersHtml: string): string {
   .sticker {
     width: 38mm;
     height: 25mm;
-    padding: 2mm 1.5mm;
+    padding: 1mm;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 0.4mm;
+    justify-content: space-between;
     text-align: center;
-    /* XP-365B feeds the label so content prints 180° rotated — flip it back */
-    transform: rotate(180deg);
     break-after: page;
     page-break-after: always;
   }
@@ -131,7 +128,7 @@ function buildPopupHtml(stickersHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v5 (centered)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v6 (driver-flip)</span></span>
   <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
