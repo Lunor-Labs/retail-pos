@@ -1,6 +1,32 @@
 import { InvoiceData } from './types';
 import logo from '../../assets/revonlak.jpeg';
 import qrCode from '../../assets/QR.jpeg';
+import { printReceiptHTML } from '../../lib/qzPrint';
+
+type BuildHTML = (data: InvoiceData, discount: boolean, logo: string, qr: string) => string;
+
+/** Resolve the logo/QR to absolute URLs and build the receipt HTML. */
+function buildResolvedHTML(invoiceData: InvoiceData, showDiscount: boolean, buildHTML: BuildHTML): string {
+    const cacheBust = Date.now();
+    const logoUrl = new URL(logo, window.location.href).href + '?v=' + cacheBust;
+    const qrUrl = new URL(qrCode, window.location.href).href + '?v=' + cacheBust;
+    return buildHTML(invoiceData, showDiscount, logoUrl, qrUrl);
+}
+
+/**
+ * Print a receipt. Primary path: send the HTML to the XP-80C via QZ Tray
+ * (no dialog). If QZ Tray isn't running, fall back to the browser print popup.
+ */
+export async function printReceipt(invoiceData: InvoiceData, showDiscount: boolean, buildHTML: BuildHTML): Promise<void> {
+    const html = buildResolvedHTML(invoiceData, showDiscount, buildHTML);
+    try {
+        // QZ renders the HTML itself; drop the popup's auto-print script.
+        const htmlForQz = html.replace(/<script>[\s\S]*?<\/script>/g, '');
+        await printReceiptHTML(htmlForQz);
+    } catch {
+        openPrintPopup(invoiceData, showDiscount, buildHTML);
+    }
+}
 
 /**
  * Builds the WhatsApp share message for a sale and opens wa.me in a new tab.

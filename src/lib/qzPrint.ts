@@ -47,16 +47,20 @@ async function ensureConnected(): Promise<void> {
   await qz.websocket.connect();
 }
 
-/** Pick the XP-365B (by name), else the system default printer. */
-async function findLabelPrinter(): Promise<string> {
+/** Pick a printer whose name matches `re`, else the system default, else the first. */
+async function findPrinter(re: RegExp): Promise<string> {
   const printers: string[] = await qz.printers.find();
-  const match = printers.find((p) => /xp.?365|xprinter|label/i.test(p));
+  const match = printers.find((p) => re.test(p));
   if (match) return match;
   const def: string | undefined = await qz.printers.getDefault();
   if (def) return def;
   if (printers.length) return printers[0];
   throw new Error('No printers found on this PC.');
 }
+
+// The 38×25 label printer vs the 80mm receipt printer (matched by name).
+const findLabelPrinter = () => findPrinter(/xp.?365|label/i);
+const findReceiptPrinter = () => findPrinter(/xp.?80|80c|receipt|pos.?80|thermal/i);
 
 /** Strip characters that would break a TSPL quoted string. */
 function esc(s: string | undefined): string {
@@ -112,4 +116,25 @@ export async function printLabels(specs: LabelSpec[]): Promise<void> {
   const config = qz.configs.create(printer, { encoding: 'UTF-8' });
   const program = specs.map(buildLabel).join('');
   await qz.print(config, [program]);
+}
+
+/**
+ * Print a receipt to the 80mm XP-80C by rasterizing the receipt HTML.
+ *
+ * HTML (not raw ESC/POS) because the receipt has a logo and Sinhala text, which
+ * thermal text commands can't render. QZ renders the HTML at 80mm width and
+ * content height, then sends the bitmap to the printer — no dialog.
+ *
+ * Throws if QZ Tray isn't reachable so the caller can fall back to the browser.
+ */
+export async function printReceiptHTML(html: string): Promise<void> {
+  await ensureConnected();
+  const printer = await findReceiptPrinter();
+  const config = qz.configs.create(printer, {
+    units: 'mm',
+    size: { width: 80 }, // 80mm paper; height follows content
+    margins: 0,
+    colorType: 'blackwhite',
+  });
+  await qz.print(config, [{ type: 'pixel', format: 'html', flavor: 'plain', data: html }]);
 }
