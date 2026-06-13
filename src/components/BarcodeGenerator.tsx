@@ -59,10 +59,10 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  /* XP-365B is a continuous/gap-feed driver — a FIXED page height ejects blank
-     labels (same lesson as the 80mm receipt printer). Use auto height and let
-     each .sticker's page-break define one label. */
-  @page { size: 38mm auto; margin: 0; }
+  /* Driver paper is set to exactly 38x25mm — lock the page to match so the
+     label area maps 1:1 to content (auto height let it grow and clipped the
+     top row). */
+  @page { size: 38mm 25mm; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
@@ -130,7 +130,7 @@ function buildPopupHtml(stickersHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v3 (rotated)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v4 (fixed page)</span></span>
   <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
