@@ -35,34 +35,114 @@ interface BarcodeGeneratorProps {
   onClose: () => void;
 }
 
-function buildStickerHtml(
-  svgStr: string,
-  label: string,
-  price?: number,
-  supplierName?: string,
-  date?: string,
-  encodedCost?: string,
-): string {
-  const metaParts = [supplierName, date, encodedCost].filter(Boolean);
-  return `
-    <div class="sticker">
-      <div class="name">${label}</div>
-      <div class="svg-wrap">${svgStr}</div>
-      ${price !== undefined ? `<div class="price">LKR ${price.toFixed(2)}</div>` : ''}
-      ${metaParts.length ? `<div class="meta">${metaParts.join(' · ')}</div>` : ''}
-    </div>`;
+interface StickerSpec {
+  value: string;        // barcode value (SKU)
+  label: string;        // product name line
+  price?: number;
+  metaText?: string;    // "supplier · date · cost"
 }
 
-function buildPopupHtml(stickersHtml: string): string {
+// Render canvas resolution: 12 px/mm ≈ 305 dpi (crisp on a 203 dpi thermal head)
+const PX_PER_MM = 12;
+const LABEL_W = Math.round(38 * PX_PER_MM); // 456
+const LABEL_H = Math.round(25 * PX_PER_MM); // 300
+
+/** Draw text centered at (cx, y), truncating with an ellipsis if wider than maxW. */
+function fillTruncated(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, maxW: number) {
+  if (ctx.measureText(text).width <= maxW) { ctx.fillText(text, cx, y); return; }
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  ctx.fillText(t + '…', cx, y);
+}
+
+/** Lay out an upright sticker (name → barcode → price → meta), vertically centered. */
+function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
+  const padX = Math.round(1.5 * PX_PER_MM);
+  const maxW = LABEL_W - padX * 2;
+  const cx = LABEL_W / 2;
+  ctx.fillStyle = '#000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Barcode → its own canvas, then scaled to fit
+  let bc: HTMLCanvasElement | null = document.createElement('canvas');
+  try {
+    JsBarcode(bc, spec.value, {
+      format: 'CODE128', width: 2, height: 70,
+      displayValue: true, fontSize: 16, textMargin: 2, margin: 10,
+    });
+  } catch { bc = null; }
+  let bcW = 0, bcH = 0;
+  if (bc && bc.width > 0) {
+    const scale = Math.min(maxW / bc.width, 130 / bc.height);
+    bcW = bc.width * scale;
+    bcH = bc.height * scale;
+  }
+
+  // Build the vertical stack and center it
+  const gap = 8;
+  const blocks: { kind: string; h: number }[] = [{ kind: 'name', h: 26 }];
+  if (bcH > 0) blocks.push({ kind: 'bc', h: bcH });
+  if (spec.price !== undefined) blocks.push({ kind: 'price', h: 36 });
+  if (spec.metaText) blocks.push({ kind: 'meta', h: 22 });
+  const total = blocks.reduce((s, b) => s + b.h, 0) + gap * (blocks.length - 1);
+  let y = (LABEL_H - total) / 2;
+
+  for (const b of blocks) {
+    const mid = y + b.h / 2;
+    if (b.kind === 'name') {
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 22px Arial';
+      fillTruncated(ctx, spec.label, cx, mid, maxW);
+    } else if (b.kind === 'bc' && bc) {
+      ctx.imageSmoothingEnabled = false; // keep bars sharp when scaled
+      ctx.drawImage(bc, cx - bcW / 2, y, bcW, bcH);
+    } else if (b.kind === 'price') {
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 30px Arial';
+      ctx.fillText(`LKR ${spec.price!.toFixed(2)}`, cx, mid);
+    } else if (b.kind === 'meta') {
+      ctx.fillStyle = '#333';
+      ctx.font = '17px Arial';
+      fillTruncated(ctx, spec.metaText!, cx, mid, maxW);
+    }
+    y += b.h + gap;
+  }
+}
+
+/**
+ * Render one sticker to a fixed-size PNG, pre-flipped 180°.
+ *
+ * Why an image instead of HTML/CSS: the XP-365B + Edge print path mangled CSS
+ * layout (90° landscape spin, auto-height growth across labels, edge clipping).
+ * A fixed-size bitmap can't reflow, grow, or spin — it prints exactly as drawn.
+ * The printer prints 180° flipped, so we bake the flip into the bitmap.
+ */
+function renderStickerDataURL(spec: StickerSpec): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = LABEL_W;
+  canvas.height = LABEL_H;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
+  // Bake the 180° flip: draw upright content into a rotated context.
+  ctx.translate(LABEL_W, LABEL_H);
+  ctx.rotate(Math.PI);
+  drawSticker(ctx, spec);
+  return canvas.toDataURL('image/png');
+}
+
+const metaLine = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ');
+
+function buildPopupHtml(imgsHtml: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-  /* AUTO height: an explicit 38x25 page is wider-than-tall, which Edge treats as
-     landscape and spins content 90° across two labels. Auto avoids that.
-     The printer prints 180° flipped and has a top-edge dead-zone, so .sticker
-     rotates content 180° and centers it with margin to spare. */
+  /* AUTO height keeps the 38mm-wide page from being treated as landscape (which
+     spins content 90°). Each sticker is a fixed-size pre-flipped PNG, so there
+     is no CSS layout to reflow, grow, or rotate — it prints exactly as drawn. */
   @page { size: 38mm auto; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
@@ -79,68 +159,25 @@ function buildPopupHtml(stickersHtml: string): string {
     border: none; border-radius: 6px; font-size: 11pt; cursor: pointer;
   }
   .content { margin-top: 44px; }
-  .sticker {
+  img.sticker {
+    display: block;
     width: 38mm;
     height: 25mm;
-    padding: 0 1.5mm;            /* horizontal breathing room only */
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;     /* center the stack vertically */
-    gap: 0.5mm;
-    text-align: center;
-    /* Printer prints 180° flipped — rotate content back so it reads upright.
-       Content is ~20mm tall, centered in the 25mm label, leaving ~2.5mm clear
-       at the top and bottom so the name never lands in the top-edge dead-zone. */
-    transform: rotate(180deg);
     break-after: page;
     page-break-after: always;
   }
-  /* No trailing page-break on the final sticker — avoids ejecting a blank label */
-  .sticker:last-child { break-after: auto; page-break-after: auto; }
-  .name {
-    font-size: 6.5pt;
-    font-weight: bold;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-    line-height: 1.1;
-    flex-shrink: 0;
-  }
-  /* FIXED height so the barcode can't grow and push the page past one label */
-  .svg-wrap {
-    width: 100%;
-    height: 11mm;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-  }
-  .svg-wrap svg { display: block; width: 100% !important; height: 100% !important; }
-  .price {
-    font-size: 7.5pt; font-weight: bold; line-height: 1.1;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    width: 100%; flex-shrink: 0;
-  }
-  .meta {
-    font-size: 5.5pt; color: #333; line-height: 1.1;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    width: 100%; flex-shrink: 0;
-  }
+  img.sticker:last-child { break-after: auto; page-break-after: auto; }
   @media print { .toolbar { display: none !important; } .content { margin-top: 0 !important; } }
 </style>
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v8 (auto+center+flip)</span></span>
-  <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v9 (image)</span></span>
+  <span class="tip">In print dialog: set Margins to "None"</span>
   <button onclick="window.print()">Print</button>
 </div>
 <div class="content">
-${stickersHtml}
+${imgsHtml}
 </div>
 </body>
 </html>`;
@@ -218,41 +255,38 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
   const previewBatch = batches?.find(b => selectedBatchIds.has(b.id));
 
   function handlePrint() {
-    const serializer = new XMLSerializer();
-    let stickersHtml = '';
+    const specs: StickerSpec[] = [];
 
     if (tab === 'product' || !hasVariants) {
-      const svgEl = productSvgRef.current;
-      if (!svgEl) return;
-      const svgStr = serializer.serializeToString(svgEl);
-
       if (batches && batches.length > 0) {
-        const selected = batches.filter(b => selectedBatchIds.has(b.id));
-        stickersHtml = selected.map(b =>
-          buildStickerHtml(svgStr, productName, b.sellingPrice, b.supplierName, b.date, b.encodedCost)
-        ).join('');
+        batches.filter(b => selectedBatchIds.has(b.id)).forEach(b =>
+          specs.push({ value: sku, label: productName, price: b.sellingPrice, metaText: metaLine(b.supplierName, b.date, b.encodedCost) })
+        );
       } else {
-        stickersHtml = buildStickerHtml(svgStr, productName, price, supplierName, date, encodedCost);
+        specs.push({ value: sku, label: productName, price, metaText: metaLine(supplierName, date, encodedCost) });
       }
     } else {
-      stickersHtml = (variants ?? []).flatMap(v => {
-        const svgEl = variantSvgsRef.current.get(v.sku);
-        if (!svgEl) return [];
-        const svgStr = serializer.serializeToString(svgEl);
-
+      (variants ?? []).forEach(v => {
         if (v.batches && v.batches.length > 0) {
           const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
-          return v.batches
-            .filter(b => vSelected.has(b.id))
-            .map(b => buildStickerHtml(svgStr, `${productName} — ${v.label}`, b.sellingPrice, b.supplierName, b.date, b.encodedCost));
+          v.batches.filter(b => vSelected.has(b.id)).forEach(b =>
+            specs.push({ value: v.sku, label: `${productName} — ${v.label}`, price: b.sellingPrice, metaText: metaLine(b.supplierName, b.date, b.encodedCost) })
+          );
+        } else {
+          specs.push({ value: v.sku, label: `${productName} — ${v.label}`, price: v.price, metaText: metaLine(v.supplierName, v.date, v.encodedCost) });
         }
-        return [buildStickerHtml(svgStr, `${productName} — ${v.label}`, v.price, v.supplierName, v.date, v.encodedCost)];
-      }).join('');
+      });
     }
+
+    if (specs.length === 0) { alert('No stickers selected to print.'); return; }
+
+    const imgsHtml = specs
+      .map(s => `<img class="sticker" src="${renderStickerDataURL(s)}" />`)
+      .join('');
 
     const popup = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,menubar=no,toolbar=no,location=no,status=no');
     if (!popup) { alert('Please allow popups for this site to enable printing.'); return; }
-    popup.document.write(buildPopupHtml(stickersHtml));
+    popup.document.write(buildPopupHtml(imgsHtml));
     popup.document.close();
   }
 
