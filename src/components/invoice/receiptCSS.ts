@@ -196,7 +196,7 @@ export const RECEIPT_PRINT_JS = `
     var style = document.createElement('style');
     style.id = 'page-style';
     // 80mm = XPrinter paper width; 'auto' height lets content determine length
-    style.textContent = '@page { size: 80mm auto; margin: 0; }';
+    style.textContent = '@page { size: 80mm auto portrait; margin: 0; }';
     document.head.appendChild(style);
   })();
 
