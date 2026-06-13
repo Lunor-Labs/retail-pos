@@ -59,16 +59,17 @@ function buildPopupHtml(stickersHtml: string): string {
 <head>
 <meta charset="utf-8">
 <style>
-  @page { size: 38mm 25mm; margin: 0; }
+  @page { size: 38mm 25mm landscape; margin: 0; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
+  html, body { margin: 0; padding: 0; background: white; font-family: Arial, sans-serif; }
   .toolbar {
-    position: fixed; top: 0; left: 0; right: 0;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
     padding: 8px 12px;
     background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; gap: 10px;
   }
-  .toolbar span { font-size: 11pt; font-weight: 600; color: #1e293b; }
+  .toolbar .title { font-size: 11pt; font-weight: 600; color: #1e293b; }
+  .toolbar .tip { font-size: 8pt; color: #64748b; flex: 1; }
   .toolbar button {
     padding: 6px 18px; background: #0f172a; color: white;
     border: none; border-radius: 6px; font-size: 11pt; cursor: pointer;
@@ -84,16 +85,18 @@ function buildPopupHtml(stickersHtml: string): string {
     align-items: center;
     justify-content: space-between;
     text-align: center;
+    break-after: page;
     page-break-after: always;
   }
   .name {
-    font-size: 7pt;
+    font-size: 6.5pt;
     font-weight: bold;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     width: 100%;
     line-height: 1.1;
+    flex-shrink: 0;
   }
   .svg-wrap {
     flex: 1;
@@ -103,17 +106,25 @@ function buildPopupHtml(stickersHtml: string): string {
     justify-content: center;
     overflow: hidden;
     min-height: 0;
-    padding: 0.3mm 0;
   }
-  .svg-wrap svg { width: 100% !important; height: auto !important; max-height: 100%; }
-  .price { font-size: 8pt; font-weight: bold; line-height: 1.1; }
-  .meta { font-size: 6pt; color: #333; line-height: 1.1; }
-  @media print { .toolbar { display: none !important; } .content { margin-top: 0; } }
+  .svg-wrap svg { display: block; width: 100% !important; height: auto !important; max-height: 100%; }
+  .price {
+    font-size: 7.5pt; font-weight: bold; line-height: 1.1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    width: 100%; flex-shrink: 0;
+  }
+  .meta {
+    font-size: 5.5pt; color: #333; line-height: 1.1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    width: 100%; flex-shrink: 0;
+  }
+  @media print { .toolbar { display: none !important; } .content { margin-top: 0 !important; } }
 </style>
 </head>
 <body>
 <div class="toolbar">
-  <span>Barcode Stickers</span>
+  <span class="title">Barcode Stickers</span>
+  <span class="tip">In print dialog: set Margins to "None" for correct label alignment</span>
   <button onclick="window.print()">Print</button>
 </div>
 <div class="content">
@@ -138,10 +149,11 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date, o
         JsBarcode(svgRef.current, value, {
           format: 'CODE128',
           width: 1.5,
-          height: 40,
+          height: 26,
           displayValue: true,
-          fontSize: 11,
-          margin: 5,
+          fontSize: 9,
+          margin: 2,
+          textMargin: 1,
         });
         callbackRef.current?.(svgRef.current);
       } catch (e) {
