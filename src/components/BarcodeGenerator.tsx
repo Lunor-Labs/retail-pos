@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { Modal } from './ui';
-import { printLabels } from '../lib/qzPrint';
 
 export interface BarcodeBatch {
   id: string;
@@ -173,7 +172,7 @@ function buildPopupHtml(imgsHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v10 (browser fallback)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v9 (image)</span></span>
   <span class="tip">In print dialog: set Margins to "None"</span>
   <button onclick="window.print()">Print</button>
 </div>
@@ -237,7 +236,6 @@ function SingleBarcode({ value, label, price, encodedCost, supplierName, date, o
 export function BarcodeGenerator({ productName, sku, price, encodedCost, supplierName, date, variants, batches, onClose }: BarcodeGeneratorProps) {
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
-  const [printing, setPrinting] = useState(false);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(
     () => new Set(batches?.map(b => b.id) ?? [])
   );
@@ -256,7 +254,7 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
 
   const previewBatch = batches?.find(b => selectedBatchIds.has(b.id));
 
-  function buildSpecs(): StickerSpec[] {
+  function handlePrint() {
     const specs: StickerSpec[] = [];
 
     if (tab === 'product' || !hasVariants) {
@@ -279,37 +277,17 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
         }
       });
     }
-    return specs;
-  }
 
-  /** Fallback when QZ Tray is unreachable: open the browser print popup (v9 path). */
-  function browserPrint(specs: StickerSpec[]) {
-    const imgsHtml = specs.map(s => `<img class="sticker" src="${renderStickerDataURL(s)}" />`).join('');
+    if (specs.length === 0) { alert('No stickers selected to print.'); return; }
+
+    const imgsHtml = specs
+      .map(s => `<img class="sticker" src="${renderStickerDataURL(s)}" />`)
+      .join('');
+
     const popup = window.open('', '_blank', 'width=400,height=600,scrollbars=yes,menubar=no,toolbar=no,location=no,status=no');
     if (!popup) { alert('Please allow popups for this site to enable printing.'); return; }
     popup.document.write(buildPopupHtml(imgsHtml));
     popup.document.close();
-  }
-
-  async function handlePrint() {
-    const specs = buildSpecs();
-    if (specs.length === 0) { alert('No stickers selected to print.'); return; }
-
-    setPrinting(true);
-    try {
-      // Primary path: send native TSPL straight to the XP-365B via QZ Tray.
-      await printLabels(specs);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const useBrowser = window.confirm(
-        `Couldn't reach QZ Tray.\n\n${msg}\n\n` +
-        `Make sure QZ Tray is installed and running on this PC (download at qz.io).\n\n` +
-        `Click OK to print through the browser instead (remember to set Margins to "None"), or Cancel to stop.`,
-      );
-      if (useBrowser) browserPrint(specs);
-    } finally {
-      setPrinting(false);
-    }
   }
 
   function batchRow(b: BarcodeBatch, checked: boolean, onChange: (checked: boolean) => void, showSupplier: boolean) {
@@ -356,11 +334,10 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           )}
           <button
             onClick={handlePrint}
-            disabled={printing}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition disabled:opacity-60"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
           >
             <Printer className="w-4 h-4" />
-            {printing ? 'Printing…' : 'Print'}
+            Print
           </button>
         </div>
 
