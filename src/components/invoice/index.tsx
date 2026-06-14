@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { X, Printer, Share2 } from 'lucide-react';
 
 import { InvoiceProps } from './types';
 import { buildReceiptHTML } from './receiptHTML';
 import { InvoicePreview } from './InvoicePreview';
-import { shareOnWhatsApp, printReceipt } from './invoiceActions';
+import { shareOnWhatsApp, openPrintPopup } from './invoiceActions';
 
 /**
  * Invoice modal — toolbar + on-screen preview.
@@ -20,16 +20,8 @@ import { shareOnWhatsApp, printReceipt } from './invoiceActions';
 export function Invoice({ invoiceData, onClose }: InvoiceProps) {
     const [showDiscount, setShowDiscount] = useState(false);
 
-    // Auto-print to the XP-80C once when the invoice opens (after a sale).
-    const autoPrinted = useRef(false);
-    useEffect(() => {
-        if (autoPrinted.current) return;
-        autoPrinted.current = true;
-        printReceipt(invoiceData, false, buildReceiptHTML);
-    }, [invoiceData]);
-
     const handlePrint = () =>
-        printReceipt(invoiceData, showDiscount, buildReceiptHTML);
+        openPrintPopup(invoiceData, showDiscount, buildReceiptHTML);
 
     const handleWhatsApp = () =>
         shareOnWhatsApp(invoiceData, showDiscount);
