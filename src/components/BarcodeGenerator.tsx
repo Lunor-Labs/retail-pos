@@ -42,10 +42,40 @@ interface StickerSpec {
   metaText?: string;    // "supplier · date · cost"
 }
 
-// Render canvas resolution: 12 px/mm ≈ 305 dpi (crisp on a 203 dpi thermal head)
-const PX_PER_MM = 12;
-const LABEL_W = Math.round(38 * PX_PER_MM); // 456
-const LABEL_H = Math.round(25 * PX_PER_MM); // 300
+// Render at the printer's NATIVE resolution so the bitmap maps 1:1 to printer
+// dots. The XP-365B head is 203 dpi = 8 dots/mm. Rendering at a higher density
+// (e.g. 12 px/mm) forced the driver to resample 456→304 px — a messy 0.667×
+// downscale that blurred every thin stroke and barcode bar. At 8 px/mm there is
+// no resampling, so small text and bars stay sharp.
+const PX_PER_MM = 8;
+const LABEL_W = Math.round(38 * PX_PER_MM); // 304
+const LABEL_H = Math.round(25 * PX_PER_MM); // 200
+/** millimetres → device pixels at the native head resolution. */
+const mm = (v: number) => Math.round(v * PX_PER_MM);
+
+// Luminance cutoff for the 1-bit pass. A thermal head prints each dot full-black
+// or nothing — it cannot reproduce the gray anti-alias pixels canvas draws around
+// small text, so those either smear black or drop to white and the stroke falls
+// apart. We snap every pixel to pure black/white below; a cutoff slightly above
+// mid-gray (160/255) keeps thin strokes solid without fattening barcode bars.
+const MONO_THRESHOLD = 160;
+
+/**
+ * Snap every pixel to pure black or white. Thermal heads are 1-bit devices —
+ * resolving the anti-alias grays here is the single biggest win for small-text
+ * legibility, and it also cleans up the barcode's resampled edges.
+ */
+function thresholdToMonochrome(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const v = lum < MONO_THRESHOLD ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
 
 /** Draw text centered at (cx, y), truncating with an ellipsis if wider than maxW. */
 function fillTruncated(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, maxW: number) {
@@ -57,34 +87,37 @@ function fillTruncated(ctx: CanvasRenderingContext2D, text: string, cx: number, 
 
 /** Lay out an upright sticker (name → barcode → price → meta), vertically centered. */
 function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
-  const padX = Math.round(1.5 * PX_PER_MM);
+  const padX = mm(1.5);
   const maxW = LABEL_W - padX * 2;
   const cx = LABEL_W / 2;
   ctx.fillStyle = '#000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Barcode → its own canvas, then scaled to fit
+  // Barcode → its own canvas, then scaled to fit. The 1-bit pass later cleans up
+  // any edge softening introduced by this scale.
   let bc: HTMLCanvasElement | null = document.createElement('canvas');
   try {
     JsBarcode(bc, spec.value, {
       format: 'CODE128', width: 2, height: 70,
-      displayValue: true, fontSize: 16, textMargin: 2, margin: 10,
+      displayValue: true, fontSize: 20, textMargin: 2, margin: 8,
     });
   } catch { bc = null; }
   let bcW = 0, bcH = 0;
   if (bc && bc.width > 0) {
-    const scale = Math.min(maxW / bc.width, 130 / bc.height);
+    const scale = Math.min(maxW / bc.width, mm(11) / bc.height);
     bcW = bc.width * scale;
     bcH = bc.height * scale;
   }
 
-  // Build the vertical stack and center it
-  const gap = 8;
-  const blocks: { kind: string; h: number }[] = [{ kind: 'name', h: 26 }];
+  // Build the vertical stack and center it. Heights are in mm so the layout holds
+  // at any render density; small text (meta) is bumped so each stroke clears the
+  // ~2-dot floor a thermal head needs to reproduce it.
+  const gap = mm(0.7);
+  const blocks: { kind: string; h: number }[] = [{ kind: 'name', h: mm(3.1) }];
   if (bcH > 0) blocks.push({ kind: 'bc', h: bcH });
-  if (spec.price !== undefined) blocks.push({ kind: 'price', h: 36 });
-  if (spec.metaText) blocks.push({ kind: 'meta', h: 22 });
+  if (spec.price !== undefined) blocks.push({ kind: 'price', h: mm(3.2) });
+  if (spec.metaText) blocks.push({ kind: 'meta', h: mm(2.3) });
   const total = blocks.reduce((s, b) => s + b.h, 0) + gap * (blocks.length - 1);
   let y = (LABEL_H - total) / 2;
 
@@ -92,18 +125,18 @@ function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
     const mid = y + b.h / 2;
     if (b.kind === 'name') {
       ctx.fillStyle = '#000';
-      ctx.font = 'bold 22px Arial';
+      ctx.font = `bold ${mm(2.7)}px Arial`;
       fillTruncated(ctx, spec.label, cx, mid, maxW);
     } else if (b.kind === 'bc' && bc) {
       ctx.imageSmoothingEnabled = false; // keep bars sharp when scaled
       ctx.drawImage(bc, cx - bcW / 2, y, bcW, bcH);
     } else if (b.kind === 'price') {
       ctx.fillStyle = '#000';
-      ctx.font = 'bold 30px Arial';
+      ctx.font = `bold ${mm(2.8)}px Arial`;
       ctx.fillText(`LKR ${spec.price!.toFixed(2)}`, cx, mid);
     } else if (b.kind === 'meta') {
-      ctx.fillStyle = '#333';
-      ctx.font = '17px Arial';
+      ctx.fillStyle = '#000'; // pure black — a 1-bit head can't print the old #333 gray
+      ctx.font = `bold ${mm(1.9)}px Arial`;
       fillTruncated(ctx, spec.metaText!, cx, mid, maxW);
     }
     y += b.h + gap;
@@ -118,17 +151,37 @@ function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
  * A fixed-size bitmap can't reflow, grow, or spin — it prints exactly as drawn.
  * The printer prints 180° flipped, so we bake the flip into the bitmap.
  */
+// Render text/vectors at SS× the head resolution, then box-downscale to native.
+// Rasterizing tiny bold Arial straight at 8 px/mm relies on the font's low-res
+// hinting and leaves strokes patchy; capturing the glyph at 3× and averaging down
+// places each native dot by true ink coverage, so small strokes stay whole.
+const SUPERSAMPLE = 3;
+
 function renderStickerDataURL(spec: StickerSpec): string {
+  // 1. Draw the upright, pre-flipped sticker at SS× resolution. scale() lets
+  //    drawSticker keep working in native (logical) coordinates.
+  const hi = document.createElement('canvas');
+  hi.width = LABEL_W * SUPERSAMPLE;
+  hi.height = LABEL_H * SUPERSAMPLE;
+  const hctx = hi.getContext('2d')!;
+  hctx.scale(SUPERSAMPLE, SUPERSAMPLE);
+  hctx.fillStyle = '#fff';
+  hctx.fillRect(0, 0, LABEL_W, LABEL_H);
+  // Bake the 180° flip: draw upright content into a rotated context.
+  hctx.translate(LABEL_W, LABEL_H);
+  hctx.rotate(Math.PI);
+  drawSticker(hctx, spec);
+
+  // 2. Downscale to the native dot grid, then snap to pure black/white for the
+  //    1-bit head. The high-quality downscale + threshold is what sharpens text.
   const canvas = document.createElement('canvas');
   canvas.width = LABEL_W;
   canvas.height = LABEL_H;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, LABEL_W, LABEL_H);
-  // Bake the 180° flip: draw upright content into a rotated context.
-  ctx.translate(LABEL_W, LABEL_H);
-  ctx.rotate(Math.PI);
-  drawSticker(ctx, spec);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(hi, 0, 0, hi.width, hi.height, 0, 0, LABEL_W, LABEL_H);
+  thresholdToMonochrome(ctx, LABEL_W, LABEL_H);
   return canvas.toDataURL('image/png');
 }
 
@@ -172,7 +225,7 @@ function buildPopupHtml(imgsHtml: string): string {
 </head>
 <body>
 <div class="toolbar">
-  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v9 (image)</span></span>
+  <span class="title">Barcode Stickers <span style="font-size:8pt;color:#16a34a;font-weight:600;">v11 (sharp · 3× SS)</span></span>
   <span class="tip">In print dialog: set Margins to "None"</span>
   <button onclick="window.print()">Print</button>
 </div>
