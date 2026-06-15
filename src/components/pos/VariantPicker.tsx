@@ -5,6 +5,8 @@ import { Product, ProductVariant, ProductBatch, VariantWithStock } from '../../t
 interface VariantPickerProps {
   product: Product;
   variants: VariantWithStock[];
+  /** When set (e.g. a scan pinpointed one variant), open jumped straight to its batch step. */
+  initialVariantId?: string | null;
   onSelect: (variant: ProductVariant, batch: ProductBatch, quantity: number) => void;
   onClose: () => void;
 }
@@ -13,9 +15,16 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export function VariantPicker({ product, variants, onSelect, onClose }: VariantPickerProps) {
-  const [selectedVariant, setSelectedVariant] = useState<VariantWithStock | null>(null);
-  const [selectedBatch, setSelectedBatch] = useState<ProductBatch | null>(null);
+export function VariantPicker({ product, variants, initialVariantId, onSelect, onClose }: VariantPickerProps) {
+  // If a scan pinpointed a variant, pre-select it (and its batch if there's only
+  // one) so the picker opens on the batch/qty step instead of the variant list.
+  const preselected = initialVariantId ? variants.find(v => v.id === initialVariantId) ?? null : null;
+  const preselectedBatches = preselected
+    ? preselected.batches.filter(b => b.current_quantity > 0)
+    : [];
+
+  const [selectedVariant, setSelectedVariant] = useState<VariantWithStock | null>(preselected);
+  const [selectedBatch, setSelectedBatch] = useState<ProductBatch | null>(preselectedBatches.length === 1 ? preselectedBatches[0] : null);
   const [quantity, setQuantity] = useState<number>(1);
 
   const isDecimal = product.unit === 'yard' || product.unit === 'meter';

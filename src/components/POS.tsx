@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType } from '../hooks/useProducts';
-import { ProductWithBatches, Customer, ReferralAgent, UserProfile, VariantWithStock, ProductVariant, ProductBatch } from '../types';
+import { Product, ProductWithBatches, Customer, ReferralAgent, UserProfile, VariantWithStock, ProductVariant, ProductBatch } from '../types';
 import { Invoice } from './Invoice';
 import { ProductGrid } from './pos/ProductGrid';
 import { CartItemsList } from './pos/CartItemsList';
@@ -135,6 +135,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // Variant picker state
   const [variantPickerProduct, setVariantPickerProduct] = useState<ProductWithBatches | null>(null);
   const [variantPickerVariants, setVariantPickerVariants] = useState<VariantWithStock[]>([]);
+  // When a scan identifies one specific variant, the picker opens jumped to that
+  // variant's batch step instead of the variant list.
+  const [variantPickerInitialId, setVariantPickerInitialId] = useState<string | null>(null);
 
   // Loyalty state
   const [loyaltyPointsToRedeem, setLoyaltyPointsToRedeem] = useState(0);
@@ -320,6 +323,17 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       playScannerBeep();
       showToast(`Scanned: ${productData.name}`, 'success');
 
+      // If this product has variants and the scanned code is one variant's OWN
+      // code (its sku or barcode), the scan already pinpoints the variant — add
+      // it directly instead of forcing the picker open. A bare product-level
+      // code still opens the picker so the cashier chooses the variant.
+      const variants = await variantService.getVariantsForProduct(productData.id).catch(() => [] as VariantWithStock[]);
+      const scannedVariant = variants.find(v => v.sku === barcode || v.barcode === barcode);
+      if (scannedVariant) {
+        addScannedVariant(productData, scannedVariant);
+        return;
+      }
+
       // Fetch batches for this product
       const batches = await productService.getProductBatches(productData.id);
 
@@ -336,7 +350,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         total_stock: totalStock
       };
 
-      handleProductSelect(productWithBatches);
+      handleProductSelect(productWithBatches, variants);
 
     } catch (err) {
       console.error(err);
@@ -344,9 +358,32 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     }
   }
 
-  async function handleProductSelect(product: ProductWithBatches) {
+  // Add a variant that a scan uniquely identified. One active batch → straight to
+  // cart; multiple → open the picker jumped to that variant's batch step.
+  function addScannedVariant(productData: Product, variant: VariantWithStock) {
+    const activeBatches = variant.batches
+      .filter(b => b.current_quantity > 0)
+      .sort((a, b) => new Date(a.received_date).getTime() - new Date(b.received_date).getTime());
+
+    if (activeBatches.length === 0) {
+      showToast('No stock available for this variant', 'warning');
+      return;
+    }
+
+    if (activeBatches.length === 1) {
+      addToCartFromVariant(variant, activeBatches[0], 1, productData);
+      return;
+    }
+
+    const productWithBatches: ProductWithBatches = { ...productData, batches: [], total_stock: variant.total_stock, base_price: activeBatches[0].selling_price };
+    setVariantPickerProduct(productWithBatches);
+    setVariantPickerVariants([variant]);
+    setVariantPickerInitialId(variant.id);
+  }
+
+  async function handleProductSelect(product: ProductWithBatches, preloadedVariants?: VariantWithStock[]) {
     try {
-      const variants = await variantService.getVariantsForProduct(product.id);
+      const variants = preloadedVariants ?? await variantService.getVariantsForProduct(product.id);
       if (variants.length > 0) {
         setVariantPickerProduct(product);
         setVariantPickerVariants(variants);
@@ -368,8 +405,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     }
   }
 
-  function addToCartFromVariant(variant: ProductVariant, batch: ProductBatch, quantity: number) {
-    const product = variantPickerProduct!;
+  function addToCartFromVariant(variant: ProductVariant, batch: ProductBatch, quantity: number, productArg?: Product) {
+    const product = productArg ?? variantPickerProduct!;
     const existingIdx = cart.findIndex(
       item => item.variant?.id === variant.id && item.batch.id === batch.id
     );
@@ -387,6 +424,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     }
     setVariantPickerProduct(null);
     setVariantPickerVariants([]);
+    setVariantPickerInitialId(null);
   }
 
   function addToCart(product: ProductWithBatches, batch: any, quantity: number) {
@@ -2032,8 +2070,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         <VariantPicker
           product={variantPickerProduct}
           variants={variantPickerVariants}
+          initialVariantId={variantPickerInitialId}
           onSelect={addToCartFromVariant}
-          onClose={() => { setVariantPickerProduct(null); setVariantPickerVariants([]); }}
+          onClose={() => { setVariantPickerProduct(null); setVariantPickerVariants([]); setVariantPickerInitialId(null); }}
         />
       )}
     </>
