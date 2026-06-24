@@ -397,7 +397,6 @@ export function AddProductPage({
                   defaultSupplierId={pricing.supplier_id}
                   suppliers={suppliers}
                   mode={mode}
-                  parentSku={info.sku}
                   isOnly={rows.length === 1}
                   showPricing={mode === 'add'}
                   sizeOptions={refSizes}
