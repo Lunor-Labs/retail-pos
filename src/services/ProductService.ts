@@ -1,6 +1,7 @@
 import { ProductRepository } from '../repositories/ProductRepository';
 import { Product, ProductWithStock, ProductWithVariants } from '../types';
 import { logger } from '../lib/logger';
+import { nextProductSku } from '../utils/skuUtils';
 
 export interface VariantInput {
   size: string | null;
@@ -336,34 +337,19 @@ export class ProductService {
     }
 
     /**
-     * Generate next SKU
+     * Generate the next numeric product base SKU (6 digits, 100000+).
+     * Brand/category are no longer encoded in the SKU — they live in their own
+     * product fields. Args kept for call-site compatibility; intentionally unused.
      */
-    async generateNextSku(brand: string = '', category: string = ''): Promise<string> {
+    async generateNextSku(_brand: string = '', _category: string = ''): Promise<string> {
         try {
-            const alpha = (s: string) => s.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3);
-            const brandPart = alpha(brand);
-            const catPart = alpha(category);
-
-            const prefix = [brandPart, catPart].filter(Boolean).join('-') || 'P';
-
             const client = (this.productRepo as any).adapter.getClient();
-            const { data } = await client
-                .from('products')
-                .select('sku')
-                .like('sku', `${prefix}-%`);
-
-            let maxNum = 0;
-            const pattern = new RegExp(`^${prefix.replace(/-/g, '\\-')}-(\\d{3})$`);
-            for (const row of (data as any[]) || []) {
-                const m = row.sku.match(pattern);
-                if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
-            }
-
-            const next = (maxNum + 1).toString().padStart(3, '0');
-            return `${prefix}-${next}`;
+            const { data } = await client.from('products').select('sku');
+            const skus = ((data as { sku: string }[]) || []).map(r => r.sku);
+            return nextProductSku(skus);
         } catch (error) {
             logger.error('Failed to generate SKU', error as Error);
-            return 'P-' + Date.now().toString().slice(-3).padStart(3, '0');
+            return '100000';
         }
     }
 
