@@ -290,7 +290,7 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
   const hasVariants = variants && variants.length > 1;
   const [tab, setTab] = useState<'product' | 'variants'>('product');
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(
-    () => new Set(batches?.map(b => b.id) ?? [])
+    () => new Set<string>()
   );
   const [selectedVariantBatchIds, setSelectedVariantBatchIds] = useState<Map<string, Set<string>>>(
     () => new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
