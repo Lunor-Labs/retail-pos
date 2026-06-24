@@ -14,15 +14,15 @@ export interface StickerSpec {
 /** Join the non-empty parts of a sticker's meta line with " · ". */
 export const metaLine = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ');
 
-/** Per-variant print selection: how many copies, and which batch's price to use. */
+/** Per-variant print selection: whether to print it, and which batch's price to use. */
 export interface VariantPrintEntry {
-  copies: number;
+  selected: boolean;
   batchId: string;
 }
 
 /**
- * Expand a per-variant selection into a flat list of sticker specs.
- * A variant prints only when copies > 0; its spec is pushed `copies` times.
+ * Map a per-variant selection to a flat list of sticker specs — one spec per
+ * selected variant (the number of copies is set later in the printer dialog).
  * The chosen batch (by id) sets price/date/cost; with no batch the variant-level
  * price is used.
  */
@@ -34,13 +34,12 @@ export function buildVariantSpecs(
   const specs: StickerSpec[] = [];
   for (const v of variants) {
     const entry = state.get(v.sku);
-    const copies = entry?.copies ?? 0;
-    if (copies <= 0) continue;
-    const batch = (v.batches ?? []).find(b => b.id === entry?.batchId);
+    if (!entry?.selected) continue;
+    const batch = (v.batches ?? []).find(b => b.id === entry.batchId);
     const spec: StickerSpec = batch
       ? { value: v.sku, label: `${productName} — ${v.label}`, price: batch.sellingPrice, metaText: metaLine(batch.supplierName, batch.date, batch.encodedCost) }
       : { value: v.sku, label: `${productName} — ${v.label}`, price: v.price, metaText: metaLine(v.supplierName, v.date, v.encodedCost) };
-    for (let i = 0; i < copies; i++) specs.push(spec);
+    specs.push(spec);
   }
   return specs;
 }
