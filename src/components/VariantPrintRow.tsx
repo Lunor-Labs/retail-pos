@@ -2,28 +2,24 @@ import type { BarcodeVariant } from './BarcodeGenerator';
 
 interface VariantPrintRowProps {
   variant: BarcodeVariant;
-  copies: number;
+  selected: boolean;
   batchId: string;
-  onCopies: (copies: number) => void;
+  onToggle: (selected: boolean) => void;
   onBatch: (batchId: string) => void;
 }
 
-/** Clamp arbitrary input to a non-negative integer (blank/NaN/negative -> 0). */
-function clampCopies(n: number): number {
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-}
-
-/** One selectable row: checkbox + label + (batch picker if >1 batch) + copies stepper. */
-export function VariantPrintRow({ variant, copies, batchId, onCopies, onBatch }: VariantPrintRowProps) {
+/** One selectable row: checkbox + label + (batch picker if >1 batch) + selected-batch stock. */
+export function VariantPrintRow({ variant, selected, batchId, onToggle, onBatch }: VariantPrintRowProps) {
   const batches = variant.batches ?? [];
-  const selected = copies > 0;
+  const activeBatch = batches.find(b => b.id === batchId) ?? batches[0];
+  const stock = activeBatch?.currentStock;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 border border-slate-200 rounded-lg">
       <input
         type="checkbox"
         checked={selected}
-        onChange={e => onCopies(e.target.checked ? 1 : 0)}
+        onChange={e => onToggle(e.target.checked)}
         className="w-4 h-4 rounded shrink-0"
       />
       <span className="text-sm font-medium text-slate-800 flex-1 truncate">{variant.label}</span>
@@ -46,25 +42,11 @@ export function VariantPrintRow({ variant, copies, batchId, onCopies, onBatch }:
         </span>
       ) : null}
 
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          type="button"
-          onClick={() => onCopies(clampCopies(copies - 1))}
-          className="w-7 h-7 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
-        >–</button>
-        <input
-          type="number"
-          min={0}
-          value={copies}
-          onChange={e => onCopies(clampCopies(parseInt(e.target.value, 10)))}
-          className="w-12 h-7 text-center text-sm border border-slate-300 rounded"
-        />
-        <button
-          type="button"
-          onClick={() => onCopies(clampCopies(copies + 1))}
-          className="w-7 h-7 rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
-        >+</button>
-      </div>
+      <span className="text-xs font-semibold whitespace-nowrap shrink-0 w-20 text-right">
+        {stock !== undefined
+          ? <span className={stock > 0 ? 'text-emerald-600' : 'text-rose-500'}>{stock} in stock</span>
+          : <span className="text-slate-400">—</span>}
+      </span>
     </div>
   );
 }

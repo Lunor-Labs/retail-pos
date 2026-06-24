@@ -286,7 +286,7 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
     () => new Set<string>()
   );
   const makeVariantState = () =>
-    new Map<string, VariantPrintEntry>((variants ?? []).map(v => [v.sku, { copies: 0, batchId: v.batches?.[0]?.id ?? '' }]));
+    new Map<string, VariantPrintEntry>((variants ?? []).map(v => [v.sku, { selected: false, batchId: v.batches?.[0]?.id ?? '' }]));
   const [variantPrint, setVariantPrint] = useState<Map<string, VariantPrintEntry>>(makeVariantState);
 
   useEffect(() => {
@@ -296,12 +296,12 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
 
   const productSvgRef = useRef<SVGSVGElement | null>(null);
 
-  const variantTotal = Array.from(variantPrint.values()).reduce((sum, e) => sum + e.copies, 0);
+  const variantTotal = Array.from(variantPrint.values()).filter(e => e.selected).length;
 
   const updateVariant = (sku: string, patch: Partial<VariantPrintEntry>) =>
     setVariantPrint(prev => {
       const next = new Map(prev);
-      const cur = next.get(sku) ?? { copies: 0, batchId: '' };
+      const cur = next.get(sku) ?? { selected: false, batchId: '' };
       next.set(sku, { ...cur, ...patch });
       return next;
     });
@@ -418,14 +418,14 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {variants!.map(v => {
-              const entry = variantPrint.get(v.sku) ?? { copies: 0, batchId: v.batches?.[0]?.id ?? '' };
+              const entry = variantPrint.get(v.sku) ?? { selected: false, batchId: v.batches?.[0]?.id ?? '' };
               return (
                 <VariantPrintRow
                   key={v.sku}
                   variant={v}
-                  copies={entry.copies}
+                  selected={entry.selected}
                   batchId={entry.batchId}
-                  onCopies={copies => updateVariant(v.sku, { copies })}
+                  onToggle={selected => updateVariant(v.sku, { selected })}
                   onBatch={batchId => updateVariant(v.sku, { batchId })}
                 />
               );
