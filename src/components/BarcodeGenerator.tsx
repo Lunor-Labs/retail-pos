@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import { Printer } from 'lucide-react';
 import { Modal } from './ui';
+import { StickerSpec, metaLine, buildVariantSpecs, VariantPrintEntry } from './barcodePrintSpecs';
+import { VariantPrintRow } from './VariantPrintRow';
 
 export interface BarcodeBatch {
   id: string;
@@ -33,13 +35,6 @@ interface BarcodeGeneratorProps {
   variants?: BarcodeVariant[];
   batches?: BarcodeBatch[];
   onClose: () => void;
-}
-
-interface StickerSpec {
-  value: string;        // barcode value (SKU)
-  label: string;        // product name line
-  price?: number;
-  metaText?: string;    // "supplier · date · cost"
 }
 
 // Render at the printer's NATIVE resolution so the bitmap maps 1:1 to printer
@@ -185,8 +180,6 @@ function renderStickerDataURL(spec: StickerSpec): string {
   return canvas.toDataURL('image/png');
 }
 
-const metaLine = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ');
-
 function buildPopupHtml(imgsHtml: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -292,18 +285,26 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(
     () => new Set<string>()
   );
-  const [selectedVariantBatchIds, setSelectedVariantBatchIds] = useState<Map<string, Set<string>>>(
-    () => new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
-  );
+  const makeVariantState = () =>
+    new Map<string, VariantPrintEntry>((variants ?? []).map(v => [v.sku, { copies: 0, batchId: v.batches?.[0]?.id ?? '' }]));
+  const [variantPrint, setVariantPrint] = useState<Map<string, VariantPrintEntry>>(makeVariantState);
 
   useEffect(() => {
-    setSelectedVariantBatchIds(
-      new Map(variants?.map(v => [v.sku, new Set(v.batches?.map(b => b.id) ?? [])]) ?? [])
-    );
+    setVariantPrint(makeVariantState());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variants]);
 
   const productSvgRef = useRef<SVGSVGElement | null>(null);
-  const variantSvgsRef = useRef<Map<string, SVGSVGElement>>(new Map());
+
+  const variantTotal = Array.from(variantPrint.values()).reduce((sum, e) => sum + e.copies, 0);
+
+  const updateVariant = (sku: string, patch: Partial<VariantPrintEntry>) =>
+    setVariantPrint(prev => {
+      const next = new Map(prev);
+      const cur = next.get(sku) ?? { copies: 0, batchId: '' };
+      next.set(sku, { ...cur, ...patch });
+      return next;
+    });
 
   const previewBatch = batches?.find(b => selectedBatchIds.has(b.id));
 
@@ -319,16 +320,7 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
         specs.push({ value: sku, label: productName, price, metaText: metaLine(supplierName, date, encodedCost) });
       }
     } else {
-      (variants ?? []).forEach(v => {
-        if (v.batches && v.batches.length > 0) {
-          const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
-          v.batches.filter(b => vSelected.has(b.id)).forEach(b =>
-            specs.push({ value: v.sku, label: `${productName} — ${v.label}`, price: b.sellingPrice, metaText: metaLine(b.supplierName, b.date, b.encodedCost) })
-          );
-        } else {
-          specs.push({ value: v.sku, label: `${productName} — ${v.label}`, price: v.price, metaText: metaLine(v.supplierName, v.date, v.encodedCost) });
-        }
-      });
+      specs.push(...buildVariantSpecs(variants ?? [], variantPrint, productName));
     }
 
     if (specs.length === 0) { alert('No stickers selected to print.'); return; }
@@ -387,10 +379,11 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
           )}
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition"
+            disabled={tab === 'variants' && hasVariants && variantTotal === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Printer className="w-4 h-4" />
-            Print
+            {tab === 'variants' && hasVariants && variantTotal > 0 ? `Print ${variantTotal} labels` : 'Print'}
           </button>
         </div>
 
@@ -423,47 +416,23 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
             onSvgReady={el => { productSvgRef.current = el; }}
           />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {variants!.map(v => {
-              const vBatches = v.batches ?? [];
-              const vSelected = selectedVariantBatchIds.get(v.sku) ?? new Set<string>();
-              const vPreviewBatch = vBatches.find(b => vSelected.has(b.id));
+              const entry = variantPrint.get(v.sku) ?? { copies: 0, batchId: v.batches?.[0]?.id ?? '' };
               return (
-                <div key={v.sku}>
-                  <SingleBarcode
-                    value={v.sku}
-                    label={`${productName} — ${v.label}`}
-                    price={vPreviewBatch ? vPreviewBatch.sellingPrice : v.price}
-                    encodedCost={vPreviewBatch ? vPreviewBatch.encodedCost : v.encodedCost}
-                    supplierName={vPreviewBatch ? vPreviewBatch.supplierName : v.supplierName}
-                    date={vPreviewBatch ? vPreviewBatch.date : v.date}
-                    onSvgReady={el => {
-                      if (el) variantSvgsRef.current.set(v.sku, el);
-                      else variantSvgsRef.current.delete(v.sku);
-                    }}
-                  />
-                  {vBatches.length > 1 && (
-                    <div className="mt-2 border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="px-3 py-1 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                        Batches
-                      </div>
-                      {vBatches.map(b => batchRow(
-                        b,
-                        vSelected.has(b.id),
-                        checked => setSelectedVariantBatchIds(prev => {
-                          const next = new Map(prev);
-                          const ids = new Set(next.get(v.sku) ?? []);
-                          if (checked) ids.add(b.id); else ids.delete(b.id);
-                          next.set(v.sku, ids);
-                          return next;
-                        }),
-                        false,
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <VariantPrintRow
+                  key={v.sku}
+                  variant={v}
+                  copies={entry.copies}
+                  batchId={entry.batchId}
+                  onCopies={copies => updateVariant(v.sku, { copies })}
+                  onBatch={batchId => updateVariant(v.sku, { batchId })}
+                />
               );
             })}
+            <div className="text-right text-sm font-semibold text-slate-700 mt-1">
+              Total: {variantTotal} {variantTotal === 1 ? 'label' : 'labels'}
+            </div>
           </div>
         )}
 
