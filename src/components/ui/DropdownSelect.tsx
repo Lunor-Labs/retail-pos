@@ -21,6 +21,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
   const [search, setSearch] = useState('');
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label ?? '';
   const showSearch = options.length >= searchThreshold;
@@ -40,7 +41,14 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      // The options panel renders as a position:fixed sibling OUTSIDE btnRef, so
+      // it must be checked too — otherwise a mousedown on an option counts as an
+      // "outside" click and closes (unmounts) the panel before the option's
+      // onClick/mouseup can fire, and the selection is silently lost.
+      const insideBtn = btnRef.current?.contains(target);
+      const insidePanel = panelRef.current?.contains(target);
+      if (!insideBtn && !insidePanel) {
         setOpen(false);
         setSearch('');
       }
@@ -96,7 +104,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
       {open && panelPos && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 299 }} onClick={() => { setOpen(false); setSearch(''); }} />
-          <div style={{
+          <div ref={panelRef} style={{
           position: 'fixed',
           top: panelPos.top,
           left: panelPos.left,
