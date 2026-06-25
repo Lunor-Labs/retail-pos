@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { ProductWithBatches } from '../../types';
 import { ProductImage } from '../ProductImage';
@@ -8,6 +8,8 @@ interface ProductGridProps {
   onAddToCart: (product: ProductWithBatches) => void;
   viewMode: 'grid' | 'list';
   isAdmin: boolean;
+  highlightedIndex?: number;
+  gridRef?: React.RefObject<HTMLDivElement>;
 }
 
 function StockChip({ stock }: { stock: number }) {
@@ -16,12 +18,18 @@ function StockChip({ stock }: { stock: number }) {
   return <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono',monospace", whiteSpace: 'nowrap' }}>{stock} left</span>;
 }
 
-export function ProductGrid({ products, onAddToCart, viewMode, isAdmin }: ProductGridProps) {
+export function ProductGrid({ products, onAddToCart, viewMode, isAdmin, highlightedIndex = -1, gridRef }: ProductGridProps) {
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+  const [hoveredIdx, setHoveredIdx] = useState(-1);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  if (products.length === 0) {
-    return null;
-  }
+  useEffect(() => {
+    if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+      itemRefs.current[highlightedIndex]!.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [highlightedIndex]);
+
+  if (products.length === 0) return null;
 
   if (viewMode === 'list') {
     return (
@@ -30,19 +38,26 @@ export function ProductGrid({ products, onAddToCart, viewMode, isAdmin }: Produc
           const totalStock = product.batches.reduce((s, b) => s + b.current_quantity, 0);
           const lowestPrice = product.batches.length > 0 ? Math.min(...product.batches.map(b => b.selling_price)) : 0;
           const isOut = totalStock === 0;
+          const isHighlighted = highlightedIndex === i;
+          const isHovered = hoveredIdx === i && !isOut;
 
           return (
             <button key={product.id}
+              ref={el => { itemRefs.current[i] = el; }}
               onClick={() => !isOut && onAddToCart(product)}
               disabled={isOut}
+              onMouseEnter={() => !isOut && setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(-1)}
               style={{
                 width: '100%', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12,
-                border: 0, borderBottom: i === products.length - 1 ? 'none' : '1px solid var(--line-2)',
-                background: 'transparent', textAlign: 'left', cursor: isOut ? 'not-allowed' : 'default',
+                border: 0,
+                borderBottom: i === products.length - 1 ? 'none' : '1px solid var(--line-2)',
+                borderLeft: isHighlighted ? '3px solid var(--accent)' : '3px solid transparent',
+                background: isHighlighted ? 'var(--accent-soft)' : isHovered ? 'var(--panel-2)' : 'transparent',
+                textAlign: 'left', cursor: isOut ? 'not-allowed' : 'default',
                 opacity: isOut ? 0.55 : 1,
+                outline: 'none',
               }}
-              onMouseEnter={(e) => { if (!isOut) e.currentTarget.style.background = 'var(--panel-2)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               <div style={{ width: 36, height: 44, borderRadius: 5, flexShrink: 0, overflow: 'hidden', background: 'var(--panel-2)' }}>
                 <ProductImage imageUrl={product.image_url} alt={product.name} size="sm" className="w-full h-full object-cover" />
@@ -73,33 +88,34 @@ export function ProductGrid({ products, onAddToCart, viewMode, isAdmin }: Produc
   // Grid view
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-        {products.map((product) => {
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
+        {products.map((product, i) => {
           const totalStock = product.batches.reduce((s, b) => s + b.current_quantity, 0);
           const lowestPrice = product.batches.length > 0 ? Math.min(...product.batches.map(b => b.selling_price)) : 0;
           const isOut = totalStock === 0;
+          const isHighlighted = highlightedIndex === i;
+          const isHovered = hoveredIdx === i && !isOut;
 
           return (
             <button key={product.id}
+              ref={el => { itemRefs.current[i] = el; }}
               onClick={() => !isOut && onAddToCart(product)}
               disabled={isOut}
+              onMouseEnter={() => !isOut && setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(-1)}
               style={{
-                background: 'var(--panel)', border: '1px solid var(--line)',
+                background: 'var(--panel)',
+                border: isHighlighted ? '2px solid var(--accent)' : '1px solid var(--line)',
                 borderRadius: 12, padding: 0, overflow: 'hidden', textAlign: 'left',
                 display: 'flex', flexDirection: 'column', cursor: isOut ? 'not-allowed' : 'default',
-                opacity: isOut ? 0.55 : 1, transition: 'all .12s ease',
-              }}
-              onMouseEnter={(e) => {
-                if (!isOut) {
-                  e.currentTarget.style.borderColor = 'var(--accent)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(20,22,26,0.08)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--line)';
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = 'none';
+                opacity: isOut ? 0.55 : 1, transition: 'border-color .12s ease, box-shadow .12s ease, transform .12s ease',
+                boxShadow: isHighlighted
+                  ? '0 0 0 3px var(--accent-soft), 0 4px 16px rgba(20,22,26,0.10)'
+                  : isHovered
+                  ? '0 4px 16px rgba(20,22,26,0.08)'
+                  : 'none',
+                transform: (isHighlighted || isHovered) ? 'translateY(-1px)' : 'none',
+                outline: 'none',
               }}
             >
               <div style={{ aspectRatio: '4/3', position: 'relative', overflow: 'hidden', background: 'var(--panel-2)' }}
