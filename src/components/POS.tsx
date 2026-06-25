@@ -93,7 +93,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   const [issueVoucherForm, setIssueVoucherForm] = useState({ amount: '', phone: '', name: '' });
   const [issuingVoucher, setIssuingVoucher] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [highlightedProductIndex, setHighlightedProductIndex] = useState(-1);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const productGridRef = useRef<HTMLDivElement>(null);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [customerFormData, setCustomerFormData] = useState({
     name: '',
@@ -158,6 +160,11 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
+  // Clear product highlight whenever the visible product list changes
+  useEffect(() => {
+    setHighlightedProductIndex(-1);
+  }, [debouncedSearch, page, searchType]);
+
   // Background sync for offline sales
   useEffect(() => {
     async function syncOfflineSales() {
@@ -212,51 +219,150 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept scanner if POS is not the active page
       if (!isActive) return;
-      // Don't intercept scanner if a major modal is open (except POS scan mode)
-      if (showCustomerModal || showAgentModal || showInvoice || showManualItemModal) return;
+      // Let modals (and the VariantPicker) handle their own keyboard events
+      if (showCustomerModal || showAgentModal || showInvoice || showManualItemModal || !!variantPickerProduct) return;
+
+      const isInInput = (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      );
+      // Whether the event comes from the main search bar specifically
+      const isSearchInput = e.target === searchInputRef.current;
+      // Non-search inputs (cart qty, discount, etc.) handle their own arrow keys
+      const isInOtherInput = isInInput && !isSearchInput;
 
       const currentTime = Date.now();
       const diff = currentTime - lastKeyTimeRef.current;
       lastKeyTimeRef.current = currentTime;
-
-      // Scanning logic: Scanners are much faster than manual typing (usually < 50ms)
       const isFastInput = diff < 50;
 
-      // 1. If Enter is pressed, finalize the scan
+      // ── Escape: clear product highlight, return focus to search ──────────────
+      if (e.key === 'Escape') {
+        if (highlightedProductIndex >= 0) {
+          e.preventDefault();
+          setHighlightedProductIndex(-1);
+          searchInputRef.current?.focus();
+        }
+        return;
+      }
+
+      // ── Enter: select highlighted product OR finalise barcode scan ────────────
       if (e.key === 'Enter') {
+        if (highlightedProductIndex >= 0) {
+          const product = products[highlightedProductIndex];
+          if (product) {
+            const stock = product.batches.reduce((s, b) => s + b.current_quantity, 0);
+            if (stock > 0) {
+              e.preventDefault();
+              handleProductSelect(product);
+              return;
+            }
+          }
+        }
         if (barcodeBuffer.length > 3) {
           e.preventDefault();
           searchProductByBarcode(barcodeBuffer);
           setBarcodeBuffer('');
           return;
         }
-        // If it's a short buffer, maybe user just pressed enter, reset
         setBarcodeBuffer('');
         return;
       }
 
-      // 2. Capture alphanumeric characters
-      if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
-        // High-speed detection OR first character of a potential sequence
-        if (barcodeBuffer === '' || isFastInput || diff < 100) {
-          setBarcodeBuffer((prev) => prev + e.key);
-        } else {
-          // Slow typing detected - reset to current key (human mode)
-          // But if we're in "Barcode Search Type", we might want to capture it anyway
-          if (searchType !== 'barcode') {
-            setBarcodeBuffer(e.key);
+      // ── Arrow keys ────────────────────────────────────────────────────────────
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // Let cart inputs, forms, etc. handle their own arrows
+        if (isInOtherInput) return;
+
+        // Helper: columns in grid view measured from the DOM
+        const getGridCols = (): number => {
+          if (viewMode !== 'grid') return 1;
+          const container = productGridRef.current;
+          if (!container) return 4;
+          const first = container.firstElementChild as HTMLElement | null;
+          if (!first) return 4;
+          return Math.max(1, Math.round((container.offsetWidth + 12) / (first.offsetWidth + 12)));
+        };
+
+        if (e.key === 'ArrowDown') {
+          if (products.length === 0) return;
+          e.preventDefault();
+          setHighlightedProductIndex(prev =>
+            prev === -1 ? 0 : Math.min(products.length - 1, prev + getGridCols())
+          );
+          return;
+        }
+
+        if (e.key === 'ArrowUp') {
+          if (highlightedProductIndex === -1) return;
+          e.preventDefault();
+          const cols = getGridCols();
+          if (highlightedProductIndex < cols) {
+            // Already on the first row — go back to search
+            setHighlightedProductIndex(-1);
+            searchInputRef.current?.focus();
           } else {
-            setBarcodeBuffer((prev) => prev + e.key);
+            setHighlightedProductIndex(prev => Math.max(0, prev - cols));
+          }
+          return;
+        }
+
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          if (highlightedProductIndex >= 0 && !isInInput) {
+            // Navigate products left / right
+            e.preventDefault();
+            const delta = e.key === 'ArrowRight' ? 1 : -1;
+            setHighlightedProductIndex(prev =>
+              Math.max(0, Math.min(products.length - 1, prev + delta))
+            );
+            return;
+          }
+          // Switch search-type tabs when not inside any input
+          if (!isInInput) {
+            const types: SearchType[] = ['all', 'name', 'sku', 'barcode'];
+            const idx = types.indexOf(searchType);
+            const next = e.key === 'ArrowLeft'
+              ? (idx - 1 + types.length) % types.length
+              : (idx + 1) % types.length;
+            setSearchType(types[next]);
+            e.preventDefault();
+          }
+          return;
+        }
+
+        return;
+      }
+
+      // ── Alphanumeric: barcode scan buffer OR redirect to search ───────────────
+      if (e.key.length === 1 && /[a-zA-Z0-9]/.test(e.key)) {
+        if (barcodeBuffer === '' || isFastInput || diff < 100) {
+          // Fast input — accumulate into barcode buffer
+          setBarcodeBuffer(prev => prev + e.key);
+        } else {
+          // Slow (human) typing
+          if (!isInInput) {
+            // Flush any partially-buffered chars + this key directly into the search
+            e.preventDefault();
+            const toAdd = barcodeBuffer + e.key;
+            setHighlightedProductIndex(-1);
+            setSearchTerm(prev => prev + toAdd);
+            searchInputRef.current?.focus();
+            setBarcodeBuffer('');
+            if (barcodeTimeoutRef.current) clearTimeout(barcodeTimeoutRef.current);
+            return;
+          } else {
+            if (searchType !== 'barcode') {
+              setBarcodeBuffer(e.key);
+            } else {
+              setBarcodeBuffer(prev => prev + e.key);
+            }
           }
         }
 
-        // Auto-clear buffer if no key for 500ms
         if (barcodeTimeoutRef.current) clearTimeout(barcodeTimeoutRef.current);
-        barcodeTimeoutRef.current = setTimeout(() => {
-          setBarcodeBuffer('');
-        }, 500);
+        barcodeTimeoutRef.current = setTimeout(() => setBarcodeBuffer(''), 500);
       }
     };
 
@@ -265,7 +371,20 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       window.removeEventListener('keydown', handleKeyDown);
       if (barcodeTimeoutRef.current) clearTimeout(barcodeTimeoutRef.current);
     };
-  }, [barcodeBuffer, showBatchModal, showCustomerModal, showAgentModal, showInvoice, showManualItemModal, searchType]);
+  }, [
+    isActive,
+    barcodeBuffer,
+    showBatchModal,
+    showCustomerModal,
+    showAgentModal,
+    showInvoice,
+    showManualItemModal,
+    variantPickerProduct,
+    searchType,
+    highlightedProductIndex,
+    products,
+    viewMode,
+  ]);
 
   async function loadData() {
     try {
@@ -983,6 +1102,8 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   onAddToCart={handleProductSelect}
                   viewMode={viewMode}
                   isAdmin={profile?.role === 'admin'}
+                  highlightedIndex={highlightedProductIndex}
+                  gridRef={productGridRef}
                 />
                 <Pagination
                   currentPage={page}
