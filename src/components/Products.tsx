@@ -540,7 +540,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               variant="pill"
               value={brandFilter}
               onChange={v => { setPage(1); setBrandFilter(v); }}
-              options={[{ value: '', label: 'All brands' }, ...allBrands.map(b => ({ value: b, label: b }))]}
+              options={[...(brandFilter ? [{ value: '', label: 'All brands' }] : []), ...allBrands.map(b => ({ value: b, label: b }))]}
               placeholder="Brand"
             />
           )}
@@ -551,7 +551,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               variant="pill"
               value={categoryFilter}
               onChange={v => { setPage(1); setCategoryFilter(v); }}
-              options={[{ value: '', label: 'All categories' }, ...allCategories.map(c => ({ value: c, label: c }))]}
+              options={[...(categoryFilter ? [{ value: '', label: 'All categories' }] : []), ...allCategories.map(c => ({ value: c, label: c }))]}
               placeholder="Category"
             />
           )}
@@ -562,7 +562,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               variant="pill"
               value={genderFilter}
               onChange={v => { setPage(1); setGenderFilter(v); }}
-              options={[{ value: '', label: 'All genders' }, ...allGenders.map(g => ({ value: g, label: g }))]}
+              options={[...(genderFilter ? [{ value: '', label: 'All genders' }] : []), ...allGenders.map(g => ({ value: g, label: g }))]}
               placeholder="Gender"
             />
           )}
@@ -573,7 +573,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               variant="pill"
               value={supplierFilter}
               onChange={v => { setPage(1); setSupplierFilter(v); }}
-              options={[{ value: '', label: 'All suppliers' }, ...suppliers.map((s: any) => ({ value: s.id, label: s.name }))]}
+              options={[...(supplierFilter ? [{ value: '', label: 'All suppliers' }] : []), ...suppliers.map((s: any) => ({ value: s.id, label: s.name }))]}
               placeholder="Supplier"
             />
           )}
