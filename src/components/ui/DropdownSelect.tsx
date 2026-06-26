@@ -14,9 +14,10 @@ interface DropdownSelectProps {
   disabled?: boolean;
   style?: React.CSSProperties;
   searchThreshold?: number; // show search box when option count >= this (default 6)
+  variant?: 'box' | 'pill'; // 'box' = form-input style (default), 'pill' = filter pill
 }
 
-export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6 }: DropdownSelectProps) {
+export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6, variant = 'box' }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -25,6 +26,8 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
   const searchRef = useRef<HTMLInputElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label ?? '';
   const showSearch = options.length >= searchThreshold;
+  const isPill = variant === 'pill';
+  const isActive = isPill && value !== '';
 
   const filtered = search.trim()
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
@@ -71,7 +74,25 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
         type="button"
         disabled={disabled}
         onClick={handleOpen}
-        style={{
+        style={isPill ? {
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 5,
+          height: 28,
+          padding: '0 10px 0 11px',
+          border: `1px solid ${isActive || open ? 'var(--accent)' : 'var(--line)'}`,
+          borderRadius: 999,
+          background: isActive ? 'var(--accent-soft)' : 'transparent',
+          color: isActive ? 'var(--accent-ink)' : 'var(--ink-2)',
+          fontSize: 12.5,
+          fontWeight: isActive ? 600 : 400,
+          cursor: disabled ? 'not-allowed' : 'default',
+          whiteSpace: 'nowrap',
+          transition: 'all .1s',
+          outline: 'none',
+          opacity: disabled ? 0.6 : 1,
+        } : {
           width: '100%',
           height: 36,
           display: 'flex',
@@ -92,12 +113,12 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
           opacity: disabled ? 0.6 : 1,
         }}
       >
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ flex: isPill ? '0 1 auto' : 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {selectedLabel || placeholder}
         </span>
         <ChevronDown
-          size={14}
-          style={{ flexShrink: 0, color: 'var(--muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
+          size={isPill ? 11 : 14}
+          style={{ flexShrink: 0, color: isActive ? 'var(--accent-ink)' : 'var(--muted)', opacity: isPill ? 0.7 : 1, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
         />
       </button>
 
@@ -108,7 +129,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
           position: 'fixed',
           top: panelPos.top,
           left: panelPos.left,
-          width: panelPos.width,
+          width: isPill ? Math.max(panelPos.width, 180) : panelPos.width,
           zIndex: 300,
           background: 'var(--panel)',
           border: '1px solid var(--line)',
