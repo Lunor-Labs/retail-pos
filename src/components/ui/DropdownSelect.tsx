@@ -24,7 +24,9 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const selectedLabel = options.find(o => o.value === value)?.label ?? '';
+  // Guard on a non-empty value so a "clear" option (value: '') doesn't render as
+  // the trigger label — the empty state should fall through to the placeholder.
+  const selectedLabel = value ? (options.find(o => o.value === value)?.label ?? '') : '';
   const showSearch = options.length >= searchThreshold;
   const isPill = variant === 'pill';
   const isActive = isPill && value !== '';
