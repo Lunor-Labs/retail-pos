@@ -20,7 +20,9 @@ export function useProducts(
   searchType: SearchType = 'all',
   stockFilter: StockFilter = 'all',
   brandFilter: string = '',
-  categoryFilter: string = ''
+  categoryFilter: string = '',
+  genderFilter: string = '',
+  supplierFilter: string = ''
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,13 +168,23 @@ export function useProducts(
         collection = collection.filter(p => p.category === categoryFilter);
       }
 
+      // Apply gender filter
+      if (genderFilter) {
+        collection = collection.filter(p => (p as any).gender === genderFilter);
+      }
+
+      // Apply supplier filter — product matches if ANY of its batches is from the supplier
+      if (supplierFilter) {
+        collection = collection.filter(p => (p.batches || []).some(b => b.supplier_id === supplierFilter));
+      }
+
       // Pagination
       const count = await collection.count();
       // Get data and handle sorting
       let data: ProductWithBatches[];
       const offset = (page - 1) * pageSize;
 
-      if (!searchQuery.trim() && stockFilter === 'all' && !brandFilter && !categoryFilter) {
+      if (!searchQuery.trim() && stockFilter === 'all' && !brandFilter && !categoryFilter && !genderFilter && !supplierFilter) {
         // Optimized path: Use Dexie to get all then sort in memory for natural ordering
         // Standard index-based orderBy is lexicographical (1, 10, 100)
         // For natural sort (1, 2, 10), we sort in memory. 
@@ -192,7 +204,7 @@ export function useProducts(
       logger.error('Local product query failed', err as Error);
       return { products: [], totalCount: 0 };
     }
-  }, [page, pageSize, searchQuery, searchType, stockFilter, brandFilter, categoryFilter]);
+  }, [page, pageSize, searchQuery, searchType, stockFilter, brandFilter, categoryFilter, genderFilter, supplierFilter]);
 
   return {
     products: queryResult?.products || [],
