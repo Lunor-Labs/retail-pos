@@ -312,8 +312,13 @@ export function BarcodeGenerator({ productName, sku, price, encodedCost, supplie
     const specs: StickerSpec[] = [];
 
     if (tab === 'product' || !hasVariants) {
-      if (batches && batches.length > 0) {
-        batches.filter(b => selectedBatchIds.has(b.id)).forEach(b =>
+      // Batch selection only applies when there's more than one batch (the
+      // checkbox UI only renders for batches.length > 1). With a single batch —
+      // or when no batch is ticked — fall back to the product-level sticker,
+      // whose price/supplier/date/cost props already come from batches[0].
+      const selectedBatches = batches?.filter(b => selectedBatchIds.has(b.id)) ?? [];
+      if (selectedBatches.length > 0) {
+        selectedBatches.forEach(b =>
           specs.push({ value: sku, label: productName, price: b.sellingPrice, metaText: metaLine(b.supplierName, b.date, b.encodedCost) })
         );
       } else {
