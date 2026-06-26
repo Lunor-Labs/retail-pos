@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
-import { Plus, Upload, Download, PackageOpen, ChevronDown } from 'lucide-react';
+import { Plus, Upload, Download, PackageOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProducts, SearchType, StockFilter } from '../hooks/useProducts';
@@ -16,81 +16,10 @@ import { AddProductPage, DefaultPricing } from './products/AddProductPage';
 import { RestockModal } from './products/RestockModal';
 import { productService, supplierService } from '../services';
 import { logger } from '../lib/logger';
-import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination } from './ui';
+import { Modal, SearchBar, LoadingSpinner, EmptyState, Pagination, DropdownSelect } from './ui';
 import { ProductActivityLog } from './products/ProductActivityLog';
 import { playScannerBeep } from '../utils/audio';
 import { useProductAudit } from '../lib/auditLog';
-
-// Inline custom dropdown — avoids native select styling issues
-function FilterDropdown({ value, onChange, options, placeholder }: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  placeholder: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const active = value !== '';
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          height: 28, padding: '0 10px 0 11px',
-          borderRadius: 999,
-          border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-          background: active ? 'var(--accent-soft)' : 'transparent',
-          color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
-          fontSize: 12.5, fontWeight: active ? 600 : 400,
-          cursor: 'default', whiteSpace: 'nowrap', transition: 'all .1s',
-        }}
-        onMouseEnter={e => { if (!active && !open) { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.borderColor = 'var(--faint)'; } }}
-        onMouseLeave={e => { if (!active && !open) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
-      >
-        {value || placeholder}
-        <ChevronDown size={11} style={{ flexShrink: 0, opacity: 0.6, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
-          background: 'var(--panel)', border: '1px solid var(--line)',
-          borderRadius: 10, boxShadow: '0 8px 24px rgba(20,22,26,0.12)',
-          minWidth: 160, overflow: 'hidden', padding: '4px',
-        }}>
-          {['', ...options].map(opt => (
-            <button
-              key={opt || '__all'}
-              onClick={() => { onChange(opt); setOpen(false); }}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '7px 10px', border: 0, borderRadius: 7,
-                background: value === opt ? 'var(--accent-soft)' : 'transparent',
-                color: value === opt ? 'var(--accent-ink)' : 'var(--ink-2)',
-                fontSize: 13, fontWeight: value === opt ? 600 : 400,
-                cursor: 'default', whiteSpace: 'nowrap',
-              }}
-              onMouseEnter={e => { if (value !== opt) e.currentTarget.style.background = 'var(--panel-2)'; }}
-              onMouseLeave={e => { if (value !== opt) e.currentTarget.style.background = 'transparent'; }}
-            >
-              {opt || `All ${placeholder.toLowerCase()}s`}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface ProductsProps {
   initialStockFilter?: StockFilter;
@@ -108,8 +37,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   const [stockFilter, setStockFilter] = useState<StockFilter>(initialStockFilter);
   const [brandFilter, setBrandFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [genderFilter, setGenderFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
 
-  const { products, loading, refetch, totalPages } = useProducts(page, pageSize, debouncedSearch, searchType, stockFilter, brandFilter, categoryFilter);
+  const { products, loading, refetch, totalPages } = useProducts(page, pageSize, debouncedSearch, searchType, stockFilter, brandFilter, categoryFilter, genderFilter, supplierFilter);
 
   const allBrands = useLiveQuery(async () => {
     const all = await db.products.toArray();
@@ -121,6 +52,12 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     const all = await db.products.toArray();
     const cats = [...new Set(all.map(p => p.category).filter(Boolean))].sort();
     return cats as string[];
+  }, []) ?? [];
+
+  const allGenders = useLiveQuery(async () => {
+    const all = await db.products.toArray();
+    const genders = [...new Set(all.map(p => (p as any).gender).filter(Boolean))].sort();
+    return genders as string[];
   }, []) ?? [];
 
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -597,43 +534,52 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         {/* Row 2: brand chips + category + stock — all as pills */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
 
-          {/* Brand chips */}
-          {allBrands.length > 0 && ['', ...allBrands].map(brand => {
-            const active = brandFilter === brand;
-            return (
-              <button
-                key={brand || '__all'}
-                onClick={() => { setPage(1); setBrandFilter(brand); }}
-                style={{
-                  height: 28, padding: '0 11px', borderRadius: 999,
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--line)'}`,
-                  background: active ? 'var(--accent-soft)' : 'transparent',
-                  color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
-                  fontSize: 12.5, fontWeight: active ? 600 : 400,
-                  cursor: 'default', whiteSpace: 'nowrap', transition: 'all .1s',
-                }}
-                onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--panel-2)'; e.currentTarget.style.borderColor = 'var(--faint)'; } }}
-                onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
-              >
-                {brand || 'All brands'}
-              </button>
-            );
-          })}
-
-          {/* Divider — only if brands exist */}
+          {/* Brand */}
           {allBrands.length > 0 && (
-            <div style={{ width: 1, height: 18, background: 'var(--line)', margin: '0 2px', flexShrink: 0 }} />
+            <DropdownSelect
+              variant="pill"
+              value={brandFilter}
+              onChange={v => { setPage(1); setBrandFilter(v); }}
+              options={[{ value: '', label: 'All brands' }, ...allBrands.map(b => ({ value: b, label: b }))]}
+              placeholder="Brand"
+            />
           )}
 
-          {/* Category custom dropdown */}
+          {/* Category */}
           {allCategories.length > 0 && (
-            <FilterDropdown
+            <DropdownSelect
+              variant="pill"
               value={categoryFilter}
               onChange={v => { setPage(1); setCategoryFilter(v); }}
-              options={allCategories}
+              options={[{ value: '', label: 'All categories' }, ...allCategories.map(c => ({ value: c, label: c }))]}
               placeholder="Category"
             />
           )}
+
+          {/* Gender */}
+          {allGenders.length > 0 && (
+            <DropdownSelect
+              variant="pill"
+              value={genderFilter}
+              onChange={v => { setPage(1); setGenderFilter(v); }}
+              options={[{ value: '', label: 'All genders' }, ...allGenders.map(g => ({ value: g, label: g }))]}
+              placeholder="Gender"
+            />
+          )}
+
+          {/* Supplier */}
+          {suppliers.length > 0 && (
+            <DropdownSelect
+              variant="pill"
+              value={supplierFilter}
+              onChange={v => { setPage(1); setSupplierFilter(v); }}
+              options={[{ value: '', label: 'All suppliers' }, ...suppliers.map((s: any) => ({ value: s.id, label: s.name }))]}
+              placeholder="Supplier"
+            />
+          )}
+
+          {/* Divider before stock pills */}
+          <div style={{ width: 1, height: 18, background: 'var(--line)', margin: '0 2px', flexShrink: 0 }} />
 
           {/* Stock — 3 chip buttons */}
           {(['all', 'low_stock', 'out_of_stock'] as StockFilter[]).map(val => {
