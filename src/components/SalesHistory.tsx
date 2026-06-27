@@ -71,6 +71,8 @@ function statusChipStyle(status: string) {
 }
 
 const today = new Date().toISOString().split('T')[0];
+const PAGE_SIZE = 50;
+
 const PRESETS = [
   { label: 'Today', start: today, end: today },
   { label: '7 days', start: (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; })(), end: today },
@@ -290,6 +292,7 @@ export function SalesHistory() {
   const [dateRange, setDateRange] = useState({ start: PRESETS[2].start, end: PRESETS[2].end });
   const [customRange, setCustomRange] = useState(false);
   const [payFilter, setPayFilter] = useState('All');
+  const [page, setPage] = useState(1);
 
   const [selected, setSelected] = useState<Sale | null>(null);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
@@ -317,6 +320,9 @@ export function SalesHistory() {
   }, [dateRange, showToast]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Reset to the first page whenever the result set changes
+  useEffect(() => { setPage(1); }, [search, payFilter, dateRange]);
 
   // Load items when selection changes
   useEffect(() => {
@@ -408,6 +414,11 @@ export function SalesHistory() {
   const avgSale = filtered.length > 0 ? totalRevenue / filtered.length : 0;
   const cashCount = filtered.filter(s => (s.payment_method ?? '').toLowerCase() === 'cash').length;
   const cardCount = filtered.filter(s => (s.payment_method ?? '').toLowerCase() === 'card').length;
+
+  // Client-side pagination of the filtered results
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="sh-outer" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -524,13 +535,13 @@ export function SalesHistory() {
                 <Receipt size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
                 <div style={{ fontSize: 13, color: 'var(--muted)' }}>No sales found</div>
               </div>
-            ) : filtered.map((s, i) => {
+            ) : pageRows.map((s, i) => {
               const isSelected = selected?.id === s.id;
               const chip = paymentChipStyle(s.payment_method);
               return (
                 <div key={s.id} onClick={() => setSelected(isSelected ? null : s)} style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer',
-                  borderBottom: i < filtered.length - 1 ? '1px solid var(--line-2)' : 'none',
+                  borderBottom: i < pageRows.length - 1 ? '1px solid var(--line-2)' : 'none',
                   background: isSelected ? 'color-mix(in oklab, var(--accent) 6%, var(--panel))' : 'transparent',
                   borderLeft: isSelected ? '2.5px solid var(--accent)' : '2.5px solid transparent',
                   transition: 'background .1s',
@@ -562,6 +573,31 @@ export function SalesHistory() {
               );
             })}
           </div>
+
+          {/* Pager */}
+          {!loading && totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 4px' }}>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="btn"
+                style={{ height: 32, fontSize: 12.5, opacity: currentPage <= 1 ? 0.45 : 1, cursor: currentPage <= 1 ? 'default' : 'pointer' }}
+              >
+                ‹ Prev
+              </button>
+              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="btn"
+                style={{ height: 32, fontSize: 12.5, opacity: currentPage >= totalPages ? 0.45 : 1, cursor: currentPage >= totalPages ? 'default' : 'pointer' }}
+              >
+                Next ›
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right: detail */}
