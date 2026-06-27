@@ -503,7 +503,13 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   async function handleProductSelect(product: ProductWithBatches, preloadedVariants?: VariantWithStock[]) {
     try {
       const variants = preloadedVariants ?? await variantService.getVariantsForProduct(product.id);
-      if (variants.length > 0) {
+      // A single variant is no real choice — auto-select it (like a pinpointed
+      // scan): one batch goes straight to cart, multiple opens the batch step.
+      if (variants.length === 1) {
+        addScannedVariant(product, variants[0]);
+        return;
+      }
+      if (variants.length > 1) {
         setVariantPickerProduct(product);
         setVariantPickerVariants(variants);
         return;
