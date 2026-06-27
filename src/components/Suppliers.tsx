@@ -3,7 +3,7 @@ import { Plus, Search, X, Phone, Mail, MapPin, FileText, Pencil, Truck, ChevronR
 import { supplierService } from '../services';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { LoadingSpinner } from './ui';
+import { LoadingSpinner, Pagination } from './ui';
 import { supabase } from '../lib/supabase';
 
 type Supplier = {
@@ -357,6 +357,8 @@ function DetailPanel({ supplier, batches, onEdit }: {
   );
 }
 
+const PAGE_SIZE = 20;
+
 // ─── Main page ────────────────────────────────────────────────────────────
 export function Suppliers() {
   const { isAdmin } = useAuth();
@@ -369,6 +371,7 @@ export function Suppliers() {
   const [batchesLoading, setBatchesLoading] = useState(false);
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [sort, setSort] = useState<'name' | 'spend' | 'batches'>('spend');
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     try {
@@ -436,6 +439,14 @@ export function Suppliers() {
       return b.totalCost - a.totalCost;
     });
   }, [suppliers, search, sort]);
+
+  // Reset to the first page whenever the result set changes
+  useEffect(() => { setPage(1); }, [search, sort]);
+
+  // Client-side pagination of the filtered results
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const totalCost = suppliers.reduce((s, x) => s + x.totalCost, 0);
   const totalBatches = suppliers.reduce((s, x) => s + x.batchCount, 0);
@@ -513,12 +524,12 @@ export function Suppliers() {
                 <Truck size={28} style={{ color: 'var(--faint)', marginBottom: 10 }} />
                 <div>No suppliers found</div>
               </div>
-            ) : filtered.map((s, i) => {
+            ) : pageRows.map((s, i) => {
               const isSelected = selected?.id === s.id;
               return (
                 <div key={s.id} onClick={() => setSelected(isSelected ? null : s)} style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', cursor: 'pointer',
-                  borderBottom: i < filtered.length - 1 ? '1px solid var(--line-2)' : 'none',
+                  borderBottom: i < pageRows.length - 1 ? '1px solid var(--line-2)' : 'none',
                   background: isSelected ? 'color-mix(in oklab, var(--accent) 6%, var(--panel))' : 'transparent',
                   borderLeft: isSelected ? '2.5px solid var(--accent)' : '2.5px solid transparent',
                   transition: 'background .1s',
@@ -549,6 +560,13 @@ export function Suppliers() {
               );
             })}
           </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            style={{ padding: '10px 14px' }}
+          />
         </div>
 
         {/* Right: detail */}

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { salesService } from '../services';
 import { Invoice, InvoiceData } from './Invoice';
-import { LoadingSpinner } from './ui';
+import { LoadingSpinner, Pagination } from './ui';
 
 type Sale = {
   id: string;
@@ -71,7 +71,7 @@ function statusChipStyle(status: string) {
 }
 
 const today = new Date().toISOString().split('T')[0];
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 const PRESETS = [
   { label: 'Today', start: today, end: today },
@@ -574,29 +574,8 @@ export function SalesHistory() {
             })}
           </div>
 
-          {/* Pager */}
-          {!loading && totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 4px' }}>
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="btn"
-                style={{ height: 32, fontSize: 12.5, opacity: currentPage <= 1 ? 0.45 : 1, cursor: currentPage <= 1 ? 'default' : 'pointer' }}
-              >
-                ‹ Prev
-              </button>
-              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-                className="btn"
-                style={{ height: 32, fontSize: 12.5, opacity: currentPage >= totalPages ? 0.45 : 1, cursor: currentPage >= totalPages ? 'default' : 'pointer' }}
-              >
-                Next ›
-              </button>
-            </div>
+          {!loading && (
+            <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setPage} style={{ padding: '2px 4px' }} />
           )}
         </div>
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, Upload, Download, Mail, Phone, MapPin, Clock, X, FileText, CheckCircle, Eye, ChevronLeft } from 'lucide-react';
 import { customerService, salesService } from '../services';
 import { useToast } from '../contexts/ToastContext';
-import { Modal, LoadingSpinner } from './ui';
+import { Modal, LoadingSpinner, Pagination } from './ui';
 import { Database } from '../lib/database.types';
 import { Invoice, InvoiceData } from './Invoice';
 
@@ -263,47 +263,12 @@ function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onS
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{
-          padding: '10px 14px', borderTop: '1px solid var(--line-2)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-          background: 'var(--panel-2)',
-        }}>
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="btn btn-sm"
-            style={{ opacity: page === 1 ? 0.4 : 1 }}
-          >
-            ← Prev
-          </button>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-              // Show pages around current
-              let p = i + 1;
-              if (totalPages > 5) {
-                const start = Math.max(1, Math.min(page - 2, totalPages - 4));
-                p = start + i;
-              }
-              return (
-                <button key={p} onClick={() => setPage(p)} style={{
-                  width: 28, height: 28, borderRadius: 6, border: 0, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                  background: p === page ? 'var(--accent)' : 'transparent',
-                  color: p === page ? '#fff' : 'var(--ink-2)',
-                }}>{p}</button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="btn btn-sm"
-            style={{ opacity: page === totalPages ? 0.4 : 1 }}
-          >
-            Next →
-          </button>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        style={{ padding: '10px 14px', borderTop: '1px solid var(--line-2)', background: 'var(--panel-2)' }}
+      />
     </div>
   );
 }
