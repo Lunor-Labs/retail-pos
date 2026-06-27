@@ -17,6 +17,8 @@ import { StockFilter } from './hooks/useProducts';
 import { ToastProvider } from './contexts/ToastContext';
 import { CostCodeProvider } from './contexts/CostCodeContext';
 import { ToastContainer } from './components/ui';
+import { StartOfDayGate } from './components/StartOfDayGate';
+import { supabase } from './lib/supabase';
 
 function AppContent() {
   const { user, profile, loading } = useAuth();
@@ -24,6 +26,27 @@ function AppContent() {
   const defaultView = role === 'cashier' ? 'pos' : role === 'stock_manager' ? 'products' : 'dashboard';
   const [currentView, setCurrentView] = useState(defaultView);
   const [initialStockFilter, setInitialStockFilter] = useState<StockFilter>('all');
+  const [showStartOfDay, setShowStartOfDay] = useState(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    const gatedRole = profile.role === 'admin' || profile.role === 'cashier';
+    if (!gatedRole) { setShowStartOfDay(false); return; }
+    const today = new Date().toISOString().split('T')[0];
+    if (localStorage.getItem(`opening_balance_skipped_${today}`)) { setShowStartOfDay(false); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await (supabase.from('app_settings') as any)
+          .select('value').eq('key', `opening_balance_${today}`).maybeSingle();
+        const isSet = data && data.value != null && data.value !== '' && !isNaN(parseFloat(data.value));
+        if (!cancelled) setShowStartOfDay(!isSet);
+      } catch {
+        if (!cancelled) setShowStartOfDay(false); // fail open — never trap the user
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [profile?.id, profile?.role]);
 
   // Lock restricted roles to their single allowed view
   const ALLOWED: Record<string, string[]> = {
@@ -95,6 +118,8 @@ function AppContent() {
       {currentView === 'sales-history' && <SalesHistory />}
       {currentView === 'reports' && <Reports />}
       {currentView === 'settings' && <Settings />}
+
+      {showStartOfDay && <StartOfDayGate onDone={() => setShowStartOfDay(false)} />}
     </Layout>
   );
 }
