@@ -5,6 +5,7 @@ import { InvoiceProps } from './types';
 import { buildReceiptHTML } from './receiptHTML';
 import { InvoicePreview } from './InvoicePreview';
 import { shareOnWhatsApp, openPrintPopup } from './invoiceActions';
+import { useBusinessProfile } from '../../contexts/BusinessProfileContext';
 
 /**
  * Invoice modal — toolbar + on-screen preview.
@@ -19,12 +20,13 @@ import { shareOnWhatsApp, openPrintPopup } from './invoiceActions';
  */
 export function Invoice({ invoiceData, onClose }: InvoiceProps) {
     const [showDiscount, setShowDiscount] = useState(false);
+    const { profile: business } = useBusinessProfile();
 
     const handlePrint = () =>
-        openPrintPopup(invoiceData, showDiscount, buildReceiptHTML);
+        openPrintPopup(invoiceData, showDiscount, buildReceiptHTML, business);
 
     const handleWhatsApp = () =>
-        shareOnWhatsApp(invoiceData, showDiscount);
+        shareOnWhatsApp(invoiceData, showDiscount, business);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">

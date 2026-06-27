@@ -1,4 +1,5 @@
 import { InvoiceData } from './types';
+import { BusinessProfile } from '../../contexts/BusinessProfileContext';
 import { RECEIPT_PRINT_CSS, RECEIPT_PRINT_JS } from './receiptCSS';
 
 /**
@@ -14,6 +15,7 @@ export function buildReceiptHTML(
     showDiscount: boolean,
     logoSrc: string,
     qrSrc: string,
+    business: BusinessProfile,
 ): string {
     const displaySubtotal = !showDiscount
         ? invoiceData.subtotal - invoiceData.discount
@@ -101,9 +103,9 @@ export function buildReceiptHTML(
 
   <!-- Header -->
   <div class="center">
-    <img class="logo" src="${logoSrc}" alt="RIVONLAK" />
-    <div class="store-name">RIVONLAK</div>
-    <div class="store-sub">Fashion Retail</div>
+    <img class="logo" src="${logoSrc}" alt="${business.name}" />
+    <div class="store-name">${business.name}</div>
+    <div class="store-sub">${business.tagline}</div>
   </div>
 
   <hr class="dash" />
@@ -145,7 +147,7 @@ export function buildReceiptHTML(
 
   <!-- Footer -->
   <div class="center footer">
-    <div class="google">Shop Again at RIVONLAK</div>
+    <div class="google">Shop Again at ${business.name}</div>
     <div class="center policy">
       <div class="policy-item">දින 4ක් ඇතුළත බිල්පත සමඟ මාරු කරගත හැක.</div>
       <div class="policy-item">සුදු රෙදි මාරු කරනු නොලැබේ.</div>

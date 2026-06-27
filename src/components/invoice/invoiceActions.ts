@@ -1,4 +1,5 @@
 import { InvoiceData } from './types';
+import { BusinessProfile } from '../../contexts/BusinessProfileContext';
 import logo from '../../assets/revonlak.jpeg';
 import qrCode from '../../assets/QR.jpeg';
 
@@ -6,76 +7,67 @@ import qrCode from '../../assets/QR.jpeg';
  * Builds the WhatsApp share message for a sale and opens wa.me in a new tab.
  * Respects the showDiscount flag the same way the print receipt does.
  */
-export function shareOnWhatsApp(invoiceData: InvoiceData, showDiscount: boolean): void {
+export function shareOnWhatsApp(invoiceData: InvoiceData, showDiscount: boolean, business: BusinessProfile): void {
+    const money = (n: number) =>
+        n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const displaySubtotal = !showDiscount
         ? invoiceData.subtotal - invoiceData.discount
         : invoiceData.subtotal;
 
-    let message = `🧾 *INVOICE: ${invoiceData.saleNumber}*\n`;
-    message += `📅 Date: ${invoiceData.date}\n\n`;
-    message += `🏢 *Gasith Motors*\n`;
-    message += `📞 +94 77 6600 285/+94 47 2103 738\n\n`;
+    const lines: string[] = [];
+    lines.push(`*${business.name}*`);
+    if (business.tagline) lines.push(`_${business.tagline}_`);
+    lines.push('');
+    lines.push(`🧾 Invoice *${invoiceData.saleNumber}*`);
+    lines.push(`📅 ${invoiceData.date}`);
 
     if (invoiceData.customerName) {
-        message += `👤 Customer: ${invoiceData.customerName}\n`;
-        if (invoiceData.customerPhone) {
-            message += `📱 Phone: ${invoiceData.customerPhone}\n`;
-        }
-        message += `\n`;
+        lines.push('');
+        lines.push(`👤 ${invoiceData.customerName}`);
+        if (invoiceData.customerPhone) lines.push(`📱 ${invoiceData.customerPhone}`);
     }
 
-    message += `*ITEMS*\n`;
-    message += `--------------------------------\n`;
-
+    lines.push('');
+    lines.push('*Items*');
     invoiceData.items.forEach((item, index) => {
-        message += `${index + 1}. ${item.name} ${item.batchNumber ? `(Batch: ${item.batchNumber})` : ''}\n`;
-        if (item.variantLabel) {
-            message += `   ${item.variantLabel}\n`;
-        }
-        const printUnitPrice =
-            !showDiscount && item.discountedUnitPrice !== undefined
-                ? item.discountedUnitPrice
-                : item.unitPrice;
-        const printSubtotal =
-            !showDiscount && item.discountedSubtotal !== undefined
-                ? item.discountedSubtotal
-                : item.subtotal;
-        message += `   ${item.quantity} x ${printUnitPrice.toFixed(2)} = LKR ${printSubtotal.toFixed(2)}\n\n`;
+        const unitPrice = !showDiscount && item.discountedUnitPrice !== undefined
+            ? item.discountedUnitPrice : item.unitPrice;
+        const subtotal = !showDiscount && item.discountedSubtotal !== undefined
+            ? item.discountedSubtotal : item.subtotal;
+        lines.push(`${index + 1}. ${item.name}${item.variantLabel ? ` — ${item.variantLabel}` : ''}`);
+        lines.push(`   ${item.quantity} × ${money(unitPrice)} = *${money(subtotal)}*`);
     });
 
-    message += `--------------------------------\n`;
-
-    if (
-        invoiceData.discount > 0 ||
-        invoiceData.tax > 0 ||
-        (invoiceData.serviceCharge && invoiceData.serviceCharge > 0)
-    ) {
-        message += `Subtotal: LKR ${displaySubtotal.toFixed(2)}\n`;
+    lines.push('');
+    const hasAdjustments =
+        invoiceData.discount > 0 || invoiceData.tax > 0 || (invoiceData.serviceCharge ?? 0) > 0;
+    if (hasAdjustments) {
+        lines.push(`Subtotal   LKR ${money(displaySubtotal)}`);
         if (showDiscount && invoiceData.discount > 0)
-            message += `Discount: -LKR ${invoiceData.discount.toFixed(2)}\n`;
+            lines.push(`Discount   −LKR ${money(invoiceData.discount)}`);
         if (invoiceData.tax > 0)
-            message += `Tax: LKR ${invoiceData.tax.toFixed(2)}\n`;
-        if (invoiceData.serviceCharge && invoiceData.serviceCharge > 0)
-            message += `Service Charge: LKR ${invoiceData.serviceCharge.toFixed(2)}\n`;
-        message += `\n`;
+            lines.push(`Tax   LKR ${money(invoiceData.tax)}`);
+        if ((invoiceData.serviceCharge ?? 0) > 0)
+            lines.push(`Service Charge   LKR ${money(invoiceData.serviceCharge as number)}`);
     }
+    lines.push(`*Total   LKR ${money(invoiceData.total)}*`);
 
-    message += `💰 *TOTAL: LKR ${invoiceData.total.toFixed(2)}*\n`;
-    message += `--------------------------------\n\n`;
-    message += `💳 Payment: ${invoiceData.paymentMethod.toUpperCase()}\n`;
-
+    lines.push('');
+    const payLabel = invoiceData.paymentMethod.charAt(0).toUpperCase() + invoiceData.paymentMethod.slice(1);
+    let payLine = `💳 ${payLabel}`;
     if (invoiceData.paymentMethod !== 'credit') {
-        message += `💵 Paid: LKR ${invoiceData.paidAmount.toFixed(2)}\n`;
-        if (invoiceData.changeAmount > 0)
-            message += `🔄 Change: LKR ${invoiceData.changeAmount.toFixed(2)}\n`;
+        payLine += ` · Paid ${money(invoiceData.paidAmount)}`;
+        if (invoiceData.changeAmount > 0) payLine += ` · Change ${money(invoiceData.changeAmount)}`;
     }
+    lines.push(payLine);
+    if (invoiceData.cashierName) lines.push(`🧑‍💼 Served by ${invoiceData.cashierName}`);
 
-    if (invoiceData.cashierName) {
-        message += `\nServed by: ${invoiceData.cashierName}`;
-    }
+    lines.push('');
+    lines.push('🙏 Thank you for shopping with us!');
+    if (business.phone) lines.push(`📞 ${business.phone}`);
+    if (business.address) lines.push(`📍 ${business.address}`);
 
-    message += `\n\nThank you for your business! 🙏`;
-
+    const message = lines.join('\n');
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
 }
 
@@ -95,13 +87,14 @@ export function shareOnWhatsApp(invoiceData: InvoiceData, showDiscount: boolean)
 export function openPrintPopup(
     invoiceData: InvoiceData,
     showDiscount: boolean,
-    buildHTML: (data: InvoiceData, discount: boolean, logo: string, qr: string) => string,
+    buildHTML: (data: InvoiceData, discount: boolean, logo: string, qr: string, business: BusinessProfile) => string,
+    business: BusinessProfile,
 ): void {
     // Add cache-busting timestamp
     const cacheBust = Date.now();
     const logoUrl = new URL(logo, window.location.href).href + '?v=' + cacheBust;
     const qrUrl = new URL(qrCode, window.location.href).href + '?v=' + cacheBust;
-    const html = buildHTML(invoiceData, showDiscount, logoUrl, qrUrl);
+    const html = buildHTML(invoiceData, showDiscount, logoUrl, qrUrl, business);
 
     const popup = window.open(
         '',
