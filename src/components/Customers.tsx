@@ -188,7 +188,7 @@ function SegmentBar({ customers, segment, setSegment }: {
   );
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 // ─── Customer list ──────────────────────────────────────────────────────
 function CustomerList({ items, search, setSearch, sort, setSort, selectedId, onSelect }: {

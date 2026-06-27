@@ -357,7 +357,7 @@ function DetailPanel({ supplier, batches, onEdit }: {
   );
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 // ─── Main page ────────────────────────────────────────────────────────────
 export function Suppliers() {

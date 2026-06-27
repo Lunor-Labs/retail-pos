@@ -71,7 +71,7 @@ function statusChipStyle(status: string) {
 }
 
 const today = new Date().toISOString().split('T')[0];
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 const PRESETS = [
   { label: 'Today', start: today, end: today },
