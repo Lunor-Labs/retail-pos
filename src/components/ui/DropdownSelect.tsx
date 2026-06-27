@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, Plus } from 'lucide-react';
 
 interface Option {
   value: string;
@@ -15,9 +15,12 @@ interface DropdownSelectProps {
   style?: React.CSSProperties;
   searchThreshold?: number; // show search box when option count >= this (default 6)
   variant?: 'box' | 'pill'; // 'box' = form-input style (default), 'pill' = filter pill
+  // When provided, a "+ Add '<search>'" row appears for a typed value with no
+  // exact match. Should persist the new item; the typed value is then selected.
+  onCreate?: (name: string) => Promise<void> | void;
 }
 
-export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6, variant = 'box' }: DropdownSelectProps) {
+export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6, variant = 'box', onCreate }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -27,13 +30,23 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
   // Guard on a non-empty value so a "clear" option (value: '') doesn't render as
   // the trigger label — the empty state should fall through to the placeholder.
   const selectedLabel = value ? (options.find(o => o.value === value)?.label ?? '') : '';
-  const showSearch = options.length >= searchThreshold;
+  const showSearch = options.length >= searchThreshold || !!onCreate;
   const isPill = variant === 'pill';
   const isActive = isPill && value !== '';
 
   const filtered = search.trim()
     ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
+
+  const q = search.trim();
+  const hasExact = options.some(o => o.label.toLowerCase() === q.toLowerCase());
+  const showCreate = !!onCreate && q !== '' && !hasExact;
+
+  async function handleCreate() {
+    try { await onCreate!(q); onChange(q); } catch { /* parent surfaces the error */ }
+    setOpen(false);
+    setSearch('');
+  }
 
   function handleOpen() {
     if (disabled) return;
@@ -154,6 +167,8 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
                       onChange(filtered[0].value);
                       setOpen(false);
                       setSearch('');
+                    } else if (e.key === 'Enter' && filtered.length === 0 && showCreate) {
+                      handleCreate();
                     }
                   }}
                   placeholder="Search…"
@@ -189,7 +204,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
               </button>
             )}
 
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && !showCreate ? (
               <div style={{ padding: '10px 10px', fontSize: 12.5, color: 'var(--muted)', textAlign: 'center' }}>No results</div>
             ) : filtered.map(opt => (
               <button
@@ -210,6 +225,22 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
                 {opt.label}
               </button>
             ))}
+
+            {showCreate && (
+              <button
+                type="button"
+                onClick={handleCreate}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
+                  padding: '7px 10px', border: 0, borderRadius: 7, marginTop: filtered.length > 0 ? 2 : 0,
+                  background: 'transparent', color: 'var(--accent-ink)', fontSize: 13, fontWeight: 600, cursor: 'default',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-soft)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Plus size={13} strokeWidth={2.2} /> Add &ldquo;{q}&rdquo;
+              </button>
+            )}
           </div>
         </div>
         </>

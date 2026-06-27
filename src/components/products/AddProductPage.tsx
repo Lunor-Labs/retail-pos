@@ -97,6 +97,27 @@ export function AddProductPage({
     referenceDataService.getActiveNames('color').then(setRefColors).catch(() => {});
   }, []);
 
+  // Create a reference item inline (from a dropdown's "+ Add" row), refresh that
+  // list, and toast. Throws on failure so the dropdown doesn't select an unsaved
+  // value. Selection of the new value is handled by the dropdown's onChange.
+  const refSetters = {
+    brand: setRefBrands, category: setRefCategories, material: setRefMaterials,
+    product_name: setRefNames, size: setRefSizes, color: setRefColors,
+  } as const;
+  async function addRef(type: keyof typeof refSetters, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await referenceDataService.add(type, trimmed);
+      const names = await referenceDataService.getActiveNames(type);
+      refSetters[type](names);
+      showToast(`Added “${trimmed}”`, 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to add', 'error');
+      throw e;
+    }
+  }
+
   // Generate SKU on mount and whenever brand/category changes (add mode only, not manually edited)
   useEffect(() => {
     if (mode !== 'add' || skuManuallyEdited) return;
@@ -266,6 +287,7 @@ export function AddProductPage({
               value={info.brand}
               onChange={v => setInfo(p => ({ ...p, brand: v }))}
               options={refBrands.map(b => ({ value: b, label: b }))}
+              onCreate={name => addRef('brand', name)}
               placeholder="Select brand…"
             />
           </div>
@@ -292,6 +314,7 @@ export function AddProductPage({
               value={info.name}
               onChange={v => setInfo(p => ({ ...p, name: v }))}
               options={refNames.map(n => ({ value: n, label: n }))}
+              onCreate={name => addRef('product_name', name)}
               placeholder="Select product name…"
             />
           </div>
@@ -301,6 +324,7 @@ export function AddProductPage({
               value={info.category}
               onChange={v => setInfo(p => ({ ...p, category: v }))}
               options={refCategories.map(c => ({ value: c, label: c }))}
+              onCreate={name => addRef('category', name)}
               placeholder="Select category…"
             />
           </div>
@@ -324,6 +348,7 @@ export function AddProductPage({
               value={info.material}
               onChange={v => setInfo(p => ({ ...p, material: v }))}
               options={refMaterials.map(m => ({ value: m, label: m }))}
+              onCreate={name => addRef('material', name)}
               placeholder="Select material…"
             />
           </div>
@@ -401,6 +426,8 @@ export function AddProductPage({
                   showPricing={mode === 'add'}
                   sizeOptions={refSizes}
                   colorOptions={refColors}
+                  onCreateSize={name => addRef('size', name)}
+                  onCreateColor={name => addRef('color', name)}
                   onChange={updateRow}
                   onDelete={deleteRow}
                   onTabFromLastCell={i === rows.length - 1 ? addRow : undefined}
