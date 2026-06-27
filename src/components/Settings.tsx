@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
-import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil, Hash, Gift } from 'lucide-react';
+import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check, Tag, Pencil, Hash, Gift, Store } from 'lucide-react';
 import { useCostCode } from '../contexts/CostCodeContext';
+import { useBusinessProfile } from '../contexts/BusinessProfileContext';
 import { encodeCost, isValidKey } from '../lib/costCode';
 import { loyaltyService, referenceDataService } from '../services';
 import type { RefType, ReferenceItem } from '../services';
@@ -33,7 +34,7 @@ const ROLE_CONFIG: Record<UnifiedStaff['role'], { label: string; desc: string; b
   admin:         { label: 'Admin',         desc: 'Full access',          bg: 'var(--accent-soft)',                                   color: 'var(--accent-ink)' },
 };
 
-type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers';
+type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers' | 'business';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
@@ -1119,6 +1120,82 @@ function VoucherRulesSection() {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────
+// ─── Section: Business ────────────────────────────────────────────────────
+function BusinessProfileSection() {
+  const { showToast } = useToast();
+  const { profile, setProfile } = useBusinessProfile();
+  const [name, setName] = useState(profile.name);
+  const [tagline, setTagline] = useState(profile.tagline);
+  const [phone, setPhone] = useState(profile.phone);
+  const [address, setAddress] = useState(profile.address);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(profile.name); setTagline(profile.tagline);
+    setPhone(profile.phone); setAddress(profile.address);
+  }, [profile]);
+
+  async function handleSave() {
+    if (!name.trim()) { showToast('Business name is required', 'error'); return; }
+    setSaving(true);
+    const next = { name: name.trim(), tagline: tagline.trim(), phone: phone.trim(), address: address.trim() };
+    try {
+      const { error } = await (supabase.from('app_settings') as any).upsert(
+        { key: 'business_profile', value: JSON.stringify(next) },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+      setProfile(next);
+      showToast('Business profile saved', 'success');
+    } catch (e: any) {
+      showToast(e?.message ?? 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <Store size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Business Profile</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              Shown on printed receipts and the WhatsApp invoice message
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Business Name</label>
+          <input style={inputStyle} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. RIVONLAK" />
+        </div>
+        <div>
+          <label style={labelStyle}>Tagline</label>
+          <input style={inputStyle} value={tagline} onChange={e => setTagline(e.target.value)} placeholder="e.g. Fashion Retail" />
+        </div>
+        <div>
+          <label style={labelStyle}>Phone</label>
+          <input style={inputStyle} value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. +94 77 660 0285" />
+        </div>
+        <div>
+          <label style={labelStyle}>Address</label>
+          <input style={inputStyle} value={address} onChange={e => setAddress(e.target.value)} placeholder="e.g. No. 12, Main Street, Kandy" />
+        </div>
+
+        <div>
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary" style={{ height: 38, fontSize: 13 }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
   const { profile } = useAuth();
   const [section, setSection] = useState<SectionId>('account');
@@ -1134,6 +1211,7 @@ export function Settings() {
     { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'cost-code', label: 'Cost Code', icon: <Hash size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'vouchers',  label: 'Vouchers',  icon: <Gift size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'business', label: 'Business', icon: <Store size={15} strokeWidth={1.7} />, adminOnly: true },
   ].filter(n => !n.adminOnly || isAdmin);
 
   return (
@@ -1178,6 +1256,7 @@ export function Settings() {
           {section === 'loyalty' && isAdmin && <LoyaltySection />}
           {section === 'cost-code' && isAdmin && <CostCodeSection />}
           {section === 'vouchers'  && isAdmin && <VoucherRulesSection />}
+          {section === 'business' && isAdmin && <BusinessProfileSection />}
         </div>
       </div>
     </div>
