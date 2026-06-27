@@ -16,6 +16,7 @@ import { GiftVouchers } from './components/vouchers/GiftVouchers';
 import { StockFilter } from './hooks/useProducts';
 import { ToastProvider } from './contexts/ToastContext';
 import { CostCodeProvider } from './contexts/CostCodeContext';
+import { BusinessProfileProvider } from './contexts/BusinessProfileContext';
 import { ToastContainer } from './components/ui';
 import { StartOfDayGate } from './components/StartOfDayGate';
 import { supabase } from './lib/supabase';
@@ -129,8 +130,10 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <CostCodeProvider>
-          <AppContent />
-          <ToastContainer />
+          <BusinessProfileProvider>
+            <AppContent />
+            <ToastContainer />
+          </BusinessProfileProvider>
         </CostCodeProvider>
       </ToastProvider>
     </AuthProvider>
