@@ -27,6 +27,8 @@ interface VariantTableRowProps {
   showPricing?: boolean;
   sizeOptions?: string[];
   colorOptions?: string[];
+  onCreateSize?: (name: string) => Promise<void>;
+  onCreateColor?: (name: string) => Promise<void>;
   onChange: (index: number, row: VariantRowData) => void;
   onDelete: (index: number) => void;
   onTabFromLastCell?: () => void;
@@ -36,6 +38,7 @@ export function VariantTableRow({
   row, index, defaultSupplierId,
   suppliers, mode, isOnly, showPricing = true,
   sizeOptions = [], colorOptions = [],
+  onCreateSize, onCreateColor,
   onChange, onDelete, onTabFromLastCell,
 }: VariantTableRowProps) {
 
@@ -85,6 +88,7 @@ export function VariantTableRow({
               value={row.size}
               onChange={v => update({ size: v })}
               options={sizeOptions.map(s => ({ value: s, label: s }))}
+              onCreate={onCreateSize}
               placeholder="Select…"
             />
           ) : (
@@ -99,6 +103,7 @@ export function VariantTableRow({
               value={row.color}
               onChange={v => update({ color: v })}
               options={colorOptions.map(c => ({ value: c, label: c }))}
+              onCreate={onCreateColor}
               placeholder="Select…"
             />
           ) : (
