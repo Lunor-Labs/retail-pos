@@ -99,7 +99,7 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                     if (e.key === 'ArrowDown') { e.preventDefault(); onUpdateQuantity(index, -qtyStep); }
                   }}
                   style={{
-                    width: 28, textAlign: 'center', fontSize: 13, fontWeight: 700,
+                    width: isDecimal ? 44 : 28, textAlign: 'center', fontSize: 13, fontWeight: 700,
                     color: 'var(--ink)', ...mono,
                     border: 0, outline: 'none', background: 'transparent',
                     // Hide browser number spin arrows
