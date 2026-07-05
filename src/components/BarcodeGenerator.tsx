@@ -80,6 +80,25 @@ function fillTruncated(ctx: CanvasRenderingContext2D, text: string, cx: number, 
   ctx.fillText(t + '…', cx, y);
 }
 
+/**
+ * Draw "name — suffix" centered at (cx, y). The suffix (variant size/colour)
+ * is what tells stickers apart, so it must stay visible — reserve room for it
+ * first and truncate only the name when the combined text is too wide.
+ */
+function fillNameWithSuffix(ctx: CanvasRenderingContext2D, name: string, suffix: string | undefined, cx: number, y: number, maxW: number) {
+  if (!suffix) { fillTruncated(ctx, name, cx, y, maxW); return; }
+  const tail = ` — ${suffix}`;
+  const tailW = ctx.measureText(tail).width;
+  if (tailW >= maxW) { fillTruncated(ctx, suffix, cx, y, maxW); return; }
+  const nameMaxW = maxW - tailW;
+  let n = name;
+  if (ctx.measureText(n).width > nameMaxW) {
+    while (n.length > 1 && ctx.measureText(n + '…').width > nameMaxW) n = n.slice(0, -1);
+    n = n + '…';
+  }
+  ctx.fillText(n + tail, cx, y);
+}
+
 /** Lay out an upright sticker (name → barcode → price → meta), vertically centered. */
 function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
   const padX = mm(1.5);
@@ -121,7 +140,7 @@ function drawSticker(ctx: CanvasRenderingContext2D, spec: StickerSpec) {
     if (b.kind === 'name') {
       ctx.fillStyle = '#000';
       ctx.font = `bold ${mm(2.7)}px Arial`;
-      fillTruncated(ctx, spec.label, cx, mid, maxW);
+      fillNameWithSuffix(ctx, spec.label, spec.variantSuffix, cx, mid, maxW);
     } else if (b.kind === 'bc' && bc) {
       ctx.imageSmoothingEnabled = false; // keep bars sharp when scaled
       ctx.drawImage(bc, cx - bcW / 2, y, bcW, bcH);

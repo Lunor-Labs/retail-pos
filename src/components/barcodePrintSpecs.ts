@@ -7,6 +7,8 @@ import type { BarcodeVariant } from './BarcodeGenerator';
 export interface StickerSpec {
   value: string;        // barcode value (SKU)
   label: string;        // product name line
+  /** Variant size/colour (e.g. "M · Blue") — kept visible, truncating `label` instead when space is tight. */
+  variantSuffix?: string;
   price?: number;
   metaText?: string;    // "supplier · date · cost"
 }
@@ -37,8 +39,8 @@ export function buildVariantSpecs(
     if (!entry?.selected) continue;
     const batch = (v.batches ?? []).find(b => b.id === entry.batchId);
     const spec: StickerSpec = batch
-      ? { value: v.sku, label: `${productName} — ${v.label}`, price: batch.sellingPrice, metaText: metaLine(batch.supplierName, batch.date, batch.encodedCost) }
-      : { value: v.sku, label: `${productName} — ${v.label}`, price: v.price, metaText: metaLine(v.supplierName, v.date, v.encodedCost) };
+      ? { value: v.sku, label: productName, variantSuffix: v.label, price: batch.sellingPrice, metaText: metaLine(batch.supplierName, batch.date, batch.encodedCost) }
+      : { value: v.sku, label: productName, variantSuffix: v.label, price: v.price, metaText: metaLine(v.supplierName, v.date, v.encodedCost) };
     specs.push(spec);
   }
   return specs;
