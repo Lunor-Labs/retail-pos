@@ -36,6 +36,7 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
         const currentDiscount = Math.max(0, item.original_price - item.price);
         const isDecimal = !item.isManual && (item.product.unit === 'yard' || item.product.unit === 'meter');
         const qtyStep = isDecimal ? 0.1 : 1;
+        const unitLabel = isDecimal ? (item.product.unit === 'yard' ? 'yd' : 'm') : null;
 
         return (
           <div
@@ -106,6 +107,12 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                     MozAppearance: 'textfield' as any,
                   }}
                 />
+
+                {unitLabel && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent-ink)', marginRight: 3, flexShrink: 0 }}>
+                    {unitLabel}
+                  </span>
+                )}
 
                 <button
                   onClick={() => onUpdateQuantity(index, qtyStep)}
