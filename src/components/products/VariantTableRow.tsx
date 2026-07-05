@@ -25,6 +25,7 @@ interface VariantTableRowProps {
   mode: 'add' | 'edit';
   isOnly: boolean;
   showPricing?: boolean;
+  unit?: string;
   sizeOptions?: string[];
   colorOptions?: string[];
   onCreateSize?: (name: string) => Promise<void>;
@@ -36,7 +37,7 @@ interface VariantTableRowProps {
 
 export function VariantTableRow({
   row, index, defaultSupplierId,
-  suppliers, mode, isOnly, showPricing = true,
+  suppliers, mode, isOnly, showPricing = true, unit,
   sizeOptions = [], colorOptions = [],
   onCreateSize, onCreateColor,
   onChange, onDelete, onTabFromLastCell,
@@ -45,6 +46,7 @@ export function VariantTableRow({
   const { isAdmin } = useAuth();
   const { isConfigured } = useCostCode();
   const hideMarkup = !isAdmin && isConfigured;
+  const isDecimal = unit === 'yard' || unit === 'meter';
 
   function update(patch: Partial<VariantRowData>) {
     // The variant SKU is numeric (base + 2-digit index) and does NOT depend on
@@ -124,9 +126,9 @@ export function VariantTableRow({
         {/* Min Stock */}
         <td style={{ ...cellStyle, width: 72 }}>
           <input
-            style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0}
+            style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step={isDecimal ? 0.1 : 1}
             value={row.reorder_level || ''}
-            onChange={e => update({ reorder_level: parseInt(e.target.value) || 0 })}
+            onChange={e => update({ reorder_level: (isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value)) || 0 })}
             placeholder="0"
           />
         </td>
@@ -140,9 +142,9 @@ export function VariantTableRow({
               </span>
             ) : (
               <input
-                style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0}
+                style={{ ...inputStyle, textAlign: 'right' }} type="number" min={0} step={isDecimal ? 0.1 : 1}
                 value={row.qty || ''}
-                onChange={e => update({ qty: parseInt(e.target.value) || 0 })}
+                onChange={e => update({ qty: (isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value)) || 0 })}
                 placeholder="0"
               />
             )}

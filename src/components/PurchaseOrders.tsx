@@ -260,6 +260,9 @@ export function PurchaseOrders() {
       order.supplier?.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const currentItemProduct = products.find((p) => p.id === currentItem.product_id);
+  const currentItemIsDecimal = currentItemProduct?.unit === 'yard' || currentItemProduct?.unit === 'meter';
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -553,8 +556,9 @@ export function PurchaseOrders() {
                     type="number"
                     placeholder="e.g., 10"
                     value={currentItem.quantity}
-                    onChange={(e) => setCurrentItem({ ...currentItem, quantity: parseInt(e.target.value) || 0 })}
-                    min="1"
+                    onChange={(e) => setCurrentItem({ ...currentItem, quantity: (currentItemIsDecimal ? parseFloat(e.target.value) : parseInt(e.target.value)) || 0 })}
+                    min={currentItemIsDecimal ? 0.1 : 1}
+                    step={currentItemIsDecimal ? 0.1 : 1}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent outline-none"
                   />
                 </div>

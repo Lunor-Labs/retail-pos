@@ -196,7 +196,7 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                     }
 
                     // Create or Update Batch
-                    const qty = parseInt(row.quantity || '0');
+                    const qty = parseFloat(row.quantity || '0');
                     const costPrice = parseFloat(row.cost_price);
                     const markup = parseFloat(row.markup_percentage);
                     const sellingPrice = costPrice * (1 + markup / 100);

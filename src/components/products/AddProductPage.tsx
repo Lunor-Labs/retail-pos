@@ -424,6 +424,7 @@ export function AddProductPage({
                   mode={mode}
                   isOnly={rows.length === 1}
                   showPricing={mode === 'add'}
+                  unit={info.unit}
                   sizeOptions={refSizes}
                   colorOptions={refColors}
                   onCreateSize={name => addRef('size', name)}

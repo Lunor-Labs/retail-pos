@@ -43,7 +43,7 @@ type SaleItem = {
   unit_price: number;
   is_manual: boolean;
   manual_description: string | null;
-  product?: { name: string; sku: string } | null;
+  product?: { name: string; sku: string; unit: string } | null;
   variant?: { color: string | null; size: string | null } | null;
 };
 
@@ -216,7 +216,9 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
                 Select Items to Return
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {saleItems.map((item, i) => (
+                {saleItems.map((item, i) => {
+                  const isDecimal = !item.is_manual && (item.product?.unit === 'yard' || item.product?.unit === 'meter');
+                  return (
                   <div key={item.id} style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
                     borderBottom: i < saleItems.length - 1 ? '1px solid var(--line-2)' : 'none',
@@ -237,14 +239,18 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                       <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Return</span>
                       <input
-                        type="number" min={0} max={item.quantity}
+                        type="number" min={0} max={item.quantity} step={isDecimal ? 0.1 : 1}
                         value={returnQty[item.id] ?? 0}
-                        onChange={e => setReturnQty(prev => ({ ...prev, [item.id]: Math.min(item.quantity, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                        onChange={e => {
+                          const v = isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value);
+                          setReturnQty(prev => ({ ...prev, [item.id]: Math.min(item.quantity, Math.max(0, v || 0)) }));
+                        }}
                         style={{ width: 56, height: 30, textAlign: 'center', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 13, outline: 'none' }}
                       />
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
               {totalAmount > 0 && (
                 <div style={{ padding: '10px 14px', background: 'var(--panel-2)', borderTop: '1px solid var(--line-2)', display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>

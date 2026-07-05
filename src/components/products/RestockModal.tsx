@@ -36,6 +36,7 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
   const [supplierId, setSupplierId] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isDecimal = product.unit === 'yard' || product.unit === 'meter';
 
   useEffect(() => {
     Promise.all([
@@ -232,9 +233,9 @@ export function RestockModal({ product, onClose, onSuccess }: RestockModalProps)
                         <td style={{ padding: '6px 12px', width: 80 }}>
                           <input
                             style={{ ...inputNum, borderColor: isActive ? 'var(--accent)' : 'var(--line)' }}
-                            type="number" min={1}
+                            type="number" min={isDecimal ? 0.1 : 1} step={isDecimal ? 0.1 : 1}
                             value={row.qty}
-                            onChange={e => updateQty(i, e.target.value === '' ? '' : parseInt(e.target.value) || '')}
+                            onChange={e => updateQty(i, e.target.value === '' ? '' : (isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value)) || '')}
                             placeholder="—"
                           />
                         </td>

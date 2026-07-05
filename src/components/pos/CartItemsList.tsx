@@ -34,6 +34,8 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
         const name = item.isManual ? item.manualDescription : item.product.name;
         const maxDisc = maxDiscount(item.original_price);
         const currentDiscount = Math.max(0, item.original_price - item.price);
+        const isDecimal = !item.isManual && (item.product.unit === 'yard' || item.product.unit === 'meter');
+        const qtyStep = isDecimal ? 0.1 : 1;
 
         return (
           <div
@@ -56,7 +58,7 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
               {/* Qty stepper with keyboard-editable centre */}
               <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                 <button
-                  onClick={() => onUpdateQuantity(index, -1)}
+                  onClick={() => onUpdateQuantity(index, -qtyStep)}
                   tabIndex={-1}
                   style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
                 >
@@ -67,10 +69,11 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                 <input
                   ref={el => { qtyRefs.current[index] = el; }}
                   type="number"
-                  min={1}
+                  min={qtyStep}
+                  step={qtyStep}
                   value={item.quantity}
                   onChange={e => {
-                    const v = parseInt(e.target.value);
+                    const v = isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value);
                     if (!isNaN(v)) onSetQuantity?.(index, v);
                   }}
                   onFocus={e => {
@@ -81,9 +84,9 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                   onBlur={e => {
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.borderRadius = '0';
-                    // Ensure at least 1
-                    const v = parseInt(e.target.value);
-                    if (isNaN(v) || v < 1) onSetQuantity?.(index, 1);
+                    // Ensure at least one step
+                    const v = isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value);
+                    if (isNaN(v) || v < qtyStep) onSetQuantity?.(index, qtyStep);
                   }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -92,8 +95,8 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                       discRefs.current[index]?.focus();
                       discRefs.current[index]?.select();
                     }
-                    if (e.key === 'ArrowUp') { e.preventDefault(); onUpdateQuantity(index, 1); }
-                    if (e.key === 'ArrowDown') { e.preventDefault(); onUpdateQuantity(index, -1); }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); onUpdateQuantity(index, qtyStep); }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); onUpdateQuantity(index, -qtyStep); }
                   }}
                   style={{
                     width: 28, textAlign: 'center', fontSize: 13, fontWeight: 700,
@@ -105,7 +108,7 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
                 />
 
                 <button
-                  onClick={() => onUpdateQuantity(index, 1)}
+                  onClick={() => onUpdateQuantity(index, qtyStep)}
                   tabIndex={-1}
                   style={{ width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, background: 'var(--panel-2)', borderRadius: 5, color: 'var(--ink-2)', cursor: 'default' }}
                 >

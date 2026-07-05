@@ -587,7 +587,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   function updateCartItemQuantity(index: number, delta: number) {
     const newCart = [...cart];
-    const newQuantity = newCart[index].quantity + delta;
+    const newQuantity = parseFloat((newCart[index].quantity + delta).toFixed(2));
 
     if (newQuantity <= 0) {
       removeFromCart(index);

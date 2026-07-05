@@ -22,6 +22,7 @@ export function QuickStockModal({ product, onClose, onSuccess }: QuickStockModal
   const [selling, setSelling] = useState<number | ''>('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const isDecimal = product.unit === 'yard' || product.unit === 'meter';
 
   useEffect(() => {
     Promise.all([
@@ -157,9 +158,9 @@ export function QuickStockModal({ product, onClose, onSuccess }: QuickStockModal
               <label style={labelStyle}>Qty</label>
               <input
                 style={{ ...inputStyle, textAlign: 'right' }}
-                type="number" min={1}
+                type="number" min={isDecimal ? 0.1 : 1} step={isDecimal ? 0.1 : 1}
                 value={qty}
-                onChange={e => setQty(e.target.value === '' ? '' : parseInt(e.target.value) || '')}
+                onChange={e => setQty(e.target.value === '' ? '' : (isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value)) || '')}
                 placeholder="Qty"
                 autoFocus
               />
