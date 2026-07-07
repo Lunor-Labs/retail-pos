@@ -2,6 +2,7 @@ import { BaseRepository } from './base/BaseRepository';
 import { DatabaseAdapter } from './base/DatabaseAdapter';
 import { Product, ProductBatch, ProductWithStock } from '../types';
 import { expandSearchTerm, generateOrQuery } from '../utils/searchUtils';
+import { fetchAllRows } from '../lib/paginate';
 
 /**
  * Repository for Product-related database operations
@@ -38,18 +39,15 @@ export class ProductRepository extends BaseRepository<Product> {
 
         if (allProducts.length === 0) return [];
 
-        // 2. Fetch all active variants
-        const { data: allVariants, error: varErr } = await client
-            .from('product_variants')
-            .select('*')
-            .eq('active', true);
-        if (varErr) throw new Error(`Failed to fetch variants: ${varErr.message}`);
+        // 2. Fetch all active variants (paged past the 1000-row cap)
+        const allVariants = await fetchAllRows<any>(() =>
+            client.from('product_variants').select('*').eq('active', true).order('id'),
+        );
 
-        // 3. Fetch all batches (linked to variants, not products)
-        const { data: allBatches, error: batErr } = await client
-            .from('product_batches')
-            .select('*, supplier:suppliers(name)');
-        if (batErr) throw new Error(`Failed to fetch batches: ${batErr.message}`);
+        // 3. Fetch all batches (linked to variants, not products; paged past the 1000-row cap)
+        const allBatches = await fetchAllRows<ProductBatch>(() =>
+            client.from('product_batches').select('*, supplier:suppliers(name)').order('id'),
+        );
 
         // 4. Group variants by product_id
         const variantsByProduct = new Map<string, any[]>();
@@ -103,11 +101,9 @@ export class ProductRepository extends BaseRepository<Product> {
         const variantIds = ((variants as any[]) || []).map((v: any) => v.id);
         let batches: ProductBatch[] = [];
         if (variantIds.length > 0) {
-            const { data: batchData } = await client
-                .from('product_batches')
-                .select('*, supplier:suppliers(name)')
-                .in('variant_id', variantIds);
-            batches = (batchData as ProductBatch[]) || [];
+            batches = await fetchAllRows<ProductBatch>(() =>
+                client.from('product_batches').select('*, supplier:suppliers(name)').in('variant_id', variantIds).order('id'),
+            );
         }
 
         const total_stock = batches.reduce((sum, b) => sum + b.current_quantity, 0);

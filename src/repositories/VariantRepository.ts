@@ -1,6 +1,7 @@
 import { BaseRepository } from './base/BaseRepository';
 import { DatabaseAdapter } from './base/DatabaseAdapter';
 import { ProductVariant, VariantWithStock, ProductBatch } from '../types';
+import { fetchAllRows } from '../lib/paginate';
 
 export class VariantRepository extends BaseRepository<ProductVariant> {
   constructor(adapter: DatabaseAdapter) {
@@ -17,12 +18,9 @@ export class VariantRepository extends BaseRepository<ProductVariant> {
 
     const variantIds = variants.map(v => v.id);
     const client = (this.adapter as any).getClient();
-    const { data: batches, error } = await client
-      .from('product_batches')
-      .select('*, supplier:suppliers(name)')
-      .in('variant_id', variantIds);
-
-    if (error) throw new Error(`Failed to fetch variant batches: ${error.message}`);
+    const batches = await fetchAllRows<ProductBatch>(() =>
+      client.from('product_batches').select('*, supplier:suppliers(name)').in('variant_id', variantIds).order('id'),
+    );
 
     const batchesByVariant = new Map<string, ProductBatch[]>();
     for (const batch of (batches as ProductBatch[])) {
@@ -59,18 +57,14 @@ export class VariantRepository extends BaseRepository<ProductVariant> {
 
   async findLowStock(): Promise<Array<VariantWithStock & { product_name: string }>> {
     const client = (this.adapter as any).getClient();
-    const { data: variants, error } = await client
-      .from('product_variants')
-      .select('*, product:products(name)')
-      .eq('active', true);
-
-    if (error) throw new Error(`Low stock query failed: ${error.message}`);
+    const variants = await fetchAllRows<any>(() =>
+      client.from('product_variants').select('*, product:products(name)').eq('active', true).order('id'),
+    );
 
     const variantIds = (variants as any[]).map(v => v.id);
-    const { data: batches } = await client
-      .from('product_batches')
-      .select('variant_id, current_quantity')
-      .in('variant_id', variantIds);
+    const batches = await fetchAllRows<any>(() =>
+      client.from('product_batches').select('variant_id, current_quantity').in('variant_id', variantIds).order('id'),
+    );
 
     const stockMap = new Map<string, number>();
     for (const b of (batches as any[]) || []) {

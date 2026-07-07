@@ -2,6 +2,7 @@ import { ProductRepository } from '../repositories/ProductRepository';
 import { Product, ProductWithStock, ProductWithVariants } from '../types';
 import { logger } from '../lib/logger';
 import { nextProductSku } from '../utils/skuUtils';
+import { fetchAllRows } from '../lib/paginate';
 
 export interface VariantInput {
   size: string | null;
@@ -344,8 +345,11 @@ export class ProductService {
     async generateNextSku(_brand: string = '', _category: string = ''): Promise<string> {
         try {
             const client = (this.productRepo as any).adapter.getClient();
-            const { data } = await client.from('products').select('sku');
-            const skus = ((data as { sku: string }[]) || []).map(r => r.sku);
+            // Must read every SKU — a truncated list would pick a colliding "next" SKU.
+            const data = await fetchAllRows<{ sku: string }>(() =>
+                client.from('products').select('sku').order('sku'),
+            );
+            const skus = (data || []).map(r => r.sku);
             return nextProductSku(skus);
         } catch (error) {
             logger.error('Failed to generate SKU', error as Error);
@@ -483,11 +487,9 @@ export class ProductService {
             const variantIds = ((variants as any[]) || []).map((v: any) => v.id);
             let allBatches: any[] = [];
             if (variantIds.length > 0) {
-                const { data: batchData } = await client
-                    .from('product_batches')
-                    .select('*, supplier:suppliers(name)')
-                    .in('variant_id', variantIds);
-                allBatches = batchData || [];
+                allBatches = await fetchAllRows<any>(() =>
+                    client.from('product_batches').select('*, supplier:suppliers(name)').in('variant_id', variantIds).order('id'),
+                );
             }
 
             const batchesByVariant = new Map<string, any[]>();

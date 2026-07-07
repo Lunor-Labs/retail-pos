@@ -35,37 +35,67 @@ export class SupabaseAdapter implements DatabaseAdapter {
             }
         }
 
-        let query = this.client.from(table).select(selectClause);
+        // Build the base query (select + filters + ordering) fresh each time so
+        // it can be re-issued for each page when auto-paginating.
+        const build = () => {
+            let query = this.client.from(table).select(selectClause);
 
-        // Apply where clauses
-        if (options.where) {
-            for (const clause of options.where) {
-                query = this.applyWhereClause(query, clause);
+            if (options.where) {
+                for (const clause of options.where) {
+                    query = this.applyWhereClause(query, clause);
+                }
             }
-        }
 
-        // Apply ordering
-        if (options.orderBy) {
-            for (const order of options.orderBy) {
-                query = query.order(order.field, { ascending: order.direction === 'asc' });
+            if (options.orderBy) {
+                for (const order of options.orderBy) {
+                    query = query.order(order.field, { ascending: order.direction === 'asc' });
+                }
             }
-        }
 
-        // Apply pagination
+            return query;
+        };
+
+        // When the caller asks for a bounded slice, honour it as a single request.
         if (options.limit) {
-            query = query.limit(options.limit);
-        }
-        if (options.offset) {
-            query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
+            let query = build();
+            if (options.offset) {
+                query = query.range(options.offset, options.offset + options.limit - 1);
+            } else {
+                query = query.limit(options.limit);
+            }
+
+            const { data, error } = await query;
+            if (error) {
+                throw new Error(`Database query failed: ${error.message}`);
+            }
+            return (data as T[]) || [];
         }
 
-        const { data, error } = await query;
+        // No explicit limit: page through the entire result set so we never hit
+        // PostgREST's default 1000-row cap (which otherwise silently truncates
+        // whole-collection reads — e.g. products showing 0 stock because their
+        // batches fell beyond row 1000). Every table has an `id` primary key, so
+        // we add it as a stable tiebreaker to keep page boundaries consistent.
+        const PAGE = 1000;
+        const all: T[] = [];
+        let from = options.offset || 0;
 
-        if (error) {
-            throw new Error(`Database query failed: ${error.message}`);
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const query = build().order('id', { ascending: true }).range(from, from + PAGE - 1);
+            const { data, error } = await query;
+            if (error) {
+                throw new Error(`Database query failed: ${error.message}`);
+            }
+
+            const rows = (data as T[]) || [];
+            all.push(...rows);
+
+            if (rows.length < PAGE) break;
+            from += PAGE;
         }
 
-        return (data as T[]) || [];
+        return all;
     }
 
     async insert<T>(table: string, data: Partial<T>): Promise<T> {

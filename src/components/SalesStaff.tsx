@@ -5,6 +5,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LoadingSpinner } from './ui';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/paginate';
 import { buildCommissionReportHTML } from './staff/commissionReportHTML';
 
 type StaffRole = 'admin' | 'cashier' | 'stock_manager' | 'staff';
@@ -642,12 +643,14 @@ function CommissionReport({ staff }: { staff: StaffMember[] }) {
       const monthEnd = new Date(y, m, 1).toISOString();
       const monthLastDay = new Date(y, m, 0).toISOString().split('T')[0];
 
-      const [{ data: sales }, { data: paidRecs }, { data: rateHistory }] = await Promise.all([
-        client.from('sales')
+      const [sales, { data: paidRecs }, { data: rateHistory }] = await Promise.all([
+        // Whole month's sales drive commission totals — page past the 1000-row cap.
+        fetchAllRows<any>(() => client.from('sales')
           .select('cashier_id, total_amount, sale_date')
           .gte('sale_date', monthStart)
           .lt('sale_date', monthEnd)
-          .not('cashier_id', 'is', null),
+          .not('cashier_id', 'is', null)
+          .order('id')),
         client.from('staff_commission_payments')
           .select('staff_id')
           .eq('month', month),
@@ -1080,10 +1083,10 @@ export function SalesStaff() {
         weekDays.push(dt.toISOString().split('T')[0]);
       }
 
-      const [{ data: todaySales }, { data: monthSales }, { data: weekSales }] = await Promise.all([
-        client.from('sales').select('cashier_id, total_amount').gte('sale_date', today).not('cashier_id', 'is', null),
-        client.from('sales').select('cashier_id, total_amount').gte('sale_date', monthStart).not('cashier_id', 'is', null),
-        client.from('sales').select('cashier_id, total_amount, sale_date').gte('sale_date', weekDays[0]).not('cashier_id', 'is', null),
+      const [todaySales, monthSales, weekSales] = await Promise.all([
+        fetchAllRows<any>(() => client.from('sales').select('cashier_id, total_amount').gte('sale_date', today).not('cashier_id', 'is', null).order('id')),
+        fetchAllRows<any>(() => client.from('sales').select('cashier_id, total_amount').gte('sale_date', monthStart).not('cashier_id', 'is', null).order('id')),
+        fetchAllRows<any>(() => client.from('sales').select('cashier_id, total_amount, sale_date').gte('sale_date', weekDays[0]).not('cashier_id', 'is', null).order('id')),
       ]);
 
       const todayMap: Record<string, { sales: number; revenue: number }> = {};

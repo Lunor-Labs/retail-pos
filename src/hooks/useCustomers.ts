@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/paginate';
 import { Customer } from '../types';
 
 export function useCustomers() {
@@ -12,12 +13,9 @@ export function useCustomers() {
       setLoading(true);
       setError(null);
 
-      const { data, error: customersError } = await supabase
-        .from('customers')
-        .select('*')
-        .order('name');
-
-      if (customersError) throw customersError;
+      const data = await fetchAllRows<Customer>(() =>
+        supabase.from('customers').select('*').order('name').order('id'),
+      );
 
       setCustomers(data || []);
     } catch (err) {

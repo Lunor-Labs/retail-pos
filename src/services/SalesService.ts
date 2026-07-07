@@ -4,6 +4,7 @@ import { ProductRepository } from '../repositories/ProductRepository';
 import { InventoryService } from './InventoryService';
 import { Sale, SaleItem } from '../types';
 import { logger } from '../lib/logger';
+import { fetchAllRows } from '../lib/paginate';
 
 export interface CreateSaleInput {
     customer_id?: string | null;
@@ -503,13 +504,15 @@ export class SalesService {
             const sinceStr = since.toISOString();
 
             // Fetch sales + their items in one query, grouped by sale_date
-            const { data: sales, error } = await client
-                .from('sales')
-                .select('sale_date, total_amount, sale_items(cost_price, quantity)')
-                .gte('sale_date', sinceStr)
-                .order('sale_date', { ascending: true });
-
-            if (error) throw error;
+            // (paged past the 1000-row cap so long windows aren't truncated)
+            const sales = await fetchAllRows<any>(() =>
+                client
+                    .from('sales')
+                    .select('sale_date, total_amount, sale_items(cost_price, quantity)')
+                    .gte('sale_date', sinceStr)
+                    .order('sale_date', { ascending: true })
+                    .order('id'),
+            );
 
             const revenueMap = new Map<string, number>();
             const costMap = new Map<string, number>();
@@ -544,10 +547,13 @@ export class SalesService {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            const { data } = await (client.from('sale_items') as any)
-                .select('quantity, products(name), sales!inner(sale_date)')
-                .gte('sales.sale_date', today.toISOString())
-                .not('product_id', 'is', null);
+            const data = await fetchAllRows<any>(() =>
+                (client.from('sale_items') as any)
+                    .select('quantity, products(name), sales!inner(sale_date)')
+                    .gte('sales.sale_date', today.toISOString())
+                    .not('product_id', 'is', null)
+                    .order('id'),
+            );
 
             const itemMap = new Map<string, number>();
             (data || []).forEach((item: any) => {
@@ -659,9 +665,12 @@ export class SalesService {
             }
             const startStr = startDate.toISOString().split('T')[0];
 
-            const { data: items } = await (client.from('sale_items') as any)
-                .select('quantity, unit_price, products(name, sku), sales!inner(sale_date)')
-                .gte('sales.sale_date', startStr);
+            const items = await fetchAllRows<any>(() =>
+                (client.from('sale_items') as any)
+                    .select('quantity, unit_price, products(name, sku), sales!inner(sale_date)')
+                    .gte('sales.sale_date', startStr)
+                    .order('id'),
+            );
 
             const colors = ['#1B6B4F', '#3340A6', '#7A2A56', '#C68A2E', '#3A4E6B'];
             const map = new Map<string, { name: string; sku: string; units: number; rev: number }>();

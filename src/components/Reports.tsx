@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Download, Star, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/paginate';
 import { LoadingSpinner } from './ui';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -309,30 +310,31 @@ export function Reports() {
       const { start, end, prevStart, prevEnd, isToday } = getRange(rangeId, customStart, customEnd);
       setIsHourly(isToday);
 
-      const [salesRes, prevSalesRes, itemsRes, loyaltyRes] = await Promise.all([
-        supabase.from('sales')
+      // Each of these reads a whole date-ranged collection, so page past the
+      // 1000-row cap to avoid truncated (under-counted) report totals.
+      const [sales, prevSales, items, loyaltyTxns] = await Promise.all([
+        fetchAllRows<any>(() => supabase.from('sales')
           .select('total_amount, payment_method, sale_date, sale_items(quantity, unit_price, cost_price)')
           .gte('sale_date', `${start}T00:00:00`)
-          .lte('sale_date', `${end}T23:59:59`),
-        supabase.from('sales')
+          .lte('sale_date', `${end}T23:59:59`)
+          .order('id')),
+        fetchAllRows<any>(() => supabase.from('sales')
           .select('total_amount')
           .gte('sale_date', `${prevStart}T00:00:00`)
-          .lte('sale_date', `${prevEnd}T23:59:59`),
-        (supabase.from('sale_items') as any)
+          .lte('sale_date', `${prevEnd}T23:59:59`)
+          .order('id')),
+        fetchAllRows<any>(() => (supabase.from('sale_items') as any)
           .select('quantity, unit_price, cost_price, is_manual, products(name, sku, category, brand), sales!inner(sale_date)')
           .gte('sales.sale_date', `${start}T00:00:00`)
           .lte('sales.sale_date', `${end}T23:59:59`)
-          .not('product_id', 'is', null),
-        (supabase.from('loyalty_transactions') as any)
+          .not('product_id', 'is', null)
+          .order('id')),
+        fetchAllRows<any>(() => (supabase.from('loyalty_transactions') as any)
           .select('type, points')
           .gte('created_at', `${start}T00:00:00`)
-          .lte('created_at', `${end}T23:59:59`),
+          .lte('created_at', `${end}T23:59:59`)
+          .order('id')),
       ]);
-
-      const sales = (salesRes.data ?? []) as any[];
-      const prevSales = (prevSalesRes.data ?? []) as any[];
-      const items = (itemsRes.data ?? []) as any[];
-      const loyaltyTxns = (loyaltyRes.data ?? []) as any[];
 
       // ── KPIs ──
       let revenue = 0, profit = 0;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, Upload, Download, Mail, Phone, MapPin, Clock, X, FileText, CheckCircle, Eye, ChevronLeft } from 'lucide-react';
 import { customerService, salesService } from '../services';
+import { fetchAllRows } from '../lib/paginate';
 import { useToast } from '../contexts/ToastContext';
 import { Modal, LoadingSpinner, Pagination } from './ui';
 import { Database } from '../lib/database.types';
@@ -728,10 +729,12 @@ export function Customers() {
       // Fetch sales aggregates via Supabase client
       try {
         const client = (customerService as any).customerRepo.adapter.getClient();
-        const { data } = await client
+        // All-time sales aggregated per customer — page past the 1000-row cap.
+        const data = await fetchAllRows<any>(() => client
           .from('sales')
           .select('customer_id, total_amount, sale_date')
-          .not('customer_id', 'is', null);
+          .not('customer_id', 'is', null)
+          .order('id'));
 
         const map: Record<string, SaleStats> = {};
         (data ?? []).forEach((row: any) => {

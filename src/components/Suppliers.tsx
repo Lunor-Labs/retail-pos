@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { LoadingSpinner, Pagination } from './ui';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/paginate';
 
 type Supplier = {
   id: string;
@@ -377,10 +378,11 @@ export function Suppliers() {
     try {
       const raw = await supplierService.getActiveSuppliers();
 
-      // Aggregate batch stats per supplier
-      const { data: agg } = await supabase
+      // Aggregate batch stats per supplier (whole table — page past the 1000-row cap)
+      const agg = await fetchAllRows<any>(() => supabase
         .from('product_batches')
-        .select('supplier_id, cost_price, initial_quantity, received_date');
+        .select('supplier_id, cost_price, initial_quantity, received_date')
+        .order('id'));
 
       const batchMap: Record<string, { cost: number; count: number; lastDate: string | null }> = {};
       for (const b of (agg ?? [])) {
@@ -417,12 +419,13 @@ export function Suppliers() {
   useEffect(() => {
     if (!selected) { setSelectedBatches([]); return; }
     setBatchesLoading(true);
-    supabase
+    fetchAllRows<BatchDelivery>(() => supabase
       .from('product_batches')
       .select('id, batch_number, received_date, initial_quantity, current_quantity, cost_price, selling_price, markup_percentage, variant:product_variants(sku, size, color, product:products(name, sku))')
       .eq('supplier_id', selected.id)
       .order('received_date', { ascending: false })
-      .then(({ data }) => { setSelectedBatches((data ?? []) as BatchDelivery[]); })
+      .order('id'))
+      .then((data) => { setSelectedBatches(data); })
       .finally(() => setBatchesLoading(false));
   }, [selected?.id]);
 

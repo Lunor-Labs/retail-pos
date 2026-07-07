@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { fetchAllRows } from '../lib/paginate';
 import { useToast } from '../contexts/ToastContext';
 
 interface PaymentSummary { count: number; total: number; cashPortion?: number; cardPortion?: number }
@@ -29,14 +30,16 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
   async function load() {
     setLoading(true);
     try {
-      const [{ data: setting }, { data: sales }] = await Promise.all([
+      const [{ data: setting }, sales] = await Promise.all([
         (supabase.from('app_settings') as any)
           .select('value').eq('key', settingKey).maybeSingle(),
-        (supabase.from('sales') as any)
+        // Whole day's sales feed the cash-drawer totals — page past the 1000-row cap.
+        fetchAllRows<any>(() => (supabase.from('sales') as any)
           .select('payment_method, total_amount, paid_amount, cash_amount, card_amount')
           .gte('sale_date', `${today}T00:00:00`)
           .lt('sale_date', new Date(new Date(today).getTime() + 86400000).toISOString().split('T')[0] + 'T00:00:00')
-          .neq('status', 'refunded'),
+          .neq('status', 'refunded')
+          .order('id')),
       ]);
 
       if (setting) {
