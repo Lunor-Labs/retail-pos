@@ -130,20 +130,26 @@ export class ProductRepository extends BaseRepository<Product> {
     async findByBarcode(barcode: string): Promise<Product | null> {
         const client = (this.adapter as any).getClient();
 
-        // Search product_variants by sku (SKU is the barcode)
-        const { data: variants } = await client
-            .from('product_variants')
-            .select('product_id')
-            .eq('sku', barcode)
-            .limit(1);
+        // A variant is identified either by its generated SKU (used as the barcode
+        // on system-generated labels) or by an external/manufacturer barcode kept
+        // in the dedicated `barcode` column. Try SKU first, then the barcode column.
+        // Two explicit queries avoid PostgREST .or() filter-parsing issues when a
+        // scanned code contains reserved characters.
+        for (const column of ['sku', 'barcode'] as const) {
+            const { data: variants } = await client
+                .from('product_variants')
+                .select('product_id')
+                .eq(column, barcode)
+                .limit(1);
 
-        if (variants && variants.length > 0) {
-            const { data: product } = await client
-                .from('products')
-                .select('*')
-                .eq('id', variants[0].product_id)
-                .single();
-            if (product) return product as Product;
+            if (variants && variants.length > 0) {
+                const { data: product } = await client
+                    .from('products')
+                    .select('*')
+                    .eq('id', variants[0].product_id)
+                    .single();
+                if (product) return product as Product;
+            }
         }
 
         // Fall back: product-level SKU

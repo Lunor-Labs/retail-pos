@@ -92,6 +92,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
   // Full-page add/edit view state
   const [pageView, setPageView] = useState<'list' | 'add' | 'edit'>('list');
   const [editProductId, setEditProductId] = useState<string | null>(null);
+  // A barcode captured by a "scan an unknown code" on the list, carried into the
+  // Add Product page to prefill the first variant's barcode.
+  const [scannedBarcode, setScannedBarcode] = useState('');
   const [rememberedBrand, setRememberedBrand] = useState('');
   const [rememberedPricing, setRememberedPricing] = useState<DefaultPricing | undefined>(undefined);
   const [tab, setTab] = useState<'products' | 'activity'>('products');
@@ -101,8 +104,10 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept scanner if a major modal is open (except our own Add/Edit modal)
-      if (showImportModal || (showModal && modalMode === 'view')) return;
+      // Don't intercept the scanner while a major modal is open, or while the
+      // Add/Edit product page is open — there the scan should land in the focused
+      // field (e.g. the variant's Barcode input), not trigger a global lookup.
+      if (showImportModal || (showModal && modalMode === 'view') || pageView === 'add' || pageView === 'edit') return;
 
       const currentTime = Date.now();
       const diff = currentTime - lastKeyTimeRef.current;
@@ -156,7 +161,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
       window.removeEventListener('keydown', handleKeyDown);
       if (barcodeTimeoutRef.current) clearTimeout(barcodeTimeoutRef.current);
     };
-  }, [showModal, modalMode, scanningBarcode, barcodeBuffer, showImportModal]);
+  }, [showModal, modalMode, scanningBarcode, barcodeBuffer, showImportModal, pageView]);
 
   // Debounce search term
   useEffect(() => {
@@ -247,7 +252,8 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setQuickStockProduct(product);
   }
 
-  function openAddPage() {
+  function openAddPage(barcode = '') {
+    setScannedBarcode(barcode);
     setPageView('add');
     setEditProductId(null);
   }
@@ -268,6 +274,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
     setRememberedPricing(pricing);
     refetch();
     setEditProductId(null);
+    setScannedBarcode(''); // the scanned code belonged to the product just saved
     setPageView('list');
     setTimeout(() => setPageView('add'), 0);
   }
@@ -323,8 +330,9 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           showToast(`Found: ${fullProduct.name}`, 'success');
         }
       } else {
-        // New product - open add page
-        openAddPage();
+        // New product - open the add page with the scanned code prefilled as the
+        // first variant's (external) barcode.
+        openAddPage(barcode);
         playScannerBeep();
         showToast('New product detected!', 'info');
       }
@@ -470,6 +478,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
         onCancel={closePage}
         initialBrand={rememberedBrand}
         initialPricing={rememberedPricing}
+        initialBarcode={pageView === 'add' ? scannedBarcode : ''}
         onSaveAndNext={pageView === 'add' ? handleSaveAndNext : undefined}
       />
     );
@@ -511,7 +520,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
               <button onClick={handleExportCSV} className="btn" style={{ height: 36 }}>
                 <Download size={14} /> Export CSV
               </button>
-              <button onClick={openAddPage} className="btn btn-primary" style={{ height: 36 }}>
+              <button onClick={() => openAddPage()} className="btn btn-primary" style={{ height: 36 }}>
                 <Plus size={14} /> Add Product
               </button>
             </>
@@ -614,7 +623,7 @@ export function Products({ initialStockFilter = 'all' }: ProductsProps) {
           icon={PackageOpen}
           title="No products found"
           description={debouncedSearch ? `No products match "${debouncedSearch}"` : "You haven't added any products yet."}
-          action={!debouncedSearch ? { label: 'Add Your First Product', onClick: openAddPage } : undefined}
+          action={!debouncedSearch ? { label: 'Add Your First Product', onClick: () => openAddPage() } : undefined}
         />
       ) : (
         <div className="card" style={{ overflow: 'hidden' }}>
