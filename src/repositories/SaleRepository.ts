@@ -285,7 +285,7 @@ export class SaleRepository extends BaseRepository<Sale> {
      */
     async findItemsWithDetails(saleId: string): Promise<SaleItem[]> {
         return this.adapter.query<SaleItem>('sale_items', {
-            select: '*, product:products(name, sku, unit), batch:product_batches(batch_number)',
+            select: '*, product:products(name, sku, unit), batch:product_batches(batch_number), variant:product_variants(color, size)',
             where: [{ field: 'sale_id', operator: '=', value: saleId }],
         });
     }

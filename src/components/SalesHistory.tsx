@@ -35,6 +35,7 @@ type SaleItem = {
   manual_description: string | null;
   product?: { name: string; sku: string } | null;
   batch?: { batch_number: string } | null;
+  variant?: { color: string | null; size: string | null } | null;
   warranty_duration?: number;
   warranty_unit?: 'days' | 'months' | 'years' | null;
   warranty_type?: string | null;
@@ -389,6 +390,7 @@ export function SalesHistory() {
         discountedSubtotal: item.unit_price * item.quantity,
         batchNumber: item.is_manual ? '' : (item.batch?.batch_number ?? ''),
         isManual: item.is_manual,
+        variantLabel: item.variant ? [item.variant.color, item.variant.size].filter(Boolean).join(' · ') : undefined,
         warranty: (!item.is_manual && item.warranty_duration && item.warranty_duration > 0) ? {
           duration: item.warranty_duration,
           unit: (item.warranty_unit as any) ?? 'months',
