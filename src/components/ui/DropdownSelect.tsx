@@ -23,7 +23,7 @@ interface DropdownSelectProps {
 export function DropdownSelect({ value, onChange, options, placeholder = 'Select…', disabled = false, style, searchThreshold = 6, variant = 'box', onCreate }: DropdownSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxListHeight: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -52,7 +52,23 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
     if (disabled) return;
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPanelPos({ top: r.bottom + 4, left: r.left, width: r.width });
+      const gap = 4;
+      const edgeMargin = 8;
+      const searchBoxHeight = showSearch ? 46 : 0;
+      const spaceBelow = window.innerHeight - r.bottom - gap - edgeMargin;
+      const spaceAbove = r.top - gap - edgeMargin;
+      // Flip the panel above the trigger when there isn't enough room below —
+      // otherwise a `position: fixed` panel gets cropped by the viewport edge
+      // and its tail is unreachable by scroll (the panel itself doesn't move).
+      const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+      const available = Math.max(120, openUp ? spaceAbove : spaceBelow);
+      setPanelPos({
+        top: openUp ? undefined : r.bottom + gap,
+        bottom: openUp ? window.innerHeight - r.top + gap : undefined,
+        left: r.left,
+        width: r.width,
+        maxListHeight: Math.min(220, available - searchBoxHeight),
+      });
     }
     setOpen(o => !o);
   }
@@ -142,7 +158,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
           <div style={{ position: 'fixed', inset: 0, zIndex: 299 }} onClick={() => { setOpen(false); setSearch(''); }} />
           <div ref={panelRef} style={{
           position: 'fixed',
-          top: panelPos.top,
+          ...(panelPos.top !== undefined ? { top: panelPos.top } : { bottom: panelPos.bottom }),
           left: panelPos.left,
           width: isPill ? Math.max(panelPos.width, 180) : panelPos.width,
           zIndex: 300,
@@ -183,7 +199,7 @@ export function DropdownSelect({ value, onChange, options, placeholder = 'Select
           )}
 
           {/* Options list */}
-          <div style={{ maxHeight: 220, overflowY: 'auto', padding: 4 }} className="custom-scrollbar">
+          <div style={{ maxHeight: panelPos.maxListHeight, overflowY: 'auto', padding: 4 }} className="custom-scrollbar">
             {/* Clear option */}
             {placeholder && !search && (
               <button
