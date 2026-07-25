@@ -27,6 +27,15 @@ export interface InvoiceData {
     serviceCharge?: number;
     paymentMethod: string;
     cashierName?: string;
+    /** Store credit or gift voucher put towards this sale. */
+    creditApplied?: number;
+    creditCode?: string;
+    /** True when the code was issued by a return rather than sold as a gift voucher. */
+    creditIsReturn?: boolean;
+    /** Still on the code after this sale — printed so the customer knows they hold it. */
+    creditRemaining?: number;
+    /** Cash handed back from the credit. Not change from a payment. */
+    cashPaidOut?: number;
 }
 
 /** Props accepted by the top-level Invoice modal component. */

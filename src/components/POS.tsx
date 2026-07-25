@@ -27,8 +27,9 @@ import { LoyaltyPanel } from './pos/LoyaltyPanel';
 import { db } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { SyncStatus } from './pos/SyncStatus';
-import { Pagination, Modal } from './ui';
-import { salesService, customerService, productService, variantService, loyaltyService } from '../services';
+import { Pagination, Modal, PinPrompt } from './ui';
+import { salesService, customerService, productService, variantService, loyaltyService, storeCreditService, ApprovalError } from '../services';
+import type { StoreCredit } from '../services';
 import { logger } from '../lib/logger';
 import { playScannerBeep } from '../utils/audio';
 
@@ -84,8 +85,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
 
   // Gift voucher redemption
   const [voucherInput, setVoucherInput] = useState('');
-  const [appliedVoucher, setAppliedVoucher] = useState<{ id: string; code: string; amount: number } | null>(null);
+  // Holds the spendable balance, not the face value: a credit can be part-spent
+  // across visits, so `balance` is what may be applied to this sale.
+  const [appliedVoucher, setAppliedVoucher] = useState<StoreCredit | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
+  // When the credit is worth more than the bill, the customer decides at the counter
+  // whether to keep the rest on the code or take it in cash.
+  const [payRemainderCash, setPayRemainderCash] = useState(false);
+  const [pendingPayout, setPendingPayout] = useState<{ amount: number; saleId: string | null } | null>(null);
+  const [payoutPinError, setPayoutPinError] = useState<string | null>(null);
 
   // POS voucher issuance
   const [showIssueVoucher, setShowIssueVoucher] = useState(false);
@@ -263,7 +271,13 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         }
         if (barcodeBuffer.length > 3) {
           e.preventDefault();
-          searchProductByBarcode(barcodeBuffer);
+          // A slip carries a RET-/RVL- code rather than a product barcode, so it goes
+          // to the credit lookup — the cashier scans it instead of typing it out.
+          if (/^(RET|RVL)-/i.test(barcodeBuffer.trim())) {
+            applyVoucher(barcodeBuffer.trim());
+          } else {
+            searchProductByBarcode(barcodeBuffer);
+          }
           setBarcodeBuffer('');
           return;
         }
@@ -678,7 +692,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
   // discountAmount is no longer used for global discount, simplifying math
   const taxBase = effectiveSubtotal;
   const taxAmount = taxBase * (taxRate / 100);
-  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.amount, taxBase + taxAmount + serviceCharge - loyaltyDiscount) : 0;
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.balance, taxBase + taxAmount + serviceCharge - loyaltyDiscount) : 0;
+  // What the credit still holds after this sale — offered back as cash or kept on the code.
+  const creditRemainder = appliedVoucher ? Math.max(0, appliedVoucher.balance - voucherDiscount) : 0;
   const total = Math.max(0, taxBase + taxAmount + serviceCharge - loyaltyDiscount - voucherDiscount);
   const changeAmount = paidAmount - total;
 
@@ -780,26 +796,81 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     }
   }
 
-  async function applyVoucher() {
-    const code = voucherInput.trim().toUpperCase();
+  /**
+   * Look up a gift voucher or a return credit — both live in the same place, so one
+   * box accepts either. Refuses while offline: a code spent on a disconnected till
+   * cannot be checked against the server, and the same code could then be used at
+   * another counter.
+   */
+  async function applyVoucher(codeArg?: string) {
+    const code = (codeArg ?? voucherInput).trim().toUpperCase();
     if (!code) return;
+
+    if (!navigator.onLine) {
+      showToast('No internet — a credit or voucher can only be used online', 'error');
+      return;
+    }
+
     setVoucherLoading(true);
     try {
-      const { data, error } = await (supabase.from('gift_vouchers') as any)
-        .select('id, code, amount, expires_at, status')
-        .eq('code', code)
-        .single();
-      if (error || !data) { showToast('Voucher not found', 'error'); return; }
-      if (data.status !== 'active') { showToast(`Voucher is ${data.status}`, 'error'); return; }
-      if (data.expires_at && new Date(data.expires_at) < new Date()) { showToast('Voucher has expired', 'error'); return; }
-      setAppliedVoucher({ id: data.id, code: data.code, amount: data.amount });
+      const credit = await storeCreditService.lookup(code);
+      if (!credit) { showToast(`No voucher or credit found for ${code}`, 'error'); return; }
+
+      const reason = storeCreditService.unusableReason(credit);
+      if (reason) { showToast(reason, 'error'); return; }
+
+      setAppliedVoucher(credit);
+      setPayRemainderCash(false);
       setVoucherInput('');
-      showToast(`Voucher ${data.code} applied — LKR ${Math.round(data.amount).toLocaleString()} off`, 'success');
-    } catch {
-      showToast('Failed to validate voucher', 'error');
+      setShowVoucherInput(false);
+      showToast(
+        `${credit.isReturnCredit ? 'Return credit' : 'Voucher'} ${credit.code} applied — LKR ${Math.round(credit.balance).toLocaleString()} available`,
+        'success',
+      );
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not check that code', 'error');
     } finally {
       setVoucherLoading(false);
     }
+  }
+
+  /**
+   * Hand a credit back as cash. Used both for the leftover after a sale and for a
+   * customer who found nothing and wants the whole amount back.
+   *
+   * The PIN limit lives in the database, so this optimistically tries without one and
+   * only asks when the server says approval is needed.
+   */
+  async function runPayout(amount: number, saleId: string | null, pin?: string) {
+    if (!appliedVoucher) return false;
+    try {
+      const { remaining } = await storeCreditService.payoutCash({
+        code: appliedVoucher.code,
+        amount,
+        saleId,
+        pin: pin ?? null,
+      });
+      setPendingPayout(null);
+      setPayoutPinError(null);
+      showToast(`Paid out LKR ${Math.round(amount).toLocaleString()} in cash`, 'success');
+      if (remaining <= 0) setAppliedVoucher(null);
+      else setAppliedVoucher({ ...appliedVoucher, balance: remaining });
+      return true;
+    } catch (e) {
+      if (e instanceof ApprovalError) {
+        setPendingPayout({ amount, saleId });
+        setPayoutPinError(pin ? e.message : null);
+      } else {
+        showToast(e instanceof Error ? e.message : 'Could not pay out this credit', 'error');
+      }
+      return false;
+    }
+  }
+
+  /** Customer found nothing they wanted — give the whole remaining credit back. */
+  async function payoutWholeCredit() {
+    if (!appliedVoucher) return;
+    await runPayout(appliedVoucher.balance, null);
   }
 
   async function handleCompleteSale() {
@@ -887,15 +958,37 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         serviceCharge,
         paymentMethod,
         cashierName: profile?.full_name || 'Cashier',
+        creditApplied: voucherDiscount > 0 ? voucherDiscount : undefined,
+        creditCode: appliedVoucher?.code,
+        creditIsReturn: appliedVoucher?.isReturnCredit,
+        creditRemaining: payRemainderCash ? 0 : creditRemainder,
+        cashPaidOut: payRemainderCash ? creditRemainder : undefined,
       });
 
-      // Mark voucher as used
-      if (appliedVoucher) {
-        await (supabase.from('gift_vouchers') as any)
-          .update({ status: 'used', redeemed_at: new Date().toISOString() })
-          .eq('id', appliedVoucher.id);
-        setAppliedVoucher(null);
+      // Spend exactly what this sale used, rather than consuming the whole code.
+      // The previous behaviour marked it 'used' outright, so a voucher worth more
+      // than the bill lost its remaining value.
+      if (appliedVoucher && voucherDiscount > 0) {
+        try {
+          await storeCreditService.redeemToSale(appliedVoucher.code, voucherDiscount, sale.id);
+        } catch (creditErr) {
+          // The sale is already recorded; surface the problem rather than losing it.
+          logger.error('Credit redemption failed after the sale was recorded', creditErr as Error);
+          showToast(
+            `Sale saved, but the credit could not be applied: ${creditErr instanceof Error ? creditErr.message : 'unknown error'}`,
+            'error',
+          );
+        }
       }
+
+      // Any leftover the customer asked for in cash, now that there is a sale to tie
+      // it to. Handled after the sale so a refused PIN cannot undo a completed sale.
+      if (appliedVoucher && payRemainderCash && creditRemainder > 0) {
+        await runPayout(creditRemainder, sale.id);
+      }
+
+      setAppliedVoucher(null);
+      setPayRemainderCash(false);
 
       setShowInvoice(true);
       clearCart();
@@ -908,6 +1001,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
       refetchProducts(); // Refresh stock levels
     } catch (err: any) {
       if (!navigator.onLine) {
+        // A credit was applied while online but the connection dropped before the
+        // sale went through. The total already has the credit taken off it, yet the
+        // credit itself was never spent — queueing that would give the discount away
+        // and leave the code still usable. Better to stop and let the cashier retry.
+        if (appliedVoucher && voucherDiscount > 0) {
+          showToast(
+            'Connection lost before the credit could be applied. Remove the credit to continue offline, or wait for the connection.',
+            'error',
+          );
+          return;
+        }
+
         // Handle Offline Mode
         // The connection can drop after the server already deducted the stock but
         // before the sale was recorded. In that case queue the sale with no stock
@@ -1460,7 +1565,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
               )}
               {voucherDiscount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>Voucher · <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{appliedVoucher?.code}</span></span>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{appliedVoucher?.isReturnCredit ? 'Return credit' : 'Voucher'} · <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{appliedVoucher?.code}</span></span>
                   <span className="num" style={{ fontSize: 12, color: '#C9A84C', fontWeight: 500 }}>−LKR {voucherDiscount.toFixed(2)}</span>
                 </div>
               )}
@@ -1510,13 +1615,43 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           {/* Gift voucher — collapsed by default */}
           <div style={{ borderTop: '1px solid var(--line-2)', background: 'var(--panel)' }}>
             {appliedVoucher ? (
-              <div style={{ padding: '7px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13 }}>🎁</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</span>
-                <span style={{ fontSize: 11.5, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</span>
-                <button onClick={() => setAppliedVoucher(null)} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
-                  <X size={13} />
-                </button>
+              <div style={{ padding: '7px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13 }}>{appliedVoucher.isReturnCredit ? '♻️' : '🎁'}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#8a6f2c', fontFamily: "'JetBrains Mono',monospace" }}>{appliedVoucher.code}</span>
+                  <span style={{ fontSize: 11.5, color: '#a88540' }}>−LKR {Math.round(voucherDiscount).toLocaleString()}</span>
+                  <button onClick={() => { setAppliedVoucher(null); setPayRemainderCash(false); }} style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: '#a88540', cursor: 'pointer', padding: 0, lineHeight: 0 }}>
+                    <X size={13} />
+                  </button>
+                </div>
+
+                {/* What is left over, and what the customer wants done with it. */}
+                {creditRemainder > 0 && (
+                  <div style={{ padding: '7px 9px', borderRadius: 7, background: 'var(--panel-2)', border: '1px solid var(--line-2)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <div style={{ fontSize: 11.5, color: 'var(--ink-2)' }}>
+                      <strong className="num">LKR {Math.round(creditRemainder).toLocaleString()}</strong> left over
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)', cursor: 'default' }}>
+                      <input type="checkbox" checked={!payRemainderCash} onChange={() => setPayRemainderCash(false)} />
+                      Keep it on this code
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--muted)', cursor: 'default' }}>
+                      <input type="checkbox" checked={payRemainderCash} onChange={() => setPayRemainderCash(true)} />
+                      Pay it out in cash
+                    </label>
+                  </div>
+                )}
+
+                {/* Nothing in the cart — the customer found nothing they liked. */}
+                {cart.length === 0 && appliedVoucher.balance > 0 && (
+                  <button
+                    onClick={payoutWholeCredit}
+                    className="btn btn-sm"
+                    style={{ height: 28, fontSize: 11.5, width: '100%' }}
+                  >
+                    Pay out LKR {Math.round(appliedVoucher.balance).toLocaleString()} in cash
+                  </button>
+                )}
               </div>
             ) : showVoucherInput ? (
               <div style={{ padding: '7px 16px', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -1525,10 +1660,10 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                   value={voucherInput}
                   onChange={e => setVoucherInput(e.target.value.toUpperCase())}
                   onKeyDown={e => e.key === 'Enter' && applyVoucher()}
-                  placeholder="Voucher code…"
+                  placeholder="Voucher or credit code…"
                   style={{ flex: 1, height: 28, border: '1px solid var(--line)', borderRadius: 6, padding: '0 8px', fontSize: 12, fontFamily: "'JetBrains Mono',monospace", outline: 'none', background: 'var(--panel-2)', letterSpacing: '0.04em', minWidth: 0 }}
                 />
-                <button onClick={applyVoucher} disabled={!voucherInput.trim() || voucherLoading} className="btn btn-sm" style={{ height: 28, fontSize: 11.5, flexShrink: 0 }}>
+                <button onClick={() => applyVoucher()} disabled={!voucherInput.trim() || voucherLoading} className="btn btn-sm" style={{ height: 28, fontSize: 11.5, flexShrink: 0 }}>
                   {voucherLoading ? '…' : 'Apply'}
                 </button>
                 <button onClick={() => { setShowVoucherInput(false); setVoucherInput(''); }} style={{ border: 0, background: 'transparent', color: 'var(--muted)', padding: 0, lineHeight: 0, flexShrink: 0 }}>
@@ -1543,7 +1678,7 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
                 onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
               >
                 <span style={{ fontSize: 13 }}>🎁</span>
-                <span>Apply gift voucher</span>
+                <span>Apply voucher or return credit</span>
               </button>
             )}
           </div>
@@ -2210,6 +2345,18 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
           initialVariantId={variantPickerInitialId}
           onSelect={addToCartFromVariant}
           onClose={() => { setVariantPickerProduct(null); setVariantPickerVariants([]); setVariantPickerInitialId(null); }}
+        />
+      )}
+
+      {/* Cash payouts above the configured limit need an admin. The limit is checked
+          by the database, so this only appears once the server has asked for it. */}
+      {pendingPayout && (
+        <PinPrompt
+          title={`Pay out LKR ${Math.round(pendingPayout.amount).toLocaleString()} in cash`}
+          detail="Cash refunds above the set limit need an admin to approve."
+          error={payoutPinError}
+          onSubmit={pin => runPayout(pendingPayout.amount, pendingPayout.saleId, pin)}
+          onCancel={() => { setPendingPayout(null); setPayoutPinError(null); }}
         />
       )}
     </>

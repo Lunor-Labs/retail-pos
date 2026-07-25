@@ -98,6 +98,12 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
                     <span>Service Charge:</span><span>LKR {invoiceData.serviceCharge.toFixed(2)}</span>
                 </div>
             )}
+            {invoiceData.creditApplied !== undefined && invoiceData.creditApplied > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{invoiceData.creditIsReturn ? 'Return Credit' : 'Voucher'}:</span>
+                    <span>-LKR {invoiceData.creditApplied.toFixed(2)}</span>
+                </div>
+            )}
             <div style={{ borderTop: '2px solid #000', margin: '6px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14 }}>
                 <span>TOTAL:</span><span>LKR {invoiceData.total.toFixed(2)}</span>
@@ -114,6 +120,12 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>Paid:</span><span>LKR {invoiceData.paidAmount.toFixed(2)}</span>
                     </div>
+                    {invoiceData.cashPaidOut !== undefined && invoiceData.cashPaidOut > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Cash Refunded:</span>
+                            <span>LKR {invoiceData.cashPaidOut.toFixed(2)}</span>
+                        </div>
+                    )}
                     {invoiceData.changeAmount > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span>Change:</span>
@@ -123,6 +135,19 @@ export function InvoicePreview({ invoiceData, showDiscount }: Props) {
                 </>
             )}
             <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
+
+            {/* Balance left on the code — printed so the customer knows they still
+                hold it, and can bring the same code back next time. */}
+            {invoiceData.creditRemaining !== undefined && invoiceData.creditRemaining > 0 && invoiceData.creditCode && (
+                <>
+                    <div style={{ borderTop: '1px dashed #999', margin: '6px 0' }} />
+                    <div className="text-center" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 700 }}>Credit remaining: LKR {invoiceData.creditRemaining.toFixed(2)}</div>
+                        <div style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}>{invoiceData.creditCode}</div>
+                        <div style={{ color: '#555' }}>Keep this code — use it on your next visit</div>
+                    </div>
+                </>
+            )}
 
             {/* Footer */}
             <div className="text-center" style={{ paddingBottom: 6 }}>

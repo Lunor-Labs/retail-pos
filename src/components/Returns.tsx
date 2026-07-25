@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, X, RotateCcw, ChevronRight, AlertTriangle } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
-import { returnService, salesService, customerService } from '../services';
-import { LoadingSpinner } from './ui';
+import { returnService, customerService, storeCreditService, ApprovalError } from '../services';
+import type { IssuedCredit } from '../services';
+import { LoadingSpinner, PinPrompt } from './ui';
+import { ReturnScanPanel } from './returns/ReturnScanPanel';
+import { ReturnSlip } from './returns/ReturnSlip';
+import type { ReturnSlipData } from './returns/returnSlipHTML';
+import type { ReturnLine } from './returns/ReturnScanPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type ReturnStatus = 'pending' | 'approved' | 'rejected';
-type RefundMethod = 'cash' | 'credit_note' | 'exchange';
+type RefundMethod = 'cash' | 'credit_note' | 'exchange' | 'store_credit';
 
 type ReturnRecord = {
   id: string;
@@ -32,21 +36,7 @@ type ReturnItem = {
   product: { name: string; sku?: string } | null;
 };
 
-type Sale = { id: string; sale_number: string; total_amount: number };
 type Customer = { id: string; name: string };
-type SaleItem = {
-  id: string;
-  product_id: string | null;
-  variant_id: string | null;
-  batch_id: string | null;
-  quantity: number;
-  unit_price: number;
-  is_manual: boolean;
-  manual_description: string | null;
-  product?: { name: string; sku: string; unit: string } | null;
-  variant?: { color: string | null; size: string | null } | null;
-};
-
 // ─── Helpers ─────────────────────────────────────────────────────────────
 function fmtLKR(n: number) { return 'LKR ' + Math.round(n).toLocaleString('en-US'); }
 function fmtK(n: number) {
@@ -65,12 +55,14 @@ function fmtDateTime(iso: string) {
 
 
 function methodStyle(m: RefundMethod | null) {
+  if (m === 'store_credit') return { bg: 'var(--accent-soft)', color: 'var(--accent-ink)' };
   if (m === 'credit_note') return { bg: 'color-mix(in oklab, #3A4E6B 14%, var(--panel-2))', color: '#3A4E6B' };
   if (m === 'exchange')    return { bg: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', color: 'var(--warn)' };
   return { bg: 'var(--accent-soft)', color: 'var(--accent-ink)' };
 }
 
 function methodLabel(m: RefundMethod | null) {
+  if (m === 'store_credit') return 'Store Credit';
   if (m === 'credit_note') return 'Credit Note';
   if (m === 'exchange') return 'Exchange';
   return 'Cash';
@@ -87,84 +79,72 @@ const labelStyle: React.CSSProperties = {
 };
 
 // ─── New Return Modal ─────────────────────────────────────────────────────
-function NewReturnModal({ sales, customers, onClose, onSaved }: {
-  sales: Sale[];
+// Returns are taken by scanning what the customer brought back — no bill needed,
+// because a barcode plus the batch it came from is enough to know both what to
+// refund and where the stock belongs. The payout is always store credit; whether
+// that becomes an exchange or cash is decided later at the counter, when the
+// customer knows what they want.
+function NewReturnModal({ customers, onClose, onIssued }: {
   customers: Customer[];
   onClose: () => void;
-  onSaved: () => void;
+  onIssued: (credit: IssuedCredit, phone: string, lines: ReturnLine[]) => void;
 }) {
-  const { profile } = useAuth();
   const { showToast } = useToast();
 
-  const [saleId, setSaleId] = useState('');
+  const [lines, setLines] = useState<ReturnLine[]>([]);
   const [customerId, setCustomerId] = useState('');
-  const [refundMethod, setRefundMethod] = useState<RefundMethod>('cash');
+  const [phone, setPhone] = useState('');
   const [reason, setReason] = useState('');
-  const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
-  const [returnQty, setReturnQty] = useState<Record<string, number>>({});
-  const [loadingItems, setLoadingItems] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  // Shown only after the database says this return needs approval, so the limit
+  // lives in one place instead of being duplicated here.
+  const [askPin, setAskPin] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
-    if (!saleId) { setSaleItems([]); setReturnQty({}); return; }
-    setLoadingItems(true);
-    salesService.getSaleItems(saleId)
-      .then(items => {
-        setSaleItems(items as SaleItem[]);
-        const init: Record<string, number> = {};
-        (items as SaleItem[]).forEach(it => { init[it.id] = 0; });
-        setReturnQty(init);
-      })
-      .catch(() => showToast('Failed to load sale items', 'error'))
-      .finally(() => setLoadingItems(false));
-  }, [saleId]);
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
 
-  const totalAmount = useMemo(() => {
-    return Object.entries(returnQty).reduce((sum, [id, qty]) => {
-      const item = saleItems.find(it => it.id === id);
-      return sum + (item ? item.unit_price * qty : 0);
-    }, 0);
-  }, [returnQty, saleItems]);
+  const totalAmount = useMemo(() => lines.reduce((sum, l) => sum + (l.amount || 0), 0), [lines]);
+  const overTag = lines.some(l => l.amount > l.tag_price * l.quantity);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(pin?: string) {
     setErr('');
-    if (totalAmount <= 0 && saleItems.length > 0) { setErr('Select at least one item to return.'); return; }
-    if (totalAmount <= 0 && !saleId) { setErr('Enter a return amount or link to a sale.'); return; }
-    if (!profile?.id) return;
+    if (lines.length === 0) { setErr('Scan at least one item.'); return; }
+    if (!reason.trim()) { setErr('Enter a reason for the return.'); return; }
+    if (totalAmount <= 0) { setErr('The refund total must be more than zero.'); return; }
+    if (overTag) { setErr("A refund cannot be more than the price on the item's label."); return; }
+
     setSaving(true);
     try {
-      const itemsToReturn = Object.entries(returnQty)
-        .filter(([, qty]) => qty > 0)
-        .map(([saleItemId, qty]) => {
-          const item = saleItems.find(it => it.id === saleItemId)!;
-          return {
-            product_id: item.product_id,
-            variant_id: item.variant_id ?? null,
-            batch_id: item.batch_id,
-            quantity: qty,
-            subtotal: item.unit_price * qty,
-            unit_price: item.unit_price,
-            sale_item_id: item.id,
-          };
-        });
+      const credit = await storeCreditService.issueReturnCredit({
+        items: lines.map(l => ({ batch_id: l.batch_id, quantity: l.quantity, amount: l.amount })),
+        reason: reason.trim(),
+        phone: phone.trim() || null,
+        customerId: customerId || null,
+        pin: pin ?? null,
+      });
 
-      const ret = await returnService.createReturn(profile.id, {
-        sale_id: saleId || null,
-        customer_id: customerId || null,
-        total_amount: totalAmount,
-        refund_method: refundMethod,
-        reason: reason || '',
-        items: itemsToReturn,
-        status: 'approved',
-      } as any);
-
-      showToast(`Return ${ret.return_number} created`, 'success');
-      onSaved();
-      onClose();
-    } catch (e: any) {
-      setErr(e?.message ?? 'Failed to create return.');
+      setAskPin(false);
+      setPinError(null);
+      showToast(`Return ${credit.return_number} done — credit ${credit.code}`, 'success');
+      onIssued(credit, phone.trim(), lines);
+    } catch (e) {
+      if (e instanceof ApprovalError) {
+        // First refusal means this return is above the approval limit; ask for the
+        // PIN. A refusal while the prompt is already open means the PIN was wrong.
+        setAskPin(true);
+        setPinError(askPin || pin ? e.message : null);
+      } else {
+        setErr(e instanceof Error ? e.message : 'Could not complete this return.');
+      }
     } finally {
       setSaving(false);
     }
@@ -175,134 +155,98 @@ function NewReturnModal({ sales, customers, onClose, onSaved }: {
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(10,12,15,0.55)', backdropFilter: 'blur(4px)',
       display: 'grid', placeItems: 'center', padding: 20,
-    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    }} onClick={e => { if (e.target === e.currentTarget && !saving) onClose(); }}>
       <div style={{
-        background: 'var(--panel)', borderRadius: 14, width: '100%', maxWidth: 560,
+        background: 'var(--panel)', borderRadius: 14, width: '100%', maxWidth: 660,
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 64px rgba(0,0,0,0.28)', overflow: 'hidden',
       }}>
         {/* Header */}
         <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>New Return</h2>
-          <button onClick={onClose} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 6 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>New Return</h2>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>
+              Scan what the customer brought back — no bill needed
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 6 }}>
             <X size={17} />
           </button>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {!online && (
+            <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in oklab, var(--warn) 12%, var(--panel-2))', color: 'var(--warn)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={14} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+              No internet connection. A return credit has to be recorded on the server before the code can be given out, so this has to wait.
+            </div>
+          )}
+
           {err && (
             <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)', fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 8 }}>
               <AlertTriangle size={14} strokeWidth={1.7} style={{ flexShrink: 0 }} /> {err}
             </div>
           )}
 
-          {/* Sale selector */}
-          <div>
-            <label style={labelStyle}>Linked Sale (optional)</label>
-            <select value={saleId} onChange={e => setSaleId(e.target.value)} style={{ ...inputStyle, height: 36 }}>
-              <option value="">— No linked sale —</option>
-              {sales.map(s => (
-                <option key={s.id} value={s.id}>{s.sale_number} · LKR {Math.round(s.total_amount).toLocaleString()}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sale items */}
-          {loadingItems && <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Loading items…</div>}
-          {saleItems.length > 0 && (
-            <div style={{ borderRadius: 9, border: '1px solid var(--line)', overflow: 'hidden' }}>
-              <div style={{ padding: '10px 14px', background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)', fontSize: 11.5, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.05em', textTransform: 'uppercase' }}>
-                Select Items to Return
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {saleItems.map((item, i) => {
-                  const isDecimal = !item.is_manual && (item.product?.unit === 'yard' || item.product?.unit === 'meter');
-                  return (
-                  <div key={item.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                    borderBottom: i < saleItems.length - 1 ? '1px solid var(--line-2)' : 'none',
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.is_manual ? (item.manual_description ?? 'Manual Item') : (item.product?.name ?? 'Unknown')}
-                      </div>
-                      {item.variant && (item.variant.color || item.variant.size) && (
-                        <div style={{ fontSize: 11, color: 'var(--accent-ink)', marginTop: 1 }}>
-                          {[item.variant.color, item.variant.size].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                      <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 1 }}>
-                        Qty: {item.quantity} · LKR {Math.round(item.unit_price).toLocaleString()} each
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
-                      <span style={{ fontSize: 11.5, color: 'var(--muted)' }}>Return</span>
-                      <input
-                        type="number" min={0} max={item.quantity} step={isDecimal ? 0.1 : 1}
-                        value={returnQty[item.id] ?? 0}
-                        onChange={e => {
-                          const v = isDecimal ? parseFloat(e.target.value) : parseInt(e.target.value);
-                          setReturnQty(prev => ({ ...prev, [item.id]: Math.min(item.quantity, Math.max(0, v || 0)) }));
-                        }}
-                        style={{ width: 56, height: 30, textAlign: 'center', borderRadius: 6, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 13, outline: 'none' }}
-                      />
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-              {totalAmount > 0 && (
-                <div style={{ padding: '10px 14px', background: 'var(--panel-2)', borderTop: '1px solid var(--line-2)', display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-                  <span>Return total</span>
-                  <span className="num">{fmtLKR(totalAmount)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Customer */}
-          <div>
-            <label style={labelStyle}>Customer (optional)</label>
-            <select value={customerId} onChange={e => setCustomerId(e.target.value)} style={{ ...inputStyle, height: 36 }}>
-              <option value="">— Walk-in —</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-
-          {/* Refund method */}
-          <div>
-            <label style={labelStyle}>Refund Method</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {([['cash', 'Cash'], ['credit_note', 'Credit Note'], ['exchange', 'Exchange']] as const).map(([v, l]) => (
-                <button key={v} type="button" onClick={() => setRefundMethod(v)} style={{
-                  flex: 1, height: 36, borderRadius: 7,
-                  border: refundMethod === v ? '1.5px solid var(--accent)' : '1px solid var(--line)',
-                  background: refundMethod === v ? 'var(--accent-soft)' : 'var(--panel-2)',
-                  color: refundMethod === v ? 'var(--accent-ink)' : 'var(--ink-2)',
-                  fontSize: 12.5, fontWeight: refundMethod === v ? 600 : 500, cursor: 'pointer',
-                }}>{l}</button>
-              ))}
-            </div>
-          </div>
+          <ReturnScanPanel lines={lines} onChange={setLines} disabled={saving || !online} />
 
           {/* Reason */}
           <div>
-            <label style={labelStyle}>Reason</label>
-            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Defective, wrong item, customer changed mind…"
-              style={{ ...inputStyle, height: 68, padding: '8px 11px', resize: 'vertical' } as React.CSSProperties} />
+            <label style={labelStyle}>Reason <span style={{ color: 'var(--danger)' }}>*</span></label>
+            <textarea value={reason} onChange={e => setReason(e.target.value)} disabled={saving}
+              placeholder="Wrong size, defective, customer changed mind…"
+              style={{ ...inputStyle, height: 60, padding: '8px 11px', resize: 'vertical' } as React.CSSProperties} />
           </div>
 
-        </form>
+          {/* Customer + phone */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Customer (optional)</label>
+              <select value={customerId} onChange={e => setCustomerId(e.target.value)} disabled={saving} style={{ ...inputStyle, height: 36 }}>
+                <option value="">— Walk-in —</option>
+                {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Phone (optional)</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} disabled={saving}
+                placeholder="07X XXX XXXX" style={inputStyle} />
+              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
+                The code can be sent by WhatsApp, so a lost slip is not a problem
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Footer */}
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
-          <button onClick={onClose} className="btn" style={{ height: 34, fontSize: 12.5 }} disabled={saving}>Cancel</button>
-          <button onClick={e => { e.preventDefault(); handleSubmit(e as any); }} className="btn btn-primary" style={{ height: 34, fontSize: 12.5, minWidth: 120 }} disabled={saving}>
-            {saving ? 'Creating…' : 'Create Return'}
-          </button>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.05em', textTransform: 'uppercase', fontWeight: 600 }}>Credit to issue</div>
+            <div className="num" style={{ fontSize: 19, fontWeight: 700, color: 'var(--ink)', letterSpacing: '-0.02em' }}>
+              {fmtLKR(totalAmount)}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} className="btn" style={{ height: 36, fontSize: 12.5 }} disabled={saving}>Cancel</button>
+            <button onClick={() => submit()} className="btn btn-primary" style={{ height: 36, fontSize: 12.5, minWidth: 150 }}
+              disabled={saving || !online || lines.length === 0 || overTag}>
+              {saving ? 'Working…' : 'Take Back & Issue Credit'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {askPin && (
+        <PinPrompt
+          title={`Approve a return of ${fmtLKR(totalAmount)}`}
+          detail="This is above the amount staff can approve on their own."
+          error={pinError}
+          busy={saving}
+          onSubmit={pin => submit(pin)}
+          onCancel={() => { setAskPin(false); setPinError(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -404,23 +348,21 @@ function DetailPanel({ ret }: { ret: ReturnRecord }) {
 export function Returns() {
   const { showToast } = useToast();
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('All');
   const [selected, setSelected] = useState<ReturnRecord | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [slip, setSlip] = useState<{ data: ReturnSlipData; phone: string } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [returnsData, salesData, customersData] = await Promise.all([
+      const [returnsData, customersData] = await Promise.all([
         returnService.getAllReturns(),
-        salesService.getRecentSales(200),
         customerService.getAllCustomers(),
       ]);
       setReturns(returnsData as ReturnRecord[]);
-      setSales(salesData as unknown as Sale[]);
       setCustomers(customersData as Customer[]);
       setSelected(prev => prev ? ((returnsData as ReturnRecord[]).find(r => r.id === prev.id) ?? null) : null);
     } catch {
@@ -582,11 +524,34 @@ export function Returns() {
       {/* New Return Modal */}
       {showModal && (
         <NewReturnModal
-          sales={sales}
           customers={customers}
           onClose={() => setShowModal(false)}
-          onSaved={load}
+          onIssued={(credit, phone, lines) => {
+            setShowModal(false);
+            setSlip({
+              phone,
+              data: {
+                code: credit.code,
+                amount: credit.amount,
+                expiresAt: credit.expires_at,
+                returnNumber: credit.return_number,
+                issuedAt: new Date().toISOString(),
+                items: lines.map(l => ({
+                  name: l.product_name,
+                  variant: l.variant_label || undefined,
+                  quantity: l.quantity,
+                  amount: l.amount,
+                })),
+              },
+            });
+            load();
+          }}
         />
+      )}
+
+      {/* Credit slip — print it, or send the code so a lost slip does not matter */}
+      {slip && (
+        <ReturnSlip data={slip.data} phone={slip.phone || undefined} onClose={() => setSlip(null)} />
       )}
     </div>
   );

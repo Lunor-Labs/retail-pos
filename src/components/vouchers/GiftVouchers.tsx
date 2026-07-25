@@ -18,7 +18,9 @@ interface GiftVoucher {
   status: 'active' | 'used' | 'voided' | 'returned';
   redeemed_at: string | null;
   created_at: string;
-  issued_source: 'sold' | 'reward';
+  issued_source: 'sold' | 'reward' | 'return_credit';
+  /** Still spendable. Differs from `amount` once a code is part-spent. */
+  balance: number;
   paid_amount: number | null;
   paid_via: 'cash' | 'card' | null;
   returned_at: string | null;
@@ -452,6 +454,9 @@ export function GiftVouchers() {
   }
 
   const allSold = vouchers.filter(v => v.issued_source === 'sold');
+  // Credit issued by a return is a refund owed, not a voucher sold — kept out of the
+  // reward count so the two are not conflated.
+  const returnCredits = vouchers.filter(v => v.issued_source === 'return_credit');
   const active  = vouchers.filter(v => v.status === 'active');
   const used    = vouchers.filter(v => v.status === 'used');
   const returned = vouchers.filter(v => v.status === 'returned');
@@ -480,8 +485,10 @@ export function GiftVouchers() {
       {/* KPI strip — counts */}
       <div className="rpt-kpi rpt-kpi-4">
         {[
-          { label: 'Total Issued', value: vouchers.length.toString(), sub: `${allSold.length} sold · ${vouchers.length - allSold.length} rewards` },
-          { label: 'Active', value: active.length.toString(), sub: fmtLKR(active.reduce((s, v) => s + v.amount, 0)) + ' outstanding' },
+          { label: 'Total Issued', value: vouchers.length.toString(), sub: `${allSold.length} sold · ${vouchers.length - allSold.length - returnCredits.length} rewards · ${returnCredits.length} returns` },
+          // Outstanding is what is still spendable, not the face value: a part-spent
+          // code would otherwise be reported as a liability it no longer carries.
+          { label: 'Active', value: active.length.toString(), sub: fmtLKR(active.reduce((s, v) => s + (v.balance ?? v.amount), 0)) + ' outstanding' },
           { label: 'Redeemed', value: used.length.toString(), sub: `${vouchers.length > 0 ? Math.round(used.length / vouchers.length * 100) : 0}% redemption rate` },
           { label: 'Voided / Returned', value: (vouchers.filter(v => v.status === 'voided').length + returned.length).toString(), sub: `${returned.length} returned · ${vouchers.filter(v => v.status === 'voided').length} voided` },
         ].map((k, i) => (
@@ -554,11 +561,13 @@ export function GiftVouchers() {
           const sourceBadge = (
             <span style={{
               fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
-              background: v.issued_source === 'sold' ? 'color-mix(in oklab, #6366f1 12%, var(--panel-2))' : 'rgba(20,22,26,0.06)',
-              color: v.issued_source === 'sold' ? '#4338ca' : 'var(--muted)',
+              background: v.issued_source === 'sold' ? 'color-mix(in oklab, #6366f1 12%, var(--panel-2))'
+                : v.issued_source === 'return_credit' ? 'var(--accent-soft)' : 'rgba(20,22,26,0.06)',
+              color: v.issued_source === 'sold' ? '#4338ca'
+                : v.issued_source === 'return_credit' ? 'var(--accent-ink)' : 'var(--muted)',
               letterSpacing: '.04em', textTransform: 'uppercase' as const,
             }}>
-              {v.issued_source === 'sold' ? 'Sold' : 'Reward'}
+              {v.issued_source === 'sold' ? 'Sold' : v.issued_source === 'return_credit' ? 'Return' : 'Reward'}
             </span>
           );
 
@@ -625,6 +634,13 @@ export function GiftVouchers() {
                 </div>
                 <div>
                   <div className="num" style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>{fmtLKR(v.amount)}</div>
+                  {/* Codes can be spent across several visits, so the face value alone
+                      no longer says what the holder can still use. */}
+                  {v.status === 'active' && v.balance != null && v.balance < v.amount && (
+                    <div className="num" style={{ fontSize: 11, color: 'var(--accent-ink)', marginTop: 1 }}>
+                      {fmtLKR(v.balance)} left
+                    </div>
+                  )}
                   {v.paid_amount != null && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>Paid: {fmtLKR(v.paid_amount)} · {v.paid_via}</div>}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--ink-2)', paddingRight: 8 }}>

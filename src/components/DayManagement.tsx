@@ -21,6 +21,9 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [balanceInput, setBalanceInput] = useState('');
   const [summary, setSummary] = useState<DaySummary | null>(null);
+  // Cash handed back against return credits today. Expected cash is otherwise built
+  // only from sales, so without this the drawer reads short by every refund given.
+  const [cashRefunds, setCashRefunds] = useState<{ count: number; total: number }>({ count: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
@@ -30,7 +33,7 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
   async function load() {
     setLoading(true);
     try {
-      const [{ data: setting }, sales] = await Promise.all([
+      const [{ data: setting }, sales, payouts] = await Promise.all([
         (supabase.from('app_settings') as any)
           .select('value').eq('key', settingKey).maybeSingle(),
         // Whole day's sales feed the cash-drawer totals — page past the 1000-row cap.
@@ -40,7 +43,17 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
           .lt('sale_date', new Date(new Date(today).getTime() + 86400000).toISOString().split('T')[0] + 'T00:00:00')
           .neq('status', 'refunded')
           .order('id')),
+        fetchAllRows<any>(() => (supabase.from('credit_payouts') as any)
+          .select('amount')
+          .gte('created_at', `${today}T00:00:00`)
+          .lt('created_at', new Date(new Date(today).getTime() + 86400000).toISOString().split('T')[0] + 'T00:00:00')
+          .order('id')),
       ]);
+
+      setCashRefunds({
+        count: (payouts ?? []).length,
+        total: (payouts ?? []).reduce((sum: number, p: any) => sum + Number(p.amount), 0),
+      });
 
       if (setting) {
         const bal = parseFloat(setting.value);
@@ -108,7 +121,9 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
 
   const mixedCash = summary?.mixed.cashPortion ?? 0;
   const mixedCard = summary?.mixed.cardPortion ?? 0;
-  const totalCashInDrawer = (summary?.cash.total ?? 0) + mixedCash;
+  // Cash in minus cash out. Refunds paid from a return credit leave the drawer just
+  // like change does, so they have to come off the expected figure.
+  const totalCashInDrawer = (summary?.cash.total ?? 0) + mixedCash - cashRefunds.total;
 
   const METHODS: { key: keyof Omit<DaySummary, 'total'>; label: string; color: string; bg: string }[] = [
     { key: 'cash',   label: 'Cash',   color: 'var(--accent-ink)', bg: 'var(--accent-soft)' },
@@ -220,8 +235,22 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
+          {cashRefunds.total > 0 && (
+            <div style={{ padding: '12px 16px', borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>Cash refunds</div>
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 2 }}>
+                  {cashRefunds.count} paid out from return credits
+                </div>
+              </div>
+              <div className="num" style={{ fontSize: 16, fontWeight: 700, color: 'var(--danger)' }}>
+                −{fmtLKR(cashRefunds.total)}
+              </div>
+            </div>
+          )}
+
           {/* Expected cash in drawer */}
-          {openingBalance !== null && totalCashInDrawer > 0 && (
+          {openingBalance !== null && (totalCashInDrawer > 0 || cashRefunds.total > 0) && (
             <div style={{ padding: '14px 16px', borderRadius: 10, background: 'var(--accent-soft)', border: '1px solid color-mix(in oklab, var(--accent) 20%, transparent)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent-ink)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 }}>Expected Cash in Drawer</div>
               <div className="num" style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-ink)', letterSpacing: '-0.02em' }}>{fmtLKR((openingBalance ?? 0) + totalCashInDrawer)}</div>
@@ -229,6 +258,7 @@ export function DayManagement({ onClose }: { onClose: () => void }) {
                 Opening {fmtLKR(openingBalance ?? 0)}
                 {(summary?.cash.total ?? 0) > 0 && ` + Cash ${fmtLKR(summary?.cash.total ?? 0)}`}
                 {mixedCash > 0 && ` + Mixed cash ${fmtLKR(mixedCash)}`}
+                {cashRefunds.total > 0 && ` − Cash refunds ${fmtLKR(cashRefunds.total)}`}
               </div>
             </div>
           )}

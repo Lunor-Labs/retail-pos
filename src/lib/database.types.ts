@@ -19,6 +19,7 @@ export interface Database {
           daily_target: number
           phone_number: string | null
           address: string | null
+          approval_pin_hash: string | null
           created_at: string
           updated_at: string
         }
@@ -31,6 +32,7 @@ export interface Database {
           daily_target?: number
           phone_number?: string | null
           address?: string | null
+          approval_pin_hash?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -43,6 +45,7 @@ export interface Database {
           daily_target?: number
           phone_number?: string | null
           address?: string | null
+          approval_pin_hash?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -530,10 +533,11 @@ export interface Database {
           customer_id: string | null
           return_date: string
           total_amount: number
-          refund_method: 'cash' | 'credit_note' | 'exchange' | null
+          refund_method: 'cash' | 'credit_note' | 'exchange' | 'store_credit' | null
           reason: string | null
           status: 'pending' | 'approved' | 'rejected'
           processed_by: string | null
+          approved_by_admin_id: string | null
           created_at: string
           updated_at: string
         }
@@ -544,10 +548,11 @@ export interface Database {
           customer_id?: string | null
           return_date?: string
           total_amount: number
-          refund_method?: 'cash' | 'credit_note' | 'exchange' | null
+          refund_method?: 'cash' | 'credit_note' | 'exchange' | 'store_credit' | null
           reason?: string | null
           status?: 'pending' | 'approved' | 'rejected'
           processed_by?: string | null
+          approved_by_admin_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -558,12 +563,42 @@ export interface Database {
           customer_id?: string | null
           return_date?: string
           total_amount?: number
-          refund_method?: 'cash' | 'credit_note' | 'exchange' | null
+          refund_method?: 'cash' | 'credit_note' | 'exchange' | 'store_credit' | null
           reason?: string | null
           status?: 'pending' | 'approved' | 'rejected'
           processed_by?: string | null
+          approved_by_admin_id?: string | null
           created_at?: string
           updated_at?: string
+        }
+      }
+      credit_payouts: {
+        Row: {
+          id: string
+          voucher_id: string
+          amount: number
+          sale_id: string | null
+          paid_by_staff_id: string | null
+          approved_by_admin_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          voucher_id: string
+          amount: number
+          sale_id?: string | null
+          paid_by_staff_id?: string | null
+          approved_by_admin_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          voucher_id?: string
+          amount?: number
+          sale_id?: string | null
+          paid_by_staff_id?: string | null
+          approved_by_admin_id?: string | null
+          created_at?: string
         }
       }
       return_items: {
@@ -743,6 +778,39 @@ export interface Database {
           p_items: Json
         }
         Returns: undefined
+      }
+      set_admin_pin: {
+        Args: {
+          p_pin: string
+        }
+        Returns: undefined
+      }
+      issue_return_credit: {
+        Args: {
+          p_items: Json
+          p_reason: string
+          p_phone?: string | null
+          p_customer_id?: string | null
+          p_pin?: string | null
+        }
+        Returns: Json
+      }
+      redeem_credit_to_sale: {
+        Args: {
+          p_code: string
+          p_amount: number
+          p_sale_id: string | null
+        }
+        Returns: Json
+      }
+      payout_credit_cash: {
+        Args: {
+          p_code: string
+          p_amount: number
+          p_sale_id?: string | null
+          p_pin?: string | null
+        }
+        Returns: Json
       }
     }
     Enums: {

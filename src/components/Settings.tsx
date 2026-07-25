@@ -6,7 +6,7 @@ import { KeyRound, Users, Star, ShieldCheck, Eye, EyeOff, X, ChevronDown, Check,
 import { useCostCode } from '../contexts/CostCodeContext';
 import { useBusinessProfile } from '../contexts/BusinessProfileContext';
 import { encodeCost, isValidKey } from '../lib/costCode';
-import { loyaltyService, referenceDataService } from '../services';
+import { loyaltyService, referenceDataService, storeCreditService } from '../services';
 import type { RefType, ReferenceItem } from '../services';
 
 type UserProfile = {
@@ -34,7 +34,7 @@ const ROLE_CONFIG: Record<UnifiedStaff['role'], { label: string; desc: string; b
   admin:         { label: 'Admin',         desc: 'Full access',          bg: 'var(--accent-soft)',                                   color: 'var(--accent-ink)' },
 };
 
-type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers' | 'business';
+type SectionId = 'account' | 'staff-access' | 'loyalty' | 'catalog' | 'cost-code' | 'vouchers' | 'returns' | 'business';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 const TONES = ['#1B6B4F','#3A4E6B','#7A2235','#6A7048','#22324F','#B89456','#5C6675','#8A9078'];
@@ -1119,6 +1119,186 @@ function VoucherRulesSection() {
   );
 }
 
+// ─── Section: Returns & Approvals ─────────────────────────────────────────
+function ReturnsApprovalSection() {
+  const { showToast } = useToast();
+  const [returnLimit, setReturnLimit] = useState('');
+  const [payoutLimit, setPayoutLimit] = useState('');
+  const [validityDays, setValidityDays] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [pin, setPin] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+
+  useEffect(() => {
+    // `as any` matches the other settings sections: the generated Database types
+    // resolve app_settings rows to `never`, so the query cannot be inferred.
+    (supabase.from('app_settings') as any)
+      .select('key, value')
+      .in('key', ['return_pin_limit', 'cash_payout_pin_limit', 'return_credit_validity_days'])
+      .then(({ data }: { data: { key: string; value: string }[] | null }) => {
+        for (const row of (data ?? [])) {
+          if (row.key === 'return_pin_limit') setReturnLimit(row.value);
+          if (row.key === 'cash_payout_pin_limit') setPayoutLimit(row.value);
+          if (row.key === 'return_credit_validity_days') setValidityDays(row.value);
+        }
+        setLoaded(true);
+      });
+  }, []);
+
+  async function handleSaveLimits() {
+    const rl = parseFloat(returnLimit);
+    const pl = parseFloat(payoutLimit);
+    const vd = parseInt(validityDays, 10);
+    if (isNaN(rl) || rl < 0 || isNaN(pl) || pl < 0) {
+      showToast('Limits must be zero or more', 'error'); return;
+    }
+    if (isNaN(vd) || vd < 1) {
+      showToast('Validity must be at least 1 day', 'error'); return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await (supabase.from('app_settings') as any).upsert([
+        { key: 'return_pin_limit', value: String(rl) },
+        { key: 'cash_payout_pin_limit', value: String(pl) },
+        { key: 'return_credit_validity_days', value: String(vd) },
+      ], { onConflict: 'key' });
+      if (error) throw error;
+      showToast('Return limits saved', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to save', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSavePin() {
+    if (!/^[0-9]{4}$/.test(pin)) { showToast('The PIN must be exactly 4 digits', 'error'); return; }
+    if (pin !== pinConfirm) { showToast('The two PINs do not match', 'error'); return; }
+    setPinSaving(true);
+    try {
+      await storeCreditService.setAdminPin(pin);
+      setPin(''); setPinConfirm('');
+      showToast('Your approval PIN is saved', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to save the PIN', 'error');
+    } finally {
+      setPinSaving(false);
+    }
+  }
+
+  const inp: React.CSSProperties = {
+    height: 38, padding: '0 11px', borderRadius: 8,
+    border: '1px solid var(--line)', background: 'var(--panel-2)',
+    color: 'var(--ink)', fontSize: 13.5, outline: 'none', boxSizing: 'border-box',
+    fontFamily: "'JetBrains Mono', monospace", textAlign: 'right' as const,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--gap)' }}>
+
+      {/* Limits */}
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <ShieldCheck size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Return Limits</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              When staff need an admin PIN to continue
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Return needs approval above</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={500} value={returnLimit} onChange={e => setReturnLimit(e.target.value)}
+                placeholder="5,000" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Returns worth more than this need an admin PIN at the desk</div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Cash refund needs approval above</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderRight: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>LKR</span>
+              <input type="number" min={0} step={100} value={payoutLimit} onChange={e => setPayoutLimit(e.target.value)}
+                placeholder="500" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>Small change from an exchange goes out without holding up the queue</div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Credit valid for</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <input type="number" min={1} step={1} value={validityDays} onChange={e => setValidityDays(e.target.value)}
+                placeholder="30" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%' }} />
+              <span style={{ padding: '0 10px', fontSize: 11.5, color: 'var(--muted)', borderLeft: '1px solid var(--line-2)', height: 38, display: 'flex', alignItems: 'center', flexShrink: 0 }}>days</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 5 }}>How long a customer has to spend a return credit</div>
+          </div>
+        </div>
+
+        <button onClick={handleSaveLimits} disabled={saving || !loaded} className="btn btn-primary" style={{ height: 36, fontSize: 13, alignSelf: 'flex-start', minWidth: 120 }}>
+          {saving ? 'Saving…' : 'Save Limits'}
+        </button>
+      </div>
+
+      {/* Own approval PIN */}
+      <div className="card" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--panel-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center' }}>
+            <KeyRound size={15} style={{ color: 'var(--ink-2)' }} strokeWidth={1.7} />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>My Approval PIN</div>
+            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>
+              The 4 digits you type to approve a cash refund or a large return
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 16, alignItems: 'end' }}>
+          <div>
+            <label style={labelStyle}>New PIN</label>
+            <div style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: '1px solid var(--line)', overflow: 'hidden', background: 'var(--panel-2)' }}>
+              <input type={showPin ? 'text' : 'password'} inputMode="numeric" maxLength={4} value={pin}
+                onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="••••" style={{ ...inp, flex: 1, border: 0, borderRadius: 0, width: '100%', textAlign: 'left', letterSpacing: '0.3em' }} />
+              <button type="button" onClick={() => setShowPin(v => !v)}
+                style={{ border: 0, background: 'transparent', color: 'var(--muted)', height: 38, padding: '0 10px', display: 'grid', placeItems: 'center', cursor: 'default' }}>
+                {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Confirm PIN</label>
+            <input type={showPin ? 'text' : 'password'} inputMode="numeric" maxLength={4} value={pinConfirm}
+              onChange={e => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="••••" style={{ ...inp, width: '100%', textAlign: 'left', letterSpacing: '0.3em' }} />
+          </div>
+          <button onClick={handleSavePin} disabled={pinSaving} className="btn btn-primary" style={{ height: 38, fontSize: 13, minWidth: 110 }}>
+            {pinSaving ? 'Saving…' : 'Set PIN'}
+          </button>
+        </div>
+
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--panel-2)', border: '1px solid var(--line-2)', fontSize: 12.5, color: 'var(--muted)' }}>
+          Each admin needs their own PIN, so the system can record who approved what.
+          Two admins cannot share the same digits. The PIN is stored scrambled — nobody
+          can read it back, so if you forget it, just set a new one here.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────
 // ─── Section: Business ────────────────────────────────────────────────────
 function BusinessProfileSection() {
@@ -1211,6 +1391,7 @@ export function Settings() {
     { id: 'loyalty', label: 'Loyalty', icon: <Star size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'cost-code', label: 'Cost Code', icon: <Hash size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'vouchers',  label: 'Vouchers',  icon: <Gift size={15} strokeWidth={1.7} />, adminOnly: true },
+    { id: 'returns',   label: 'Returns',   icon: <ShieldCheck size={15} strokeWidth={1.7} />, adminOnly: true },
     { id: 'business', label: 'Business', icon: <Store size={15} strokeWidth={1.7} />, adminOnly: true },
   ].filter(n => !n.adminOnly || isAdmin);
 
@@ -1256,6 +1437,7 @@ export function Settings() {
           {section === 'loyalty' && isAdmin && <LoyaltySection />}
           {section === 'cost-code' && isAdmin && <CostCodeSection />}
           {section === 'vouchers'  && isAdmin && <VoucherRulesSection />}
+          {section === 'returns'   && isAdmin && <ReturnsApprovalSection />}
           {section === 'business' && isAdmin && <BusinessProfileSection />}
         </div>
       </div>

@@ -69,6 +69,14 @@ export function buildReceiptHTML(
         invoiceData.serviceCharge && invoiceData.serviceCharge > 0
             ? row('Service Charge:', `LKR ${invoiceData.serviceCharge.toFixed(2)}`)
             : '';
+    // A credit is a settlement, not a discount, so it gets its own line.
+    const creditLine =
+        invoiceData.creditApplied && invoiceData.creditApplied > 0
+            ? row(
+                invoiceData.creditIsReturn ? 'Return Credit:' : 'Voucher:',
+                `-LKR ${invoiceData.creditApplied.toFixed(2)}`,
+            )
+            : '';
 
     // ── Conditional meta rows ─────────────────────────────────────────────────
     const customerLine = invoiceData.customerName
@@ -85,9 +93,23 @@ export function buildReceiptHTML(
     const paymentBlock =
         invoiceData.paymentMethod !== 'credit'
             ? `${row('Paid:', `LKR ${invoiceData.paidAmount.toFixed(2)}`)}
+         ${invoiceData.cashPaidOut && invoiceData.cashPaidOut > 0
+                ? row('Cash Refunded:', `LKR ${invoiceData.cashPaidOut.toFixed(2)}`)
+                : ''}
          ${invoiceData.changeAmount > 0
                 ? row('Change:', `LKR ${invoiceData.changeAmount.toFixed(2)}`)
                 : ''}`
+            : '';
+
+    // What is still on the code, so the customer knows to bring it back.
+    const creditRemainingBlock =
+        invoiceData.creditRemaining && invoiceData.creditRemaining > 0 && invoiceData.creditCode
+            ? `<hr class="dash" />
+     <div class="center" style="font-size:11px;line-height:1.5">
+       <div style="font-weight:700">Credit remaining: LKR ${invoiceData.creditRemaining.toFixed(2)}</div>
+       <div style="font-family:monospace;letter-spacing:.08em">${invoiceData.creditCode}</div>
+       <div style="color:#555">Keep this code — use it on your next visit</div>
+     </div>`
             : '';
 
     // ── Assemble final HTML ───────────────────────────────────────────────────
@@ -129,6 +151,7 @@ export function buildReceiptHTML(
   ${discountLine}
   ${taxLine}
   ${scLine}
+  ${creditLine}
 
   <hr class="solid" />
 
@@ -142,6 +165,7 @@ export function buildReceiptHTML(
   <!-- Payment -->
   ${row('Payment:', invoiceData.paymentMethod.toUpperCase())}
   ${paymentBlock}
+  ${creditRemainingBlock}
 
   <hr class="dash" />
 

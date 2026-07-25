@@ -8,6 +8,7 @@ import { PurchaseOrderService } from './PurchaseOrderService';
 import { ReturnService } from './ReturnService';
 import { VariantService } from './VariantService';
 import { LoyaltyService } from './LoyaltyService';
+import { StoreCreditService } from './StoreCreditService';
 
 // Create service instances
 export const productService = new ProductService(productRepository);
@@ -19,8 +20,11 @@ export const purchaseOrderService = new PurchaseOrderService(purchaseOrderReposi
 export const returnService = new ReturnService(returnRepository, customerService, inventoryService);
 export const variantService = new VariantService(variantRepository);
 export const loyaltyService = new LoyaltyService(loyaltyRepository);
+export const storeCreditService = new StoreCreditService(adapter);
 export { referenceDataService } from './ReferenceDataService';
 export type { RefType, ReferenceItem } from './ReferenceDataService';
 
 // Export service classes for testing
-export { ProductService, SalesService, InventoryService, CustomerService, SupplierService, PurchaseOrderService, ReturnService, VariantService, LoyaltyService };
+export { ProductService, SalesService, InventoryService, CustomerService, SupplierService, PurchaseOrderService, ReturnService, VariantService, LoyaltyService, StoreCreditService };
+export type { StoreCredit, IssuedCredit, ReturnLineInput } from './StoreCreditService';
+export { ApprovalError } from './StoreCreditService';
