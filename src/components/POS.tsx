@@ -909,6 +909,10 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
     } catch (err: any) {
       if (!navigator.onLine) {
         // Handle Offline Mode
+        // The connection can drop after the server already deducted the stock but
+        // before the sale was recorded. In that case queue the sale with no stock
+        // changes, or syncing it would deduct the same units twice.
+        const stockAlreadyDeducted = err?.stockAlreadyDeducted === true;
         const saleNumber = `SALE-${Date.now()} `;
         const salePayload = {
           sale: {
@@ -940,10 +944,15 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
             is_manual: item.isManual || false,
             manual_description: item.manualDescription,
           })),
-          batches: cart.filter(i => !i.isManual).map(item => ({
-            id: item.batch.id,
-            newQuantity: item.batch.current_quantity - item.quantity
-          })),
+          // How much was sold, not what the total should end up as. An absolute
+          // target computed here from a stale local quantity would overwrite every
+          // sale another terminal made while this one was offline.
+          batches: stockAlreadyDeducted
+            ? []
+            : cart.filter(i => !i.isManual).map(item => ({
+              batch_id: item.batch.id,
+              quantity: item.quantity
+            })),
           customerCredit: (paymentMethod === 'credit' && selectedCustomer && creditAmount > 0) ? {
             id: selectedCustomer.id,
             newCredit: selectedCustomer.current_credit + creditAmount
@@ -1125,8 +1134,9 @@ export function POS({ isActive = true }: { isActive?: boolean }) {
         {/* ── Cart panel (desktop) ── */}
         <aside className="hidden lg:flex lg:flex-col" style={{ background: 'var(--panel)', borderLeft: '1px solid var(--line)', overflowY: 'auto' }}>
 
-          {/* Cart header */}
-          <div className="pos-cart-header" style={{ borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          {/* Cart header — sticks to the top so the item count and Clear stay reachable
+              once a long cart scrolls the panel */}
+          <div className="pos-cart-header" style={{ position: 'sticky', top: 0, zIndex: 11, background: 'var(--panel)', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' }}>Current Sale</h3>

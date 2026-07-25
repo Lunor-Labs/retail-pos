@@ -731,7 +731,19 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      deduct_batch_stock: {
+        Args: {
+          p_items: Json
+          p_allow_shortfall?: boolean
+        }
+        Returns: Json
+      }
+      restore_batch_stock: {
+        Args: {
+          p_items: Json
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -17,6 +17,16 @@ export interface VariantInput {
   supplier_id: string;
 }
 
+/** Edits to a variant that already exists — its own columns only, no stock intake. */
+export interface VariantUpdateInput {
+  id: string;
+  size: string | null;
+  color: string | null;
+  sku: string;
+  barcode: string | null;
+  reorder_level: number;
+}
+
 /**
  * Product service - handles product business logic
  */
@@ -517,10 +527,19 @@ export class ProductService {
         }
     }
 
+    /**
+     * Save product-level fields, edits to variants that already exist, and any
+     * variants added in this session.
+     *
+     * existingVariants used to have no equivalent at all: only inserts happened here,
+     * so editing a variant's size or colour looked like it saved (the product row did)
+     * while the variant kept its old values.
+     */
     async updateProductWithVariants(
         id: string,
         productData: { name: string; description?: string; category?: string; brand?: string; gender?: string; material?: string; unit?: string; image_url?: string },
-        newVariants: VariantInput[]
+        newVariants: VariantInput[],
+        existingVariants: VariantUpdateInput[] = []
     ): Promise<void> {
         try {
             const client = (this.productRepo as any).adapter.getClient();
@@ -540,6 +559,21 @@ export class ProductService {
                 })
                 .eq('id', id);
             if (prodErr) throw prodErr;
+
+            for (const v of existingVariants) {
+                const { error: updErr } = await client
+                    .from('product_variants')
+                    .update({
+                        size: v.size || null,
+                        color: v.color || null,
+                        sku: v.sku.trim(),
+                        barcode: v.barcode || null,
+                        reorder_level: v.reorder_level || 0,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', v.id);
+                if (updErr) throw updErr;
+            }
 
             for (const v of newVariants) {
                 const { data: variant, error: varErr } = await client

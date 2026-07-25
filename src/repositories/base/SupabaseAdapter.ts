@@ -134,6 +134,23 @@ export class SupabaseAdapter implements DatabaseAdapter {
         }
     }
 
+    async rpc<T>(fn: string, params: Record<string, unknown> = {}): Promise<T> {
+        // The adapter interface is database-agnostic, so the function name arrives as
+        // a plain string and is narrowed to the generated union here.
+        const { data, error } = await this.client.rpc(
+            fn as keyof Database['public']['Functions'],
+            params as never
+        );
+
+        if (error) {
+            // Surface the function's own message (RAISE EXCEPTION text) unchanged —
+            // callers match on the prefixes it uses, e.g. INSUFFICIENT_STOCK.
+            throw new Error(error.message);
+        }
+
+        return data as T;
+    }
+
     async raw<T>(_query: string, _params?: any[]): Promise<T[]> {
         // Supabase doesn't support raw SQL directly in the client
         // This would need to be implemented via RPC functions

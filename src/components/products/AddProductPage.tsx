@@ -3,7 +3,7 @@ import { ArrowLeft, Plus } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import { DropdownSelect } from '../ui';
 import { productService, supplierService, referenceDataService } from '../../services';
-import { VariantInput } from '../../services/ProductService';
+import { VariantInput, VariantUpdateInput } from '../../services/ProductService';
 import { VariantTableRow, VariantRowData } from './VariantTableRow';
 import { useProductAudit } from '../../lib/auditLog';
 import { useAuth } from '../../contexts/AuthContext';
@@ -188,6 +188,7 @@ export function AddProductPage({
     setRows(prev => prev.map((r, i) => i === index ? row : r));
   }
 
+  /** Rows added during this edit — they have no id yet, so they get inserted. */
   function buildVariantInputs(): VariantInput[] {
     return rows
       .filter(r => !r.id)
@@ -202,6 +203,20 @@ export function AddProductPage({
         cost_price: r.cost_price,
         markup_percentage: r.markup_percentage,
         supplier_id: pricing.supplier_id,
+      }));
+  }
+
+  /** Rows that already exist — their size/colour/SKU edits need saving too. */
+  function buildVariantUpdates(): VariantUpdateInput[] {
+    return rows
+      .filter(r => r.id)
+      .map(r => ({
+        id: r.id!,
+        size: r.size.trim() || null,
+        color: r.color.trim() || null,
+        sku: r.sku.trim(),
+        barcode: r.barcode.trim() || null,
+        reorder_level: r.reorder_level,
       }));
   }
 
@@ -242,7 +257,7 @@ export function AddProductPage({
         showToast(`${info.name} saved — ${rows.length} variant${rows.length > 1 ? 's' : ''} added`, 'success');
       } else if (productId) {
         const newVariants = buildVariantInputs();
-        await productService.updateProductWithVariants(productId, info, newVariants);
+        await productService.updateProductWithVariants(productId, info, newVariants, buildVariantUpdates());
         logAudit({ action_type: 'product_updated', product_id: productId, product_name: info.name });
         showToast('Product updated', 'success');
       }

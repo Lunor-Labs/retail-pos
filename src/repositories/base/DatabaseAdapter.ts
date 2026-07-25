@@ -29,6 +29,12 @@ export interface DatabaseAdapter {
     raw<T>(query: string, params?: any[]): Promise<T[]>;
 
     /**
+     * Call a stored database function. The way to run an operation that has to be
+     * atomic, since the client cannot open a transaction of its own.
+     */
+    rpc<T>(fn: string, params?: Record<string, unknown>): Promise<T>;
+
+    /**
      * Begin a transaction
      */
     beginTransaction(): Promise<Transaction>;

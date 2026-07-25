@@ -191,15 +191,33 @@ export class ProductRepository extends BaseRepository<Product> {
     }
 
     /**
-     * Find batches for a product
-     */
-    /**
-     * Find batches for a product
+     * Find batches for a product, across all of its variants.
+     *
+     * Batches hang off variants — product_batches has no product_id column — so this
+     * resolves the product's variants first. Filtering product_batches on product_id
+     * directly (as this used to) made PostgREST reject every call, which callers
+     * swallowed as "no batches": returns silently restored nothing.
      */
     async findBatchesByProductId(productId: string): Promise<ProductBatch[]> {
+        const client = (this.adapter as any).getClient();
+
+        const { data: variants, error: variantError } = await client
+            .from('product_variants')
+            .select('id')
+            .eq('product_id', productId);
+
+        if (variantError) {
+            throw new Error(`Database query failed: ${variantError.message}`);
+        }
+
+        const variantIds: string[] = (variants ?? []).map((v: { id: string }) => v.id);
+        if (variantIds.length === 0) {
+            return [];
+        }
+
         return this.adapter.query<ProductBatch>('product_batches', {
             select: '*, supplier:suppliers(name)', // Join supplier information
-            where: [{ field: 'product_id', operator: '=', value: productId }],
+            where: [{ field: 'variant_id', operator: 'in', value: variantIds }],
             orderBy: [{ field: 'received_date', direction: 'desc' }],
         });
     }

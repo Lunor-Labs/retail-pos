@@ -37,6 +37,15 @@ export interface CreateSaleInput {
 }
 
 /**
+ * A sale failure that happened after stock was already taken on the server.
+ * Set when createSale cannot record the sale and cannot give the stock back, so an
+ * offline retry knows not to deduct those units again.
+ */
+export interface StockAwareError extends Error {
+    stockAlreadyDeducted?: boolean;
+}
+
+/**
  * Sales service - handles sales business logic
  */
 export class SalesService {
@@ -122,8 +131,33 @@ export class SalesService {
             }>;
             await this.inventoryRepo.deductStock(stockItems);
 
-            // Create sale with items
-            const sale = await this.saleRepo.createWithItems(saleData, saleItems);
+            // Create sale with items. Stock is already gone at this point, so if the
+            // sale itself fails to record, hand it back rather than leaving the shop
+            // short of inventory it never sold.
+            let sale: SaleWithItems;
+            try {
+                sale = await this.saleRepo.createWithItems(saleData, saleItems);
+            } catch (saleError) {
+                let stockStillDeducted = true;
+                try {
+                    await this.inventoryRepo.restoreStock(stockItems);
+                    stockStillDeducted = false;
+                } catch (restoreError) {
+                    logger.error(
+                        'Stock restore failed after sale creation failed — stock is now understated',
+                        restoreError as Error,
+                        { stockItems }
+                    );
+                }
+
+                // If the connection dropped here, the caller falls back to queueing an
+                // offline sale. Tell it whether the server already took the stock, so
+                // the queued sale does not deduct the same units a second time on sync.
+                if (saleError instanceof Error) {
+                    (saleError as StockAwareError).stockAlreadyDeducted = stockStillDeducted;
+                }
+                throw saleError;
+            }
 
             // Update customer credit if applicable
             if (input.customer_id && (status === 'credit' || status === 'partial')) {
@@ -396,34 +430,14 @@ export class SalesService {
                 throw new Error('Cannot delete a sale that has associated returns. Please handle returns first.');
             }
 
-            // 3. Restore stock levels (skip manual items which have no batch)
-            for (const item of sale.items) {
-                if (item.is_manual || !item.batch_id) continue;
+            // 3. Restore stock levels (skip manual items which have no batch).
+            //    Relative, so a sale made between reading and writing is not undone.
+            const stockToRestore = sale.items
+                .filter(item => !item.is_manual && item.batch_id)
+                .map(item => ({ batch_id: item.batch_id as string, quantity: item.quantity }));
 
-                // Get current batch to know current quantity
-                const client = (this.productRepo as any).adapter.getClient();
-                const { data: batch, error } = await client
-                    .from('product_batches')
-                    .select('current_quantity')
-                    .eq('id', item.batch_id)
-                    .single();
-
-                if (error) {
-                    logger.error(`Failed to fetch batch ${item.batch_id} for stock restoration`, error);
-                    continue;
-                }
-
-                if (batch) {
-                    const newQuantity = batch.current_quantity + item.quantity;
-                    await this.productRepo.updateStock(item.batch_id, newQuantity);
-                    logger.debug('Restored stock for item', {
-                        productId: item.product_id,
-                        batchId: item.batch_id,
-                        addedQuantity: item.quantity,
-                        newQuantity
-                    });
-                }
-            }
+            await this.inventoryRepo.restoreStock(stockToRestore);
+            logger.debug('Restored stock for deleted sale', { itemCount: stockToRestore.length });
 
             // 3. Reverse customer credit if applicable
             if (sale.customer_id && (sale.status === 'credit' || sale.status === 'partial')) {
@@ -756,16 +770,53 @@ export class SalesService {
         try {
             const { sale, items, batches, customerCredit, commission } = data;
 
-            // 1. Create Sale and Items
-            const createdSale = await this.saleRepo.createWithItems(sale, items);
-            logger.info('Offline sale synced', { saleId: createdSale.id, saleNumber: createdSale.sale_number });
+            // 1. Deduct stock first, as a relative change, so that sales made
+            //    elsewhere while this terminal was offline are not overwritten. The
+            //    sale already happened at the counter, so a shortfall must not reject
+            //    it — take stock down to zero and record what was short (step 5).
+            //
+            //    Sales queued before this change carry absolute targets
+            //    ({ id, newQuantity }) instead of deltas; those still sync the old
+            //    way so nothing already in IndexedDB is stranded.
+            const stockItems: Array<{ batch_id: string; quantity: number }> = [];
+            const legacyStockItems: Array<{ id: string; newQuantity: number }> = [];
 
-            // 2. Update Batches (Stock)
             if (batches && Array.isArray(batches)) {
                 for (const b of batches) {
-                    await this.productRepo.updateStock(b.id, b.newQuantity);
+                    if (b.batch_id !== undefined && b.quantity !== undefined) {
+                        stockItems.push({ batch_id: b.batch_id, quantity: b.quantity });
+                    } else if (b.id !== undefined && b.newQuantity !== undefined) {
+                        legacyStockItems.push({ id: b.id, newQuantity: b.newQuantity });
+                    }
                 }
             }
+
+            const shortfalls = await this.inventoryRepo.deductStock(stockItems, { allowShortfall: true });
+
+            for (const b of legacyStockItems) {
+                await this.productRepo.updateStock(b.id, b.newQuantity);
+            }
+
+            // 2. Create Sale and Items. Stock is already deducted, so put it back if
+            //    the sale cannot be recorded — otherwise the shop is short inventory
+            //    for a sale that does not exist.
+            let createdSale: SaleWithItems;
+            try {
+                createdSale = await this.saleRepo.createWithItems(sale, items);
+            } catch (saleError) {
+                try {
+                    await this.inventoryRepo.restoreStock(stockItems);
+                } catch (restoreError) {
+                    logger.error(
+                        'Stock restore failed after offline sale creation failed — stock is now understated',
+                        restoreError as Error,
+                        { stockItems }
+                    );
+                }
+                throw saleError;
+            }
+
+            logger.info('Offline sale synced', { saleId: createdSale.id, saleNumber: createdSale.sale_number });
 
             // 3. Update Customer Credit
             if (customerCredit) {
@@ -781,6 +832,31 @@ export class SalesService {
                     ...commission,
                     sale_id: createdSale.id
                 });
+            }
+
+            // 5. Flag any shortfall on the sale itself, so it shows up in sale history
+            //    where a manager can reconcile it rather than only in the console.
+            if (shortfalls.length > 0) {
+                const summary = shortfalls
+                    .map(s => `batch ${s.batch_number}: sold ${s.requested}, only ${s.deducted} in stock`)
+                    .join('; ');
+                const note = `[STOCK SHORTFALL ON OFFLINE SYNC] ${summary}`;
+
+                logger.warn('Offline sale synced with stock shortfall', {
+                    saleNumber: createdSale.sale_number,
+                    shortfalls,
+                });
+
+                try {
+                    await this.saleRepo.update(createdSale.id, {
+                        notes: createdSale.notes ? `${createdSale.notes}\n${note}` : note,
+                        updated_at: new Date().toISOString(),
+                    } as Partial<Sale>);
+                } catch (noteError) {
+                    // The sale and the stock are both correct at this point; losing the
+                    // annotation must not fail the sync and trigger a retry.
+                    logger.error('Failed to annotate shortfall on sale', noteError as Error);
+                }
             }
         } catch (error) {
             logger.error('Failed to sync offline sale', error as Error);

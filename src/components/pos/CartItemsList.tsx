@@ -37,6 +37,9 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
         const isDecimal = !item.isManual && (item.product.unit === 'yard' || item.product.unit === 'meter');
         const qtyStep = isDecimal ? 0.1 : 1;
         const unitLabel = isDecimal ? (item.product.unit === 'yard' ? 'yd' : 'm') : null;
+        // The variant SKU is what the shelf label and barcode carry, so prefer it over
+        // the parent product's. Manual items have neither.
+        const sku = item.isManual ? null : (item.variant?.sku || item.product.sku);
 
         return (
           <div
@@ -45,7 +48,11 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
               padding: '8px 18px',
               borderBottom: '1px solid var(--line-2)',
               borderLeft: item.isManual ? '3px solid var(--warn)' : '3px solid transparent',
-              background: item.isManual ? 'color-mix(in srgb, var(--warn) 4%, transparent)' : 'transparent',
+              // Alternating tint gives the eye a line to follow across a long cart.
+              // Manual items keep their own tint so they stay recognisable.
+              background: item.isManual
+                ? 'color-mix(in srgb, var(--warn) 4%, transparent)'
+                : index % 2 === 1 ? 'color-mix(in srgb, var(--ink) 2%, transparent)' : 'transparent',
             }}
           >
             {/* ── Row 1: # · qty · name · subtotal · remove ── */}
@@ -151,12 +158,28 @@ export function CartItemsList({ items, onUpdateQuantity, onSetQuantity, onUpdate
               </div>
             </div>
 
-            {/* ── Row 2: unit price · discount input · max hint ── */}
+            {/* ── Row 2: sku · unit price · discount input · max hint ── */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               marginTop: 5,
               paddingLeft: 94,
             }}>
+              {/* SKU — sits here rather than beside the name so it is always visible
+                  without stealing width from long product names. */}
+              {sku && (
+                <>
+                  <span style={{
+                    fontSize: 10.5, ...mono, flexShrink: 0,
+                    color: 'var(--ink-2)', fontWeight: 600,
+                    background: 'var(--panel-2)', border: '1px solid var(--line-2)',
+                    borderRadius: 4, padding: '1px 5px', letterSpacing: '-0.01em',
+                  }}>
+                    {sku}
+                  </span>
+                  <span style={{ color: 'var(--line-2)', fontSize: 11, flexShrink: 0 }}>·</span>
+                </>
+              )}
+
               {/* Original price (strikethrough when discounted) */}
               <span style={{
                 fontSize: 11.5, ...mono, flexShrink: 0,

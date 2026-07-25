@@ -171,7 +171,11 @@ html, body {
 @media (min-width: 1024px) {
   .pos-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 440px;
+    /* The cart holds long product names, a qty stepper, SKU and a discount box on
+       every line, so it takes a share of the width rather than a fixed 440px: same
+       440px on a 1024–1375px screen, growing to 600px on a wide monitor where the
+       product grid can spare it. */
+    grid-template-columns: minmax(0, 1fr) clamp(440px, 32vw, 600px);
     height: calc(100vh - 56px);
     overflow: hidden;
   }

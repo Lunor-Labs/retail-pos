@@ -1,8 +1,8 @@
 import { ReturnRepository } from '../repositories/ReturnRepository';
 import { Return } from '../types';
 import { logger } from '../lib/logger';
-import { ProductService } from './ProductService';
 import { CustomerService } from './CustomerService';
+import { InventoryService } from './InventoryService';
 
 export interface CreateReturnInput {
     sale_id: string | null;
@@ -24,8 +24,8 @@ export interface CreateReturnInput {
 export class ReturnService {
     constructor(
         private returnRepo: ReturnRepository,
-        private productService: ProductService,
-        private customerService: CustomerService
+        private customerService: CustomerService,
+        private inventoryService: InventoryService
     ) { }
 
     async getAllReturns(): Promise<Return[]> {
@@ -54,15 +54,7 @@ export class ReturnService {
 
             // If approved immediately, restore stock
             if (status === 'approved' && items.length > 0) {
-                for (const item of items) {
-                    if (item.batch_id) {
-                        const batches = await this.productService.getProductBatches(item.product_id!);
-                        const batch = batches.find(b => b.id === item.batch_id);
-                        if (batch) {
-                            await this.productService.updateStock(batch.id, batch.current_quantity + item.quantity);
-                        }
-                    }
-                }
+                await this.restoreStockForItems(items);
             }
 
             return result;
@@ -86,31 +78,7 @@ export class ReturnService {
             const items = await this.returnRepo.findItemsByReturnId(id);
 
             // 1. Restore stock
-            for (const item of items) {
-                // Assuming ReturnItem has batch_id or logic to find batch.
-                // The interface validation might fail if batch_id is missing on item type but mapped via create.
-                // In Returns.tsx it queries return_items.
-                // If item has batch_id, we restore.
-                if ((item as any).batch_id) {
-                    // Get current quantity first (this needs a method in ProductService or access via repo)
-                    // But ProductService abstracts this.
-                    // I will assume ProductService can expose a method `restoreStock(batchId, quantity)`
-                    // OR I use getProductBatches and find the batch?
-                    // Let's rely on ProductService.updateStock assuming I can get current qty.
-                    // A safer bet is to add `incrementStock` to ProductService later if needed.
-                    // For now, I will assume a method `increaseStock` exists or I implement logic here?
-                    // I will implement logic: get batch, update.
-                    // I don't have direct access to Batch info via Service easily without creating many methods.
-                    // I'll try to add `increaseStock` to ProductService or just use `updateStock` if I can get current.
-                    // Let's use `productService.updateStock` and catch error if I can't read current.
-                    // Wait, `productService` has `getProductBatches`.
-                    const batches = await this.productService.getProductBatches(item.product_id!);
-                    const batch = batches.find(b => b.id === (item as any).batch_id);
-                    if (batch) {
-                        await this.productService.updateStock(batch.id, batch.current_quantity + item.quantity);
-                    }
-                }
-            }
+            await this.restoreStockForItems(items);
 
             // 2. Update status
             await this.returnRepo.update(id, {
@@ -136,6 +104,30 @@ export class ReturnService {
             logger.error('Failed to approve return', error as Error);
             throw error;
         }
+    }
+
+    /**
+     * Put returned units back into their original batches.
+     *
+     * Adds relative to what the batch currently holds, so a sale made between the
+     * return being raised and approved is not overwritten. This used to look the
+     * batch up through getProductBatches first, which always failed and left the
+     * restore silently skipped.
+     */
+    private async restoreStockForItems(
+        items: Array<{ batch_id?: string | null; quantity: number }>
+    ): Promise<void> {
+        const stockItems = items
+            .filter(item => !!item.batch_id)
+            .map(item => ({ batch_id: item.batch_id as string, quantity: item.quantity }));
+
+        if (stockItems.length === 0) {
+            logger.warn('Return has no batch-linked items — no stock restored');
+            return;
+        }
+
+        await this.inventoryService.restoreStock(stockItems);
+        logger.info('Return stock restored', { itemCount: stockItems.length });
     }
 
     async rejectReturn(id: string): Promise<void> {

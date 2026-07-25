@@ -16,7 +16,7 @@ export const salesService = new SalesService(saleRepository, customerRepository,
 export const customerService = new CustomerService(customerRepository, referralAgentRepository);
 export const supplierService = new SupplierService(supplierRepository);
 export const purchaseOrderService = new PurchaseOrderService(purchaseOrderRepository, productService);
-export const returnService = new ReturnService(returnRepository, productService, customerService);
+export const returnService = new ReturnService(returnRepository, customerService, inventoryService);
 export const variantService = new VariantService(variantRepository);
 export const loyaltyService = new LoyaltyService(loyaltyRepository);
 export { referenceDataService } from './ReferenceDataService';
