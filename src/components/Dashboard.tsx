@@ -66,12 +66,18 @@ function KPICard({ label, value, sub, spark, delta = 0, tone = 'default' }: {
 }
 
 // ── Revenue Chart ─────────────────────────────────────────
-function RevenueChart({ data, period, onPeriod }: { data: { name: string; revenue: number; cost: number }[]; period: string; onPeriod: (p: string) => void }) {
+function RevenueChart({ data, period, onPeriod, loading }: { data: { name: string; revenue: number; cost: number }[]; period: string; onPeriod: (p: string) => void; loading?: boolean }) {
   const W = 720, H = 240, PL = 52, PR = 12, PT = 14, PB = 28;
   const iw = W - PL - PR, ih = H - PT - PB;
 
   const fmtK = (v: number) => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'k' : String(Math.round(v));
   const fmtFull = (v: number) => `LKR ${Math.round(v).toLocaleString()}`;
+
+  if (loading) return (
+    <div className="card" style={{ padding: 40, display: 'flex', justifyContent: 'center' }}>
+      <div className="animate-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid var(--line)', borderTopColor: 'var(--accent)' }} />
+    </div>
+  );
 
   if (data.length < 2) return (
     <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>Not enough data to draw chart yet.</div>
@@ -488,6 +494,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   const firstName = profile?.full_name?.split(' ')[0] || 'there';
 
   const [loading, setLoading] = useState(true);
+  const [loadingChart, setLoadingChart] = useState(true);
   const [todayStats, setTodayStats] = useState({ count: 0, revenue: 0 });
   const [yesterdayStats, setYesterdayStats] = useState({ count: 0, revenue: 0 });
   const [totalProducts, setTotalProducts] = useState(0);
@@ -505,9 +512,17 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
   const [showDayManagement, setShowDayManagement] = useState(false);
   const [activityItems, setActivityItems] = useState<{ type: ActivityType; text: string; time: string; by: string }[]>([]);
 
+  // Fast, date-filter-independent data — drives first paint. Runs once on mount.
+  useEffect(() => {
+    loadCore();
+    loadStock(); // heavy full-catalog scans; not on the critical path, resolves in the background
+  }, []);
+
+  // Only the revenue chart depends on chartPeriod — refetching everything else on
+  // every period click was the main cause of the dashboard feeling slow.
   useEffect(() => {
     const days = chartPeriod === '7D' ? 7 : chartPeriod === '90D' ? 90 : chartPeriod === 'YTD' ? Math.ceil((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000) : 30;
-    load(days);
+    loadChart(days);
   }, [chartPeriod]);
 
   useEffect(() => {
@@ -522,34 +537,19 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
     return new Date(iso).toLocaleDateString();
   };
 
-  async function load(days: number) {
+  // Cheap, date-scoped queries that make up the "above the fold" KPIs — this is
+  // what should gate the initial spinner, not the full-catalog stock scans below.
+  async function loadCore() {
     try {
-      const [
-        allProducts, customerCount, todaySalesData, yesterdaySalesData, pendingCount,
-        recentSalesData, historyData, topSellerData, variantLowStock, cashiers,
-      ] = await Promise.all([
-        productService.getAllProducts(),
+      const [customerCount, todaySalesData, yesterdaySalesData, pendingCount, recentSalesData, cashiers] = await Promise.all([
         customerService.getCustomerCount(),
         salesService.getTodaySales(),
         salesService.getYesterdayStats(),
         salesService.getPendingReturnsCount(),
         salesService.getRecentSales(8),
-        salesService.getSalesHistoryWithCost(days),
-        salesService.getTopSellingWithRevenue(5, topSellerPeriod),
-        variantService.getLowStockVariants(),
         salesService.getCashierStats(),
       ]);
 
-      const lowList = allProducts.filter(p => p.total_stock > 0 && p.total_stock <= 5);
-      const outList = allProducts.filter(p => p.total_stock === 0);
-
-      const chartData = (historyData || []).map((day: any) => ({
-        name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        revenue: Math.round(day.revenue),
-        cost: Math.round(day.cost),
-      }));
-
-      // Build activity from recent sales
       const activity: { type: ActivityType; text: string; time: string; by: string }[] = (recentSalesData || [])
         .slice(0, 5)
         .map((s: any) => ({
@@ -559,33 +559,63 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
           by: 'Cashier',
         }));
 
-      // Append stock alerts as activity if any
-      if (lowList.length > 0) {
-        activity.push({
-          type: 'stock',
-          text: `Low stock alert · ${lowList[0].name} (${lowList[0].total_stock} left)`,
-          time: 'Today',
-          by: 'system',
-        });
-      }
-
       setTodayStats({ count: todaySalesData.count, revenue: todaySalesData.revenue });
       setYesterdayStats(yesterdaySalesData);
-      setTotalProducts(allProducts.length);
       setTotalCustomers(customerCount || 0);
       setPendingReturns(pendingCount || 0);
-      setSalesData(chartData);
       setRecentSales(recentSalesData || []);
-      setLowStockItems(lowList);
-      setOutOfStockItems(outList);
-      setVariantLowStockItems(variantLowStock || []);
-      setTopSellers(topSellerData);
       setCashierStats(cashiers);
       setActivityItems(activity);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Full-catalog scans (all products + all variants/batches) — the slowest part of
+  // the page by far. Not needed for first paint, so it runs in the background and
+  // fills in the stock KPI tiles/alerts whenever it resolves.
+  async function loadStock() {
+    try {
+      const [allProducts, variantLowStock] = await Promise.all([
+        productService.getAllProducts(),
+        variantService.getLowStockVariants(),
+      ]);
+
+      const lowList = allProducts.filter(p => p.total_stock > 0 && p.total_stock <= 5);
+      const outList = allProducts.filter(p => p.total_stock === 0);
+
+      setTotalProducts(allProducts.length);
+      setLowStockItems(lowList);
+      setOutOfStockItems(outList);
+      setVariantLowStockItems(variantLowStock || []);
+
+      if (lowList.length > 0) {
+        setActivityItems(prev => [
+          ...prev,
+          { type: 'stock', text: `Low stock alert · ${lowList[0].name} (${lowList[0].total_stock} left)`, time: 'Today', by: 'system' },
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // The only thing that actually depends on the chart's date-range filter.
+  async function loadChart(days: number) {
+    setLoadingChart(true);
+    try {
+      const historyData = await salesService.getSalesHistoryWithCost(days);
+      setSalesData((historyData || []).map((day: any) => ({
+        name: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        revenue: Math.round(day.revenue),
+        cost: Math.round(day.cost),
+      })));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingChart(false);
     }
   }
 
@@ -711,7 +741,7 @@ export function Dashboard({ onNavigate, onFilterNavigate }: DashboardProps) {
 
       {/* Revenue chart + Top sellers */}
       <div className="dash-grid">
-        <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} />
+        <RevenueChart data={salesData} period={chartPeriod} onPeriod={setChartPeriod} loading={loadingChart} />
         <TopSellers items={topSellers} period={topSellerPeriod} onPeriod={setTopSellerPeriod} />
       </div>
 
