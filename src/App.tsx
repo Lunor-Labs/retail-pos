@@ -51,7 +51,7 @@ function AppContent() {
 
   // Lock restricted roles to their single allowed view
   const ALLOWED: Record<string, string[]> = {
-    cashier: ['pos'],
+    cashier: ['pos', 'gift-vouchers', 'returns'],
     stock_manager: ['products', 'suppliers'],
   };
 
