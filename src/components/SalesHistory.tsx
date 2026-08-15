@@ -71,15 +71,17 @@ function statusChipStyle(status: string) {
   return { bg: 'color-mix(in oklab, var(--danger) 10%, var(--panel-2))', color: 'var(--danger)' };
 }
 
-const today = new Date().toISOString().split('T')[0];
 const PAGE_SIZE = 5;
 
-const PRESETS = [
-  { label: 'Today', start: today, end: today },
-  { label: '7 days', start: (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; })(), end: today },
-  { label: '30 days', start: (() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().split('T')[0]; })(), end: today },
-  { label: 'This month', start: today.slice(0, 7) + '-01', end: today },
-];
+function buildPresets() {
+  const today = new Date().toISOString().split('T')[0];
+  return [
+    { label: 'Today', start: today, end: today },
+    { label: '7 days', start: (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; })(), end: today },
+    { label: '30 days', start: (() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().split('T')[0]; })(), end: today },
+    { label: 'This month', start: today.slice(0, 7) + '-01', end: today },
+  ];
+}
 
 // ─── Delete confirmation modal ────────────────────────────────────────────
 function DeleteModal({ onConfirm, onCancel, busy }: { onConfirm: () => void; onCancel: () => void; busy: boolean }) {
@@ -289,6 +291,7 @@ export function SalesHistory() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const PRESETS = useMemo(buildPresets, []);
   const [preset, setPreset] = useState(2); // default: 30 days
   const [dateRange, setDateRange] = useState({ start: PRESETS[2].start, end: PRESETS[2].end });
   const [customRange, setCustomRange] = useState(false);
@@ -498,7 +501,7 @@ export function SalesHistory() {
                 {(['start', 'end'] as const).map(k => (
                   <div key={k}>
                     <div style={{ fontSize: 10.5, color: 'var(--muted)', marginBottom: 4, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase' }}>{k === 'start' ? 'From' : 'To'}</div>
-                    <input type="date" value={dateRange[k]} max={today}
+                    <input type="date" value={dateRange[k]} max={PRESETS[0].start}
                       onChange={e => setDateRange(r => ({ ...r, [k]: e.target.value }))}
                       style={{ width: '100%', height: 32, padding: '0 9px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }} />
                   </div>
