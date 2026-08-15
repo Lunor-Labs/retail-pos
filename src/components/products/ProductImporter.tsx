@@ -11,17 +11,21 @@ interface ProductImporterProps {
     onSuccess: () => void;
 }
 
+// Products without size/color still need one variant row to carry sku/barcode
+// and to own their stock batches — this is the name used when nothing distinguishes it.
+const DEFAULT_SUPPLIER_NAME = 'Unspecified Supplier';
+
 interface CSVRow {
     product_name: string;
-    sku: string;
-    barcode?: string;
+    barcode: string;
+    sku?: string;
     category?: string;
-    supplier_name: string;
+    supplier_name?: string;
     cost_price: string;
-    markup_percentage: string;
-    quantity: string;
+    selling_price?: string;
+    markup_percentage?: string;
+    quantity?: string;
     batch_number?: string;
-    expiry_date?: string;
     reorder_level?: string;
     unit?: string;
     image_url?: string;
@@ -45,12 +49,14 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
 
     const handleDownloadTemplate = () => {
         const headers = [
-            'product_name', 'sku', 'barcode', 'category', 'supplier_name',
-            'cost_price', 'markup_percentage', 'quantity', 'batch_number', 'expiry_date',
+            'product_name', 'barcode', 'sku', 'category', 'supplier_name',
+            'cost_price', 'selling_price', 'quantity', 'batch_number',
             'reorder_level', 'unit', 'image_url'
         ];
         const sampleData = [
-            'Engine Oil 4L,OIL-4L,12345678,Lubricants,Shell Lanka,4500,22,10,BATCH001,2025-12-31,5,bottle,https://example.com/oil.jpg'
+            'Engine Oil 4L,12345678,,Lubricants,Shell Lanka,4500,5490,10,BATCH001,5,bottle,https://example.com/oil.jpg',
+            // Minimal row: only what's needed to load an existing stock sheet with no supplier/qty data yet.
+            'Baby Boys T Shirt,11683,,BABY,,925,1650,,,,,',
         ];
 
         const csvContent = "data:text/csv;charset=utf-8,"
@@ -94,8 +100,8 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
         let failedCount = 0;
         const errors: string[] = [];
 
-        // 1. Extract and Process Suppliers in Bulk
-        const supplierNames = [...new Set(previewData.map(row => row.supplier_name?.trim()).filter(Boolean))];
+        // 1. Extract and Process Suppliers in Bulk (rows without a supplier fall back to a shared default)
+        const supplierNames = [...new Set(previewData.map(row => row.supplier_name?.trim() || DEFAULT_SUPPLIER_NAME))];
         const supplierMap = new Map<string, string>(); // Name -> ID
 
         try {
@@ -129,24 +135,32 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
             errors.push(`Supplier processing error: ${err.message}`);
         }
 
-        // 2. Process Products and Batches in Chunks
+        // 2. Process Products, Variants and Batches in Chunks
         const CHUNK_SIZE = 5; // Smaller chunks for better progress visibility
         for (let i = 0; i < previewData.length; i += CHUNK_SIZE) {
             const chunk = previewData.slice(i, i + CHUNK_SIZE);
 
             await Promise.all(chunk.map(async (row: CSVRow) => {
+                const rowLabel = row.sku?.trim() || row.barcode?.trim() || 'Unknown';
                 try {
-                    // Validation
-                    if (!row.product_name || !row.sku || !row.cost_price || !row.markup_percentage) {
-                        throw new Error(`Missing required fields for SKU: ${row.sku || 'Unknown'}`);
+                    // Validation — a sellable item needs a name, a barcode (doubles as SKU
+                    // when no separate sku column is given), a cost, and either the selling
+                    // price or a markup to derive it from.
+                    if (!row.product_name || !row.barcode || !row.cost_price) {
+                        throw new Error(`Missing required fields (product_name/barcode/cost_price) for: ${rowLabel}`);
+                    }
+                    if (!row.selling_price && !row.markup_percentage) {
+                        throw new Error(`Provide either selling_price or markup_percentage for: ${rowLabel}`);
                     }
 
-                    const supplierId = supplierMap.get(row.supplier_name?.trim());
+                    const supplierName = row.supplier_name?.trim() || DEFAULT_SUPPLIER_NAME;
+                    const supplierId = supplierMap.get(supplierName);
                     if (!supplierId) {
-                        throw new Error(`Supplier '${row.supplier_name}' not found or failed to create`);
+                        throw new Error(`Supplier '${supplierName}' not found or failed to create`);
                     }
 
-                    const cleanSku = row.sku.trim();
+                    const cleanBarcode = row.barcode.trim();
+                    const cleanSku = row.sku?.trim() || cleanBarcode;
 
                     // Check Product
                     let productId = '';
@@ -195,52 +209,88 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                         productId = newProduct.id;
                     }
 
-                    // Create or Update Batch
-                    const qty = parseFloat(row.quantity || '0');
+                    // Check/Create the (single, size/color-less) variant that carries the sku,
+                    // barcode and stock batches for this row.
+                    let variantId = '';
+                    const { data: existingVariant } = await (supabase.from('product_variants') as any)
+                        .select('id')
+                        .eq('sku', cleanSku)
+                        .maybeSingle();
+
+                    if (existingVariant) {
+                        variantId = existingVariant.id;
+                    } else {
+                        const { data: newVariant, error: variantError } = await (supabase
+                            .from('product_variants') as any)
+                            .insert({
+                                product_id: productId,
+                                size: null,
+                                color: null,
+                                sku: cleanSku,
+                                barcode: cleanBarcode,
+                                reorder_level: parseInt(row.reorder_level || '0', 10) || 0,
+                                active: true,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                            })
+                            .select('id')
+                            .single();
+
+                        if (variantError) throw variantError;
+                        variantId = newVariant.id;
+                    }
+
+                    // Create or Update Batch (this is where cost/selling price and stock actually live)
+                    const parsedQty = parseFloat(row.quantity || '0');
+                    const qty = Number.isNaN(parsedQty) ? 0 : parsedQty;
                     const costPrice = parseFloat(row.cost_price);
-                    const markup = parseFloat(row.markup_percentage);
-                    const sellingPrice = costPrice * (1 + markup / 100);
+                    const sellingPrice = row.selling_price
+                        ? parseFloat(row.selling_price)
+                        : costPrice * (1 + parseFloat(row.markup_percentage!) / 100);
+                    const markup = row.markup_percentage
+                        ? parseFloat(row.markup_percentage)
+                        : (costPrice > 0 ? ((sellingPrice - costPrice) / costPrice) * 100 : 0);
 
                     if (qty >= 0) {
                         let batchNumber = row.batch_number?.trim();
                         let existingBatchId = null;
 
                         if (batchNumber) {
-                            // Check for specific batch
+                            // Check for specific batch on this variant
                             const { data: batch } = await (supabase
                                 .from('product_batches') as any)
                                 .select('id')
+                                .eq('variant_id', variantId)
                                 .eq('batch_number', batchNumber)
-                                .single();
+                                .maybeSingle();
                             if (batch) existingBatchId = batch.id;
-                        } else {
-                            // No batch number provided - find the most recent batch to update if qty is 0,
-                            // or create a new one if qty > 0
-                            if (qty === 0) {
-                                const { data: latestBatch } = await (supabase
-                                    .from('product_batches') as any)
-                                    .select('id, batch_number')
-                                    .order('received_date', { ascending: false })
-                                    .limit(1)
-                                    .single();
+                        } else if (qty === 0) {
+                            // No batch number and no new stock — update this variant's most
+                            // recent batch (e.g. to refresh pricing) instead of creating a new one.
+                            const { data: latestBatch } = await (supabase
+                                .from('product_batches') as any)
+                                .select('id, batch_number')
+                                .eq('variant_id', variantId)
+                                .order('received_date', { ascending: false })
+                                .limit(1)
+                                .maybeSingle();
 
-                                if (latestBatch) {
-                                    existingBatchId = latestBatch.id;
-                                    batchNumber = latestBatch.batch_number;
-                                }
-                            }
-
-                            if (!batchNumber) {
-                                batchNumber = `BATCH-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                            if (latestBatch) {
+                                existingBatchId = latestBatch.id;
+                                batchNumber = latestBatch.batch_number;
                             }
                         }
 
+                        if (!batchNumber) {
+                            batchNumber = `BATCH-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                        }
+
                         const baseBatchData = {
-                            variant_id: null, // variant association done after variant management is active
+                            variant_id: variantId,
                             supplier_id: supplierId,
                             batch_number: batchNumber,
                             cost_price: costPrice,
-                            markup_percentage: markup,
+                            markup_percentage: Math.round(markup * 100) / 100,
                             selling_price: Math.round(sellingPrice * 100) / 100,
                             current_quantity: qty,
                             updated_at: new Date().toISOString()
@@ -253,8 +303,9 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                                 .eq('id', existingBatchId);
 
                             if (batchError) throw batchError;
-                        } else if (qty > 0) {
-                            // On insert, we set initial_quantity
+                        } else {
+                            // First batch for this variant — always create it so cost/selling
+                            // price are saved even when there's no opening stock count yet (qty 0).
                             const { error: batchError } = await supabase
                                 .from('product_batches')
                                 .insert({
@@ -271,7 +322,7 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                     successCount++;
                 } catch (err: any) {
                     failedCount++;
-                    errors.push(`Row ${row.sku}: ${err.message}`);
+                    errors.push(`Row ${rowLabel}: ${err.message}`);
                 } finally {
                     setProcessedCount(prev => prev + 1);
                 }
@@ -311,8 +362,9 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                                 <p className="font-semibold mb-1">Before you start:</p>
                                 <ul className="list-disc list-inside space-y-1">
                                     <li>Download the template to see the required format.</li>
-                                    <li>Make sure SKU is unique for new products.</li>
-                                    <li>Existing suppliers will be matched by name.</li>
+                                    <li>barcode is required and must be unique — it's used as the SKU when no separate sku column is given.</li>
+                                    <li>Provide either selling_price or markup_percentage (cost_price is always required).</li>
+                                    <li>supplier_name and quantity are optional — left blank, rows use a shared "{DEFAULT_SUPPLIER_NAME}" supplier and zero opening stock.</li>
                                 </ul>
                             </div>
                         </div>
@@ -356,23 +408,23 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
                             <table className="w-full text-sm">
                                 <thead className="bg-slate-50 sticky top-0">
                                     <tr>
-                                        <th className="px-4 py-2 text-left border-b">SKU</th>
+                                        <th className="px-4 py-2 text-left border-b">Barcode/SKU</th>
                                         <th className="px-4 py-2 text-left border-b">Product</th>
                                         <th className="px-4 py-2 text-left border-b">Supplier</th>
                                         <th className="px-4 py-2 text-right border-b">Cost</th>
-                                        <th className="px-4 py-2 text-right border-b">Markup %</th>
+                                        <th className="px-4 py-2 text-right border-b">Selling</th>
                                         <th className="px-4 py-2 text-right border-b">Qty</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {previewData.slice(0, 5).map((row, i) => (
                                         <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                                            <td className="px-4 py-2">{row.sku}</td>
+                                            <td className="px-4 py-2">{row.sku?.trim() || row.barcode}</td>
                                             <td className="px-4 py-2 truncate max-w-[150px]">{row.product_name}</td>
-                                            <td className="px-4 py-2">{row.supplier_name}</td>
+                                            <td className="px-4 py-2">{row.supplier_name?.trim() || DEFAULT_SUPPLIER_NAME}</td>
                                             <td className="px-4 py-2 text-right">{row.cost_price}</td>
-                                            <td className="px-4 py-2 text-right">{row.markup_percentage}%</td>
-                                            <td className="px-4 py-2 text-right">{row.quantity}</td>
+                                            <td className="px-4 py-2 text-right">{row.selling_price || '—'}</td>
+                                            <td className="px-4 py-2 text-right">{row.quantity || 0}</td>
                                         </tr>
                                     ))}
                                 </tbody>
