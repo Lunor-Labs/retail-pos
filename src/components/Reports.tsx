@@ -15,10 +15,11 @@ const CHART_COLORS = ['var(--accent)', '#C68A2E', '#3A4E6B', '#7A2235', '#6A7048
 
 type RangeId = 'today' | 'week' | 'month' | 'quarter' | 'ytd' | 'custom';
 
-const todayStr = new Date().toISOString().split('T')[0];
+function getTodayStr() { return new Date().toISOString().split('T')[0]; }
 
 function getRange(id: RangeId, customStart: string, customEnd: string) {
   const d = new Date();
+  const todayStr = getTodayStr();
   let start = todayStr, end = todayStr;
 
   if (id === 'today') { start = end = todayStr; }
@@ -288,8 +289,8 @@ interface KpiData { sales: number; revenue: number; profit: number; avgOrder: nu
 
 export function Reports() {
   const [rangeId, setRangeId] = useState<RangeId>('month');
-  const [customStart, setCustomStart] = useState(todayStr.slice(0, 7) + '-01');
-  const [customEnd, setCustomEnd] = useState(todayStr);
+  const [customStart, setCustomStart] = useState(getTodayStr().slice(0, 7) + '-01');
+  const [customEnd, setCustomEnd] = useState(getTodayStr());
   const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -524,7 +525,7 @@ export function Reports() {
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>To</span>
-                <input type="date" value={customEnd} min={customStart} max={todayStr}
+                <input type="date" value={customEnd} min={customStart} max={getTodayStr()}
                   onChange={e => setCustomEnd(e.target.value)}
                   style={{ height: 30, padding: '0 9px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--panel-2)', color: 'var(--ink)', fontSize: 12, outline: 'none' }} />
               </div>
