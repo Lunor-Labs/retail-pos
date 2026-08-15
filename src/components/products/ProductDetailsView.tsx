@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ProductWithStock, VariantWithStock, ProductBatch } from '../../types';
+import { ProductWithStock, VariantWithStock, ProductBatch, Supplier } from '../../types';
 import { ProductImage } from '../ProductImage';
 import { Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { productService } from '../../services';
+import { productService, supplierService } from '../../services';
 import { useProductAudit } from '../../lib/auditLog';
-import { CostInput, CostDisplay } from '../ui';
+import { CostInput, CostDisplay, DropdownSelect } from '../ui';
 import { useCostCode } from '../../contexts/CostCodeContext';
 
 interface ProductDetailsViewProps {
@@ -22,14 +22,15 @@ function fmtDate(iso: string) {
 interface BatchRowProps {
   batch: ProductBatch;
   isAdmin: boolean;
+  suppliers: Supplier[];
   onSave: (id: string, data: Partial<ProductBatch>) => Promise<void>;
 }
 
-function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
+function BatchRow({ batch, isAdmin, suppliers, onSave }: BatchRowProps) {
   const [editing, setEditing] = useState(false);
   const { isConfigured } = useCostCode();
   const useEncoding = !isAdmin && isConfigured;
-  const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price });
+  const [d, setD] = useState({ current_quantity: batch.current_quantity, cost_price: batch.cost_price, markup_percentage: batch.markup_percentage, selling_price: batch.selling_price, supplier_id: batch.supplier_id });
   const [saving, setSaving] = useState(false);
 
   function updateCost(cost: number) {
@@ -63,6 +64,15 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
               <button onClick={() => setEditing(false)} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><X size={14} /></button>
               <button onClick={save} disabled={saving} style={{ border: 0, background: 'transparent', color: 'var(--pos)', cursor: 'pointer', padding: 4, lineHeight: 0, borderRadius: 5 }}><Check size={14} /></button>
             </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.05em' }}>Supplier</div>
+            <DropdownSelect
+              value={d.supplier_id ?? ''}
+              onChange={supplier_id => setD(p => ({ ...p, supplier_id }))}
+              options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+              placeholder="Select supplier…"
+            />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: useEncoding ? '1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: 8 }}>
             {/* Qty */}
@@ -131,10 +141,11 @@ function BatchRow({ batch, isAdmin, onSave }: BatchRowProps) {
 interface VariantSectionProps {
   variant: VariantWithStock;
   isAdmin: boolean;
+  suppliers: Supplier[];
   onBatchSave: (batchId: string, data: Partial<ProductBatch>) => Promise<void>;
 }
 
-function VariantSection({ variant, isAdmin, onBatchSave }: VariantSectionProps) {
+function VariantSection({ variant, isAdmin, suppliers, onBatchSave }: VariantSectionProps) {
   const [expanded, setExpanded] = useState(true);
   const label = [variant.size, variant.color].filter(Boolean).join(' · ') || variant.sku;
 
@@ -161,7 +172,7 @@ function VariantSection({ variant, isAdmin, onBatchSave }: VariantSectionProps) 
             .slice()
             .sort((a, b) => new Date(b.received_date).getTime() - new Date(a.received_date).getTime())
             .map(batch => (
-              <BatchRow key={batch.id} batch={batch} isAdmin={isAdmin} onSave={onBatchSave} />
+              <BatchRow key={batch.id} batch={batch} isAdmin={isAdmin} suppliers={suppliers} onSave={onBatchSave} />
             ))}
         </>
       )}
@@ -177,9 +188,11 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
   const canEditStock = isAdmin || profile?.role === 'stock_manager';
   const [variants, setVariants] = useState<VariantWithStock[]>([]);
   const [loadingVariants, setLoadingVariants] = useState(true);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   useEffect(() => {
     loadVariants();
+    supplierService.getActiveSuppliers().then(setSuppliers).catch(() => {});
   }, [product.id]);
 
   async function loadVariants() {
@@ -273,6 +286,7 @@ export function ProductDetailsView({ product, onClose, onUpdate }: ProductDetail
             key={v.id}
             variant={v}
             isAdmin={canEditStock}
+            suppliers={suppliers}
             onBatchSave={handleBatchSave}
           />
         ))}
