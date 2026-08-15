@@ -54,7 +54,7 @@ export function ProductImporter({ onClose, onSuccess }: ProductImporterProps) {
             'reorder_level', 'unit', 'image_url'
         ];
         const sampleData = [
-            'Engine Oil 4L,12345678,,Lubricants,Shell Lanka,4500,5490,10,BATCH001,5,bottle,https://example.com/oil.jpg',
+            'Men\'s Cotton T-Shirt,8901234567890,,T-Shirts,City Fashion Distributors,850,1350,20,BATCH001,5,piece,https://example.com/tshirt.jpg',
             // Minimal row: only what's needed to load an existing stock sheet with no supplier/qty data yet.
             'Baby Boys T Shirt,11683,,BABY,,925,1650,,,,,',
         ];
